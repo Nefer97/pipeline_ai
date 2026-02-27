@@ -806,8 +806,8 @@ def main():
     parser.add_argument("--start-from", type=int, default=1,
         help="Inizia numerazione lezioni da N")
     parser.add_argument("--subject",
-        help="Tipo di materia: ingegneria, matematica, fisica, medicina, "
-             "economia, giurisprudenza (default: auto-detect)")
+            help="Tipo di materia: ingegneria, matematica, fisica, medicina, "
+                "economia, giurisprudenza (default: auto-detect)")
     parser.add_argument("--no-context", action="store_true",
         help="Non usare/aggiornare corso_context.json")
     args = parser.parse_args()
