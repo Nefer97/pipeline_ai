@@ -80,7 +80,8 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                 for f in output_dir.rglob("*"):
                     if f.is_file():
-                        zf.write(f, f.relative_to(output_dir))
+                        # Mantieni la cartella output_name come root dello ZIP
+                        zf.write(f, f.relative_to(output_dir.parent))
             jobs[job_id]["status"]   = "done"
             jobs[job_id]["zip_path"] = str(zip_path)
         else:
@@ -120,8 +121,10 @@ async def run_pipeline(
 
     # Crea job
     job_id     = str(uuid.uuid4())[:8]
-    lesson_dir = UPLOAD_DIR  / job_id
-    output_dir = OUTPUT_DIR  / job_id
+    lesson_dir = UPLOAD_DIR / job_id
+    # Usa il nome scelto dall'utente come sottocartella nell'output
+    output_name = "".join(c for c in output if c.isalnum() or c in "_-. /").strip().strip("./").replace("/","_") or "output"
+    output_dir  = OUTPUT_DIR / job_id / output_name
     lesson_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -135,17 +138,20 @@ async def run_pipeline(
 
     # Inizializza job
     jobs[job_id] = {
-        "status":       "queued",
-        "title":        title,
-        "files":        saved,
-        "subject":      _subject,
+        "status":        "queued",
+        "title":         title,
+        "files":         saved,
+        "subject":       _subject,
         "whisper_model": whisper_model,
-        "no_context":   _no_context,
-        "start_from":   _start_from,
-        "stdout":       "",
-        "stderr":       "",
-        "returncode":   None,
-        "zip_path":     None,
+        "no_context":    _no_context,
+        "start_from":    _start_from,
+        "skip_ai":       _skip_ai,
+        "skip_ocr":      _skip_ocr,
+        "output_name":   output_name,
+        "stdout":        "",
+        "stderr":        "",
+        "returncode":    None,
+        "zip_path":      None,
     }
 
     # Lancia in background (non blocca la risposta HTTP)
@@ -172,18 +178,21 @@ async def get_job(job_id: str):
 
     job = jobs[job_id]
     response = {
-        "job_id":       job_id,
-        "status":       job["status"],   # queued | running | done | error
-        "title":        job["title"],
-        "files":        job["files"],
-        "subject":      job.get("subject"),
+        "job_id":        job_id,
+        "status":        job["status"],
+        "title":         job["title"],
+        "files":         job["files"],
+        "subject":       job.get("subject"),
         "whisper_model": job.get("whisper_model"),
-        "no_context":   job.get("no_context"),
-        "start_from":   job.get("start_from"),
-        "stdout":       job["stdout"],
-        "stderr":       job["stderr"],
-        "returncode":   job["returncode"],
-        "download":     f"/download/{job_id}" if job["status"] == "done" else None,
+        "no_context":    job.get("no_context"),
+        "start_from":    job.get("start_from"),
+        "skip_ai":       job.get("skip_ai"),
+        "skip_ocr":      job.get("skip_ocr"),
+        "output_name":   job.get("output_name"),
+        "stdout":        job["stdout"],
+        "stderr":        job["stderr"],
+        "returncode":    job["returncode"],
+        "download":      f"/download/{job_id}" if job["status"] == "done" else None,
     }
     return JSONResponse(response)
 
