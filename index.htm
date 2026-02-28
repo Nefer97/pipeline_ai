@@ -75,7 +75,7 @@
   .toggle-wrap label{display:block;width:40px;height:22px;background:var(--border2);border-radius:11px;cursor:pointer;position:relative;transition:background .25s;}
   .toggle-wrap label::after{content:'';position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:transform .25s,background .25s;}
   .toggle-wrap input:checked+label{background:color-mix(in srgb,var(--tc,var(--c3)) 30%,transparent);border:1px solid color-mix(in srgb,var(--tc,var(--c3)) 50%,transparent);}
-  .toggle-wrap input:checked+label::after{transform:translateX(18px);background:var(--tc,var(--c3));}
+  .toggle-wrap input:checked+label::after{transform:translate(18px, -1px);background:var(--tc,var(--c3));}
   /* SELECT */
   .config-select{background:var(--surface2);border:1px solid var(--border2);border-radius:9px;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:.76rem;color:var(--text);cursor:pointer;outline:none;width:100%;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748b' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;transition:border-color .2s;}
   .config-select:focus,.config-select:hover{border-color:var(--c1);}
@@ -154,7 +154,13 @@
   </header>
 
   <div class="pipeline">
-
+    <audio id="bgMusic" src="assets/audio/ambient.mp3" autoplay loop muted></audio>
+    <script>
+    const bgMusic = document.getElementById('bgMusic');
+    bgMusic.volume = 0.05; // 15% del volume massimo
+    bgMusic.muted = false;  // togli il mute se vuoi far sentire subito
+    bgMusic.play().catch(e => console.log('Autoplay bloccato:', e));
+    </script>
     <div class="section-label">// 01 · carica le tue fonti</div>
     <div class="input-row">
       <div class="upload-col">
@@ -323,6 +329,27 @@
     <div class="run-section">
       <button class="run-btn" id="runBtn">▶ AVVIA PIPELINE</button>
     </div>
+
+  
+
+  <audio id="Play" src="assets/audio/Play.mp3"></audio>
+
+  <script>
+  const bkgMusic = document.getElementById('Play');
+  bkgMusic.volume = 0.15; // volume basso per sottofondo
+
+  const runBtn = document.getElementById('runBtn');
+  runBtn.addEventListener('click', () => {
+    // avvia musica
+    bkgMusic.play().catch(e => console.log("Autoplay bloccato:", e));
+    
+    // eventuale codice della pipeline
+    console.log("Pipeline avviata!");
+    
+    // puoi anche attivare lo stile del bottone se vuoi
+    runBtn.classList.add('active');
+  });
+  </script>
 
     <div class="arrow-down"><div class="chevron"></div></div>
 

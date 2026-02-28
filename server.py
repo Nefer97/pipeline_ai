@@ -135,19 +135,17 @@ async def run_pipeline(
 
     # Inizializza job
     jobs[job_id] = {
-        "status":        "queued",
-        "title":         title,
-        "files":         saved,
-        "subject":       _subject,
+        "status":       "queued",
+        "title":        title,
+        "files":        saved,
+        "subject":      _subject,
         "whisper_model": whisper_model,
-        "no_context":    _no_context,
-        "start_from":    _start_from,
-        "skip_ai":       _skip_ai,
-        "skip_ocr":      _skip_ocr,
-        "stdout":        "",
-        "stderr":        "",
-        "returncode":    None,
-        "zip_path":      None,
+        "no_context":   _no_context,
+        "start_from":   _start_from,
+        "stdout":       "",
+        "stderr":       "",
+        "returncode":   None,
+        "zip_path":     None,
     }
 
     # Lancia in background (non blocca la risposta HTTP)
@@ -186,8 +184,6 @@ async def get_job(job_id: str):
         "stderr":       job["stderr"],
         "returncode":   job["returncode"],
         "download":     f"/download/{job_id}" if job["status"] == "done" else None,
-        "skip_ai":      job.get("skip_ai"),
-        "skip_ocr":     job.get("skip_ocr"),
     }
     return JSONResponse(response)
 

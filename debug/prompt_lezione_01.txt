@@ -1,0 +1,99 @@
+TIPO DI CORSO: Corso Universitario
+- Definizioni importanti → \begin{definition}
+- Concetti chiave → \begin{itemize} o \begin{enumerate}
+- Formule → \begin{equation}
+- Esempi → \begin{example}
+- Struttura: \section > \subsection > \subsubsection
+
+# Lezione 1: Lezione Test
+
+[SLIDE]
+--- SLIDE 1: Light:its nature and its properties ---
+Light:its nature and its properties
+Lecturer: Mauro Mosca
+(www.dieet.unipa.it/tfl)
+last update: 29/09/2021
+
+--- SLIDE 2: Waves ---
+Waves
+Longitudinal waves
+Transversal waves
+
+--- SLIDE 3: Frequency and wavelength ---
+Frequency and wavelength
+Not all waves travel…
+…at a fixed point in space standing waves
+
+--- SLIDE 4: Frequency and wavelength ---
+Frequency and wavelength l l/T = lf = v
+
+--- SLIDE 5: Light ---
+Light particles or
+Waves
+?
++ reflection, refraction shadows
+Electromagnetic and quantum theory are in perfect agreement if we assume that the amplitude of a field (electric or magnetic) at a certain point and at a certain instant is proportional to the probability (wave function) of finding a photon
+
+--- SLIDE 6: Light properties ---
+Light properties
+Reflection qr qi qi = qr n1 n2 qt n1sinqi = n2sinqt
+Refraction
+
+--- SLIDE 7: Refractive indices ---
+Refractive indices
+
+--- SLIDE 8: Why refraction? ---
+Why refraction?
+n1 = 1
+?
+n2 = 1,3
+
+--- SLIDE 9: Interference: some pretty simple math... ---
+Interference: some pretty simple math...
+asin = n asin = (n+1/2)
+
+--- SLIDE 10:  --- ngsir.netfirms.com
+Web project:
+
+--- SLIDE 11: Photoelectric effect ---
+Photoelectric effect both velocity and energy of electrons independent of light intensity
+both velocity and energy of electrons dependent on color of light electrons insensitive to some colors
+
+--- SLIDE 12: Photons ---
+Photons photons
+Light = “energy packets”
+E = hf = hc/l   (Planck-Einstein relation)
+
+--- SLIDE 13: Electromagnetic spectrum ---
+Electromagnetic spectrum
+
+--- SLIDE 14: Dispersion ---
+Dispersion v  function of l n = n (l)
+
+--- SLIDE 15: Gratings ---
+Gratings in reflection in trasmission asin = n
+
+--- SLIDE 16: Spectrometer ---
+Spectrometer mirrors slit resolution?…
+
+--- SLIDE 17: Polarization of light ---
+Polarization of light
+E polarized light
+H non-polarized light
+
+--- SLIDE 18: Polarizers ---
+Polarizers
+E
+
+--- SLIDE 19: Optical activity ---
+Optical activity ability of some crystals to rotate the wave polarization plane possible in crystals that exhibit
+birefringence
+
+--- SLIDE 20: Light modulation ---
+Light modulation
+
+--- SLIDE 21: Light modulation: amplitude modulation ---
+Light modulation: amplitude modulation
+= f(t)
+
+Genera il capitolo LaTeX. Inizia con \section{Lezione 1: Lezione Test}.

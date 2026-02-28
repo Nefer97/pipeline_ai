@@ -357,16 +357,121 @@ REGOLE OBBLIGATORIE:
 10. Definizioni importanti -> \\begin{definition}...\\end{definition}"""
 
 
+# def generate_with_claude(lesson_number: int, title: str,
+#                           transcript: str, slide_text: str, extra_text: str,
+#                           subject_hint: str = None,
+#                           course_context_path: str = None):
+#     import urllib.request, urllib.error
+#     api_key = os.environ.get("ANTHROPIC_API_KEY")
+#     if not api_key:
+#         print("    [SKIP] ANTHROPIC_API_KEY non trovata")
+#         print("           Imposta: export ANTHROPIC_API_KEY='sk-ant-...'")
+#         return None
+
+#     # ── Preprocessor ──
+#     if PREPROCESSOR:
+#         doc = preprocess(
+#             transcript          = transcript,
+#             slide_text          = slide_text,
+#             extra_text          = extra_text,
+#             title               = f"Lezione {lesson_number}: {title}",
+#             subject_hint        = subject_hint,
+#             course_context_path = course_context_path,
+#             lesson_number       = lesson_number,
+#         )
+#         user_content = (
+#             doc.to_prompt()
+#             + f"\n\nGenera il capitolo LaTeX. "
+#             + f"Inizia con \\section{{Lezione {lesson_number}: {title}}}."
+#         )
+#     else:
+#         # Fallback legacy (niente preprocessor)
+#         parts = [f"# Lezione {lesson_number}: {title}\n"]
+#         if transcript:
+#             t = transcript[:6000] + "\n[...]" if len(transcript) > 6000 else transcript
+#             parts.append(f"## TRASCRIZIONE AUDIO\n{t}\n")
+#         if slide_text:
+#             s = slide_text[:3000] + "\n[...]" if len(slide_text) > 3000 else slide_text
+#             parts.append(f"## CONTENUTO SLIDE\n{s}\n")
+#         if extra_text:
+#             e = extra_text[:2000] + "\n[...]" if len(extra_text) > 2000 else extra_text
+#             parts.append(f"## DOCUMENTI AGGIUNTIVI\n{e}\n")
+#         parts.append(
+#             f"\nGenera il capitolo LaTeX. "
+#             f"Inizia con \\section{{Lezione {lesson_number}: {title}}}."
+#         )
+#         user_content = "\n".join(parts)
+    
+#     payload = json.dumps({
+#         "model": CONFIG["claude_model"],
+#         "max_tokens": CONFIG["claude_max_tokens"],
+#         "system": CLAUDE_SYSTEM,
+#         "messages": [{"role": "user", "content": user_content}]
+#     }).encode("utf-8")
+
+#     req = urllib.request.Request(
+#         "https://api.anthropic.com/v1/messages",
+#         data=payload,
+#         headers={"Content-Type": "application/json",
+#                  "x-api-key": api_key,
+#                  "anthropic-version": "2023-06-01"},
+#         method="POST"
+#     )
+#     print(f"    Claude API: lezione {lesson_number} ...")
+#     t0 = time.time()
+
+#     api_key = os.environ.get("ANTHROPIC_API_KEY")
+#     if not api_key:
+#         print("    [SKIP] ANTHROPIC_API_KEY non trovata")
+#         print("           Imposta: export ANTHROPIC_API_KEY='sk-ant-...'")
+#         # ── Dopo che user_content è pronto, subito prima del payload ──
+
+#         # ===== DEBUG PROMPT =====
+#         from pathlib import Path
+
+#         debug_dir = Path("debug")
+#         debug_dir.mkdir(exist_ok=True)
+
+#         debug_file = debug_dir / f"prompt_lezione_{lesson_number:02d}.txt"
+#         debug_file.write_text(user_content, encoding="utf-8")
+
+#         print(f"\n[DEBUG] Prompt salvato in: {debug_file.resolve()}")
+#         print(f"[DEBUG] Caratteri: {len(user_content)}")
+#         print(f"[DEBUG] Stima token ≈ {len(user_content)//4}\n")
+#         # ========================
+
+#         return None
+    
+#     try:
+#         with urllib.request.urlopen(req) as resp:
+#             data  = json.loads(resp.read())
+#             latex = data["content"][0]["text"]
+#             print(f"    ✓ {time.time()-t0:.1f}s, {len(latex)} caratteri")
+#             # Aggiorna contesto corso se preprocessor disponibile
+#             if PREPROCESSOR and course_context_path:
+#                 update_course_context(
+#                     context_path  = course_context_path,
+#                     lesson_number = lesson_number,
+#                     lesson_title  = title,
+#                     latex_content = latex,
+#                 )
+#             return latex
+#     except urllib.error.HTTPError as e:
+#         print(f"    [ERRORE] Claude {e.code}: {e.read().decode()[:200]}")
+#         return None
+#     except Exception as e:
+#         print(f"    [ERRORE] {e}")
+#         return None
+
 def generate_with_claude(lesson_number: int, title: str,
                           transcript: str, slide_text: str, extra_text: str,
                           subject_hint: str = None,
                           course_context_path: str = None):
     import urllib.request, urllib.error
+    from pathlib import Path
+    import time, json, os
+
     api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("    [SKIP] ANTHROPIC_API_KEY non trovata")
-        print("           Imposta: export ANTHROPIC_API_KEY='sk-ant-...'")
-        return None
 
     # ── Preprocessor ──
     if PREPROCESSOR:
@@ -402,6 +507,24 @@ def generate_with_claude(lesson_number: int, title: str,
         )
         user_content = "\n".join(parts)
 
+    # ===== DEBUG PROMPT =====
+    debug_dir = Path("debug")
+    debug_dir.mkdir(exist_ok=True)
+
+    debug_file = debug_dir / f"prompt_lezione_{lesson_number:02d}.txt"
+    debug_file.write_text(user_content, encoding="utf-8")
+
+    print(f"\n[DEBUG] Prompt salvato in: {debug_file.resolve()}")
+    print(f"[DEBUG] Caratteri: {len(user_content)}")
+    print(f"[DEBUG] Stima token ≈ {len(user_content)//4}\n")
+    # ========================
+
+    # Se manca la API key, esci dopo aver salvato il debug
+    if not api_key:
+        print("    [SKIP] ANTHROPIC_API_KEY non trovata")
+        print("           Imposta: export ANTHROPIC_API_KEY='sk-ant-...'")
+        return None
+
     payload = json.dumps({
         "model": CONFIG["claude_model"],
         "max_tokens": CONFIG["claude_max_tokens"],
@@ -419,6 +542,7 @@ def generate_with_claude(lesson_number: int, title: str,
     )
     print(f"    Claude API: lezione {lesson_number} ...")
     t0 = time.time()
+
     try:
         with urllib.request.urlopen(req) as resp:
             data  = json.loads(resp.read())
@@ -439,8 +563,6 @@ def generate_with_claude(lesson_number: int, title: str,
     except Exception as e:
         print(f"    [ERRORE] {e}")
         return None
-
-
 # ─────────────────────────────────────────────
 # STEP 7: LaTeX STRUTTURATO SENZA AI
 # Usa i dati del collega quando disponibili
@@ -806,8 +928,8 @@ def main():
     parser.add_argument("--start-from", type=int, default=1,
         help="Inizia numerazione lezioni da N")
     parser.add_argument("--subject",
-            help="Tipo di materia: ingegneria, matematica, fisica, medicina, "
-                "economia, giurisprudenza (default: auto-detect)")
+        help="Tipo di materia: ingegneria, matematica, fisica, medicina, "
+             "economia, giurisprudenza (default: auto-detect)")
     parser.add_argument("--no-context", action="store_true",
         help="Non usare/aggiornare corso_context.json")
     args = parser.parse_args()
