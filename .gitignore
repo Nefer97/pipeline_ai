@@ -19,3 +19,16 @@ corso_context.json
 *.wav
 test/
 files/
+
+# Output generati
+output/
+debug/
+test_images/
+*.transcript.txt
+
+# File di test temporanei
+lezione_test/
+test_lesson/
+
+# Venv
+venv/

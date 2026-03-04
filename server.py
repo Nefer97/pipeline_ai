@@ -44,7 +44,6 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                        no_context: bool, start_from: int):
     """Eseguito in background thread da BackgroundTasks."""
     jobs[job_id]["status"] = "running"
-
     cmd = [
         "python3", "pipeline.py",
         str(lesson_dir),
@@ -81,7 +80,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                 for f in output_dir.rglob("*"):
                     if f.is_file():
                         # Mantieni la cartella output_name come root dello ZIP
-                        zf.write(f, f.relative_to(output_dir.parent))
+                        zf.write(f, Path(output_dir.name) / f.relative_to(output_dir))  
             jobs[job_id]["status"]   = "done"
             jobs[job_id]["zip_path"] = str(zip_path)
         else:
