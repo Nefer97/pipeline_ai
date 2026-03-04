@@ -61,12 +61,14 @@ CONFIG = {
 # ─────────────────────────────────────────────
 try:
     from extractor import extract_slides
-    from builder import build_latex, _escape_latex
+    from builder import _escape_latex
     from formula_detector import is_formula_image
     from omml2latex import omml_to_latex
     from ocr_math import image_to_latex
+    from slide_renderer import render_slide_images, slide_figure_latex
+    from pdf_renderer import render_pdf_pages
     COLLEAGUE_MODULES = True
-    print("✓ Moduli collega: extractor, builder, formula_detector, omml2latex, ocr_math")
+    print("✓ Moduli collega: extractor, builder, formula_detector, omml2latex, ocr_math, slide_renderer, pdf_renderer")
 except ImportError as e:
     COLLEAGUE_MODULES = False
     print(f"⚠  Moduli collega non disponibili ({e}) — uso fallback base")
@@ -99,29 +101,38 @@ def extract_audio_from_video(video_path: Path, out_dir: Path):
 # ─────────────────────────────────────────────
 # STEP 2: TRASCRIZIONE WHISPER
 # ─────────────────────────────────────────────
-def transcribe_audio(audio_path: Path, model_name: str = "base") -> str:
-    cache = audio_path.with_suffix(".transcript.txt")
+def transcribe_audio(audio_path: Path, model_name: str = "base") -> tuple[str, int]:
+    """
+    Trascrive l'audio con Whisper.
+    Ritorna (testo_con_timestamp, durata_secondi).
+    """
+    cache      = audio_path.with_suffix(".transcript.txt")
+    cache_dur  = audio_path.with_suffix(".duration.txt")
     if cache.exists():
         print(f"    [cache] {cache.name}")
-        return cache.read_text(encoding="utf-8")
+        duration = int(cache_dur.read_text().strip()) if cache_dur.exists() else 0
+        return cache.read_text(encoding="utf-8"), duration
     try:
         import whisper
     except ImportError:
         print("    [MANCANTE] whisper — pip install openai-whisper")
-        return ""
+        return "", 0
     print(f"    Whisper ({model_name}): {audio_path.name} ...")
     t0 = time.time()
     model = whisper.load_model(model_name)
     result = model.transcribe(str(audio_path), language="it", verbose=False)
     elapsed = time.time() - t0
     lines = []
+    duration = 0
     for seg in result.get("segments", []):
         m, s = int(seg["start"] // 60), int(seg["start"] % 60)
         lines.append(f"[{m:02d}:{s:02d}] {seg['text'].strip()}")
+        duration = max(duration, int(seg.get("end", seg["start"])))
     text = "\n".join(lines)
     cache.write_text(text, encoding="utf-8")
-    print(f"    ✓ {elapsed:.0f}s, {len(lines)} segmenti")
-    return text
+    cache_dur.write_text(str(duration), encoding="utf-8")
+    print(f"    ✓ {elapsed:.0f}s, {len(lines)} segmenti, durata≈{duration}s")
+    return text, duration
 
 
 
@@ -270,14 +281,15 @@ def extract_pdf(pdf_path: Path) -> str:
 def process_pdf_chunked(pdf_path: Path, output_dir: Path,
                          base_lesson_number: int, title: str,
                          skip_ai: bool = False,
-                         chunk_size: int = 10) -> list[Path]:
+                         chunk_size: int = 10,
+                         subject_hint: str = None,
+                         course_context_path: str = None) -> list[Path]:
     """
     Processa un PDF grande dividendolo in chunk di pagine.
     Ogni chunk diventa un lezione_NN.tex separato.
     Ritorna la lista dei .tex generati.
     """
     print(f"\n  [PDF grande] {pdf_path.name} — chunking ogni {chunk_size} pagine")
-    from pdf_renderer import render_pdf_pages
     images_dir = output_dir / "images"
     images_dir.mkdir(exist_ok=True)
     pages = extract_pdf_pages(pdf_path)
@@ -291,6 +303,8 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
 
     tex_files = []
     for idx, chunk in enumerate(chunks):
+        if not chunk:
+            continue
         lesson_num  = base_lesson_number + idx
         p_start     = chunk[0]["page"]
         p_end       = chunk[-1]["page"]
@@ -306,26 +320,16 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
                 pdf_path   = pdf_path,
                 images_dir = images_dir,
                 pages_data = chunk,
-            )
+            ) if COLLEAGUE_MODULES else ({}, None)
             if latex_skeleton:
-                def esc(t):
-                    for a, b in [("\\","\\textbackslash{}"),("&","\\&"),
-                                ("%","\\%"),("$","\\$"),("#","\\#")]:
-                        t = t.replace(a, b)
-                    return t
                 content = (
-                    f"\\section{{Lezione {lesson_num}: {esc(chunk_title)}}}\n"
+                    f"\\section{{Lezione {lesson_num}: {_escape_latex(chunk_title)}}}\n"
                     f"\\label{{sec:lezione{lesson_num:02d}}}\n\n"
                     + latex_skeleton
                 )
             else:
-                def esc(t):
-                    for a, b in [("\\","\\textbackslash{}"),("&","\\&"),
-                                ("%","\\%"),("$","\\$"),("#","\\#")]:
-                        t = t.replace(a, b)
-                    return t
                 content_lines = [
-                    f"\\section{{Lezione {lesson_num}: {esc(chunk_title)}}}",
+                    f"\\section{{Lezione {lesson_num}: {_escape_latex(chunk_title)}}}",
                     f"\\label{{sec:lezione{lesson_num:02d}}}\n",
                 ]
                 for p in chunk:
@@ -333,7 +337,7 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
                     for line in p["text"].split("\n"):
                         line = line.strip()
                         if line:
-                            content_lines.append(esc(line) + "\n")
+                            content_lines.append(_escape_latex(line) + "\n")
                 content = "\n".join(content_lines)
         else:
             # ── Costruisce sources con la nuova struttura ──
@@ -341,7 +345,7 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
                 pdf_path   = pdf_path,
                 images_dir = images_dir,
                 pages_data = chunk,
-            )
+            ) if COLLEAGUE_MODULES else ({}, None)
             chunk_sources = {
                 "has_audio": False,
                 "scheletro": [{
@@ -356,18 +360,16 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
                 "contorno": [],
             }
             content = generate_with_claude(
-                lesson_number = lesson_num,
-                title         = chunk_title,
-                sources       = chunk_sources,
+                lesson_number        = lesson_num,
+                title                = chunk_title,
+                sources              = chunk_sources,
+                subject_hint         = subject_hint,
+                course_context_path  = course_context_path,
+                _progress_output_dir = output_dir,
             )
             if not content:
-                def esc(t):
-                    for a, b in [("\\","\\textbackslash{}"),("&","\\&"),
-                                  ("%","\\%"),("$","\\$"),("#","\\#")]:
-                        t = t.replace(a, b)
-                    return t
                 content = (
-                    f"\\section{{{esc(chunk_title)}}}\n"
+                    f"\\section{{{_escape_latex(chunk_title)}}}\n"
                     f"\\label{{sec:lezione{lesson_num:02d}}}\n\n"
                 )
                 for p in chunk:
@@ -375,7 +377,7 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
                     for line in p["text"].split("\n"):
                         line = line.strip()
                         if line:
-                            content += esc(line) + "\n"
+                            content += _escape_latex(line) + "\n"
 
         write_lesson_tex(lesson_num, chunk_title, content,
                          [f"{pdf_path.name} pag.{p_start}-{p_end}"], out_tex)
@@ -402,7 +404,7 @@ def extract_docx(docx_path: Path) -> str:
 # (con preprocessor integrato)
 # ─────────────────────────────────────────────
 try:
-    from preprocessor import preprocess, NormalizedDocument, update_course_context
+    from preprocessor import preprocess, NormalizedDocument, update_course_context, aligned_to_prompt
     PREPROCESSOR = True
 except ImportError:
     PREPROCESSOR = False
@@ -425,7 +427,8 @@ REGOLE OBBLIGATORIE:
 def generate_with_claude(lesson_number: int, title: str,
                           sources: dict,
                           subject_hint: str = None,
-                          course_context_path: str = None) -> str | None:
+                          course_context_path: str = None,
+                          _progress_output_dir: Path = None) -> str | None:
     """
     Genera LaTeX da Claude con prompt strutturato e gerarchia semantica.
 
@@ -458,10 +461,12 @@ REGOLE OBBLIGATORIE:
 7. Definizioni: \\begin{definition}...\\end{definition}
 8. Teoremi: \\begin{theorem}...\\end{theorem}
 9. Esempi: \\begin{example}...\\end{example}
-10. Non copiare verbatim la trascrizione — sintetizza i concetti
-11. Mantieni la terminologia tecnica originale del professore
-12. Le formule [FORMULA_OMML] sono già verificate — usale direttamente
-13. I blocchi \\begin{figure}...\\end{figure} nello SCHELETRO vanno mantenuti nella posizione esatta"""
+10. Osservazioni e intuizioni del professore: \\begin{remark}...\\end{remark}
+11. ZERO perdita di informazione concettuale dalla trascrizione: ogni spiegazione, esempio, intuizione e osservazione del professore deve apparire negli appunti — elimina solo le ripetizioni identiche e i riempitivi verbali (\"allora\", \"quindi\", \"diciamo\", ecc.)
+12. Le spiegazioni orali che vanno OLTRE il contenuto delle slide sono il materiale più prezioso: preservale integralmente con lo stile del professore
+13. Mantieni la terminologia tecnica originale del professore
+14. Le formule [FORMULA_OMML] sono già verificate — usale direttamente
+15. I blocchi \\begin{figure}...\\end{figure} nello SCHELETRO vanno mantenuti nella posizione esatta"""
 
     # ─────────────────────────────────────────
     # PREPROCESSOR — pulizia e contesto corso
@@ -471,8 +476,9 @@ REGOLE OBBLIGATORIE:
 
     if PREPROCESSOR:
         # Usa preprocessor solo per pulizia e contesto — non per assemblare il prompt
-        carne_text    = "\n".join(s["text"] for s in sources["carne"])
-        scheletro_raw = "\n".join(s["text"] for s in sources["scheletro"])
+        carne_text      = "\n".join(s["text"] for s in sources["carne"])
+        scheletro_raw   = "\n".join(s["text"] for s in sources["scheletro"])
+        total_duration  = sum(s.get("duration_sec", 0) for s in sources["carne"]) or None
 
         doc = preprocess(
             transcript          = carne_text,
@@ -482,12 +488,15 @@ REGOLE OBBLIGATORIE:
             subject_hint        = subject_hint,
             course_context_path = course_context_path,
             lesson_number       = lesson_number,
+            total_duration_sec  = total_duration,
         )
         subject        = doc.subject
         course_context = doc.context_prompt
         subject_instr  = doc.subject_prompt
+        aligned        = doc.aligned_sections
     else:
         subject_instr = ""
+        aligned       = []
 
     # ─────────────────────────────────────────
     # USER PROMPT — assemblaggio con gerarchia
@@ -584,21 +593,35 @@ REGOLE OBBLIGATORIE:
     if has_carne:
         parts.append(f"{sep}\n  FONTE: CARNE (voce del professore)\n{sep}")
 
-        for entry in sources["carne"]:
-            filename = entry["filename"]
-            text     = entry["text"]
+        # Se abbiamo l'allineamento slide↔trascrizione, usalo — è molto più utile per Claude
+        if aligned and has_scheletro:
+            aligned_text = aligned_to_prompt(aligned)
             parts.append(
                 f"{sep2}\n"
-                f"File: {filename}\n\n"
-                f"Trascrizione della VOCE DEL PROFESSORE durante la lezione.\n"
+                f"Trascrizione ALLINEATA per slide — voce del professore mappata sulla struttura\n"
                 f"REGOLE:\n"
-                f"  • Integra le spiegazioni nelle \\subsection corrispondenti dello SCHELETRO\n"
+                f"  • Ogni blocco [SPIEGAZIONE ORALE] corrisponde alla slide soprastante\n"
                 f"  • Le ripetizioni di un concetto indicano importanza — enfatizzalo\n"
-                f"  • Gli esempi verbali non presenti nello scheletro → \\begin{{example}}\n"
+                f"  • Gli esempi verbali non nello scheletro → \\begin{{example}}\n"
                 f"  • Le frasi 'quindi', 'in altre parole', 'ricordate' → spiegazioni chiave\n"
-                f"  • I timestamp [MM:SS] indicano la progressione temporale\n"
-                f"{sep2}\n{text}"
+                f"{sep2}\n{aligned_text}"
             )
+        else:
+            for entry in sources["carne"]:
+                filename = entry["filename"]
+                text     = entry["text"]
+                parts.append(
+                    f"{sep2}\n"
+                    f"File: {filename}\n\n"
+                    f"Trascrizione della VOCE DEL PROFESSORE durante la lezione.\n"
+                    f"REGOLE:\n"
+                    f"  • Integra le spiegazioni nelle \\subsection corrispondenti dello SCHELETRO\n"
+                    f"  • Le ripetizioni di un concetto indicano importanza — enfatizzalo\n"
+                    f"  • Gli esempi verbali non presenti nello scheletro → \\begin{{example}}\n"
+                    f"  • Le frasi 'quindi', 'in altre parole', 'ricordate' → spiegazioni chiave\n"
+                    f"  • I timestamp [MM:SS] indicano la progressione temporale\n"
+                    f"{sep2}\n{text}"
+                )
 
     # ── SUPPORTO ──
     if has_supporto:
@@ -689,6 +712,10 @@ REGOLE OBBLIGATORIE:
     )
 
     print(f"  Claude API: lezione {lesson_number} ...")
+    if _progress_output_dir:
+        _report_progress(_progress_output_dir, 70,
+                         "Claude — Generazione LaTeX",
+                         f"Lezione {lesson_number}: {title}")
     t0 = time.time()
     try:
         with urllib.request.urlopen(req) as resp:
@@ -735,11 +762,16 @@ def _build_synthesis_instructions(lesson_number: int, title: str,
         lines += [
             "CASO: slide + audio (caso ideale)",
             "1. Parti dallo SCHELETRO — mantieni ogni \\subsection e ogni \\begin{figure} nella posizione esatta",
-            "2. Per ogni \\subsection integra la spiegazione dalla CARNE corrispondente per timestamp",
-            "3. Se scheletro e carne si contraddicono → privilegia lo SCHELETRO",
+            "2. Per ogni \\subsection espandi con la SPIEGAZIONE COMPLETA del professore dalla CARNE:",
+            "   - Trascrivi integralmente la spiegazione del professore per quella slide",
+            "   - Preserva il filo logico e lo stile didattico originale",
+            "   - Rimuovi solo i riempitivi verbali puri (\"allora\", \"quindi\", ripetizioni identiche)",
+            "3. Se scheletro e carne si contraddicono → privilegia lo SCHELETRO per i fatti, la CARNE per le spiegazioni",
             "4. Esempi verbali del professore non nello scheletro → aggiungi come \\begin{example}",
-            "5. Formule [FORMULA_OMML] → copia direttamente senza modifiche",
-            "6. Formule pronunciate nella trascrizione → converti tu in LaTeX",
+            "5. Osservazioni, intuizioni, avvertenze del professore → aggiungi come \\begin{remark}",
+            "6. Ogni subsection deve contenere la spiegazione orale completa, non solo i bullet point della slide",
+            "7. Formule [FORMULA_OMML] → copia direttamente senza modifiche",
+            "8. Formule pronunciate nella trascrizione → converti tu in LaTeX",
         ]
 
     # Caso 2: solo scheletro PPTX, no audio
@@ -757,8 +789,11 @@ def _build_synthesis_instructions(lesson_number: int, title: str,
         lines += [
             "CASO: documento + audio",
             "1. Usa la struttura del documento come guida per \\subsection",
-            "2. Riempi ogni sezione con le spiegazioni dalla trascrizione",
-            "3. Se documento e trascrizione si contraddicono → privilegia il documento",
+            "2. Per ogni sezione integra la SPIEGAZIONE COMPLETA del professore dalla trascrizione:",
+            "   - Preserva ogni spiegazione, esempio e osservazione del professore",
+            "   - Rimuovi solo i riempitivi verbali puri",
+            "3. Se documento e trascrizione si contraddicono → privilegia il documento per i fatti",
+            "4. Esempi verbali → \\begin{example}, osservazioni → \\begin{remark}",
         ]
 
     # Caso 4: solo audio, niente scheletro
@@ -767,8 +802,10 @@ def _build_synthesis_instructions(lesson_number: int, title: str,
             "CASO: solo audio (nessuno scheletro)",
             "1. Struttura autonomamente identificando i macro-argomenti nella trascrizione",
             "2. Ogni cambio di argomento → nuova \\subsection",
-            "3. Segui l'ordine cronologico della lezione",
-            "4. Formule pronunciate → converti in LaTeX",
+            "3. Preserva integralmente le spiegazioni del professore — zero perdita di informazione",
+            "4. Segui l'ordine cronologico della lezione",
+            "5. Esempi verbali → \\begin{example}, osservazioni → \\begin{remark}",
+            "6. Formule pronunciate → converti in LaTeX",
         ]
 
     # Caso 5: solo documenti, niente audio
@@ -792,7 +829,8 @@ def _build_synthesis_instructions(lesson_number: int, title: str,
         "",
         "QUALITÀ ATTESA:",
         "• Struttura gerarchica chiara e navigabile",
-        "• Ogni concetto spiegato, non solo elencato",
+        "• Spiegazioni complete del professore integrate per ogni concetto, non solo i bullet point",
+        "• Nessuna informazione concettuale della trascrizione va persa",
         "• Formule matematiche corrette e leggibili",
         "• Pronto per compilazione con pdflatex",
     ]
@@ -818,7 +856,6 @@ def build_fallback_latex(lesson_number: int, title: str,
     slide_images = slide_images or {}
 
     if COLLEAGUE_MODULES and slides:
-        from slide_renderer import slide_figure_latex
         esc = _escape_latex
         parts = []
         parts.append(f"\\section{{Lezione {lesson_number}: {esc(title)}}}")
@@ -918,7 +955,6 @@ def build_fallback_latex(lesson_number: int, title: str,
                 parts.append(f"\n\\subsection{{{esc(line)}}}\n")
                 # Aggiungi figura se disponibile
                 if current_slide_num and current_slide_num in slide_images:
-                    from slide_renderer import slide_figure_latex
                     parts.append(slide_figure_latex(
                         img_filename = slide_images[current_slide_num],
                         slide_number = current_slide_num,
@@ -957,57 +993,211 @@ def write_lesson_tex(lesson_number: int, title: str,
 
 
 # ─────────────────────────────────────────────
+# STATE — numerazione persistente per corso
+# ─────────────────────────────────────────────
+_STATE_FILE = "state.json"
+
+
+def load_state(output_dir: Path) -> dict:
+    """
+    Legge state.json dalla cartella output del corso.
+    Struttura:
+      {
+        "course_title": "...",
+        "subject":      "...",
+        "next_lesson":  N,
+        "lessons": [
+          {"number": 1, "source_dir": "...", "tex_file": "lezione_01.tex",
+           "processed_at": "ISO8601"}
+        ]
+      }
+    """
+    path = output_dir / _STATE_FILE
+    if path.exists():
+        try:
+            import json as _json
+            return _json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {"course_title": "", "subject": None, "next_lesson": 1, "lessons": []}
+
+
+def save_state(output_dir: Path, state: dict):
+    """Salva state.json nella cartella output del corso."""
+    import json as _json
+    path = output_dir / _STATE_FILE
+    path.write_text(_json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+# ─────────────────────────────────────────────
+# PROGRESS — comunicazione real-time col server
+# ─────────────────────────────────────────────
+
+def _report_progress(output_dir: Path, progress: int,
+                     current_step: str, detail: str = ""):
+    """
+    Scrive progress.json nella output_dir.
+    Il server FastAPI lo legge ad ogni GET /job/{job_id}.
+    Silenzioso in caso di errore (non deve mai crashare la pipeline).
+    """
+    import json as _json
+    try:
+        data = {
+            "progress":     max(0, min(100, progress)),
+            "current_step": current_step,
+            "detail":       detail,
+        }
+        (output_dir / "progress.json").write_text(
+            _json.dumps(data), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
+# ─────────────────────────────────────────────
 # GENERAZIONE main.tex
 # ─────────────────────────────────────────────
 MAIN_TEMPLATE = r"""\documentclass[12pt,a4paper]{{report}}
 
-%% Encoding e lingua
+% ---------------------------------------------------------
+% ENCODING & LINGUA
+% ---------------------------------------------------------
 \usepackage[utf8]{{inputenc}}
 \usepackage[T1]{{fontenc}}
 \usepackage[english,italian]{{babel}}
+\usepackage{{lmodern}}
 
-%% Matematica
-\usepackage{{amsmath,amssymb,amsthm,mathtools}}
+% ---------------------------------------------------------
+% MATEMATICA
+% ---------------------------------------------------------
+\usepackage{{amsmath,amsfonts,amssymb,amsthm,mathtools}}
+\usepackage{{gensymb}}
 
-%% Layout
+% ---------------------------------------------------------
+% LAYOUT & GEOMETRIA
+% ---------------------------------------------------------
 \usepackage[margin=2.5cm]{{geometry}}
-\usepackage{{microtype,setspace}}
-\onehalfspacing
+\usepackage{{microtype}}
 
-%% Immagini
-\usepackage{{graphicx,float}}
+% ---------------------------------------------------------
+% IMMAGINI & FIGURE
+% ---------------------------------------------------------
+\usepackage{{graphicx,float,subcaption}}
 \graphicspath{{{{{images_path}}}}}
 
-%% Header/Footer
+% ---------------------------------------------------------
+% COLORI & GRAFICA
+% ---------------------------------------------------------
+\usepackage{{xcolor}}
+\usepackage{{tikz}}
+\usetikzlibrary{{positioning,calc,arrows.meta,shapes,shapes.geometric}}
+\tikzstyle{{block}} = [draw, rectangle, minimum height=1.2cm, minimum width=1.8cm]
+\tikzstyle{{sum}}   = [draw, circle, inner sep=0pt, minimum size=6mm]
+\tikzstyle{{input}} = [coordinate]
+
+% ---------------------------------------------------------
+% LISTE & SIMBOLI
+% ---------------------------------------------------------
+\usepackage{{enumitem}}
+\usepackage{{pifont}}
+\usepackage{{newunicodechar}}
+\newunicodechar{{✓}}{{\ding{{51}}}}
+\newunicodechar{{✗}}{{\ding{{55}}}}
+
+% ---------------------------------------------------------
+% CODICE
+% ---------------------------------------------------------
+\usepackage{{listings}}
+\lstset{{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  backgroundcolor=\color{{gray!10}},
+  numbers=left,
+  numberstyle=\tiny\color{{gray}},
+  keywordstyle=\color{{blue!70!black}}\bfseries,
+  commentstyle=\color{{green!50!black}}\itshape,
+  stringstyle=\color{{orange!80!black}},
+}}
+
+% ---------------------------------------------------------
+% AMBIENTI COLORATI (tcolorbox)
+% ---------------------------------------------------------
+\usepackage[most]{{tcolorbox}}
+
+\tcbset{{
+  theorembase/.style={{
+    enhanced, breakable,
+    fonttitle=\bfseries,
+    separator sign={{~—~}},
+  }}
+}}
+
+\newtcbtheorem[number within=chapter]{{theorem}}{{Teorema}}{{
+  theorembase,
+  colback=blue!5!white, colframe=blue!50!black,
+}}{{thm}}
+
+\newtcbtheorem[use counter from=theorem]{{definition}}{{Definizione}}{{
+  theorembase,
+  colback=green!5!white, colframe=green!45!black,
+}}{{def}}
+
+\newtcbtheorem[use counter from=theorem]{{example}}{{Esempio}}{{
+  theorembase,
+  colback=orange!5!white, colframe=orange!60!black,
+}}{{ex}}
+
+\newtcbtheorem[use counter from=theorem]{{remark}}{{Osservazione}}{{
+  theorembase,
+  colback=gray!8!white, colframe=gray!50!black,
+}}{{rem}}
+
+\newtcbtheorem[use counter from=theorem]{{lemma}}{{Lemma}}{{
+  theorembase,
+  colback=purple!5!white, colframe=purple!50!black,
+}}{{lem}}
+
+% ---------------------------------------------------------
+% HEADER / FOOTER
+% ---------------------------------------------------------
 \usepackage{{fancyhdr}}
-\pagestyle{{fancy}}\fancyhf{{}}
-\rhead{{\thepage}}\lhead{{\leftmark}}
+\pagestyle{{fancy}}
+\fancyhf{{}}
+\lhead{{\leftmark}}
+\rhead{{{title}}}
+\cfoot{{\thepage}}
+\renewcommand{{\headrulewidth}}{{0.4pt}}
+\renewcommand{{\footrulewidth}}{{0pt}}
 
-%% Link
+% ---------------------------------------------------------
+% LINK
+% ---------------------------------------------------------
 \usepackage{{hyperref}}
-\hypersetup{{colorlinks=true,linkcolor=blue,urlcolor=blue}}
+\hypersetup{{
+  colorlinks = true,
+  linkcolor  = blue!70!black,
+  urlcolor   = blue!70!black,
+  citecolor  = green!50!black,
+}}
 
-%% Ambienti teoremi
-\newtheorem{{theorem}}{{Teorema}}[chapter]
-\newtheorem{{lemma}}[theorem]{{Lemma}}
-\newtheorem{{corollary}}[theorem]{{Corollario}}
-\newtheorem{{definition}}[theorem]{{Definizione}}
-\newtheorem{{example}}[theorem]{{Esempio}}
-\newtheorem{{remark}}[theorem]{{Osservazione}}
-
-%% Codice
-\usepackage{{listings,xcolor}}
-\lstset{{basicstyle=\ttfamily\small,breaklines=true,
-        frame=single,backgroundcolor=\color{{gray!10}}}}
-
-%% ──────────────────────
-\title{{{title}\\[1ex]\large Appunti del Corso}}
-\author{{Appunti AI}}
-\date{{{date}}}
-%% ──────────────────────
-
+% ---------------------------------------------------------
+% INIZIO DOCUMENTO
+% ---------------------------------------------------------
 \begin{{document}}
-\maketitle
+
+\begin{{titlepage}}
+\centering
+\vspace*{{3cm}}
+{{\Huge\bfseries {title}\par}}
+\vspace{{1cm}}
+{{\large Appunti generati automaticamente\par}}
+\vspace{{0.5cm}}
+{{\large {date}\par}}
+\vfill
+{{\normalsize Generato con \texttt{{appunti\_ai}} + Claude (Anthropic)\par}}
+\end{{titlepage}}
+
 \tableofcontents
 \clearpage
 
@@ -1068,6 +1258,7 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         print("  [SKIP] Nessun file riconosciuto")
         return None
     print(f"  Fonti trovate: {', '.join(labels)}")
+    _report_progress(output_dir, 5, "Analisi sorgenti", f"Lezione {lesson_number}")
 
     tmp_dir    = output_dir / f"_tmp_{lesson_number:02d}"
     images_dir = output_dir / CONFIG["images_subdir"]
@@ -1090,24 +1281,32 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     # ─────────────────────────────────────────────
     # STEP 1: AUDIO → CARNE (sempre)
     # ─────────────────────────────────────────────
-    for af in by["audio"]:
+    audio_files = by["audio"]
+    for idx, af in enumerate(audio_files):
         print(f"\n  [Audio → CARNE] {af.name}")
-        t = transcribe_audio(af, whisper_model)
+        _report_progress(output_dir, 10 + idx * 5,
+                         "Whisper — Trascrizione audio",
+                         f"File {idx+1}/{len(audio_files)}: {af.name}")
+        t, dur = transcribe_audio(af, whisper_model)
         if t:
-            sources["carne"].append({"filename": af.name, "text": t})
+            sources["carne"].append({"filename": af.name, "text": t, "duration_sec": dur})
             sources["has_audio"] = True
             source_names.append(af.name)
 
     # ─────────────────────────────────────────────
     # STEP 2: VIDEO → CARNE (sempre)
     # ─────────────────────────────────────────────
-    for vf in by["video"]:
+    video_files = by["video"]
+    for idx, vf in enumerate(video_files):
         print(f"\n  [Video → CARNE] {vf.name}")
+        _report_progress(output_dir, 15 + idx * 5,
+                         "Whisper — Trascrizione video",
+                         f"File {idx+1}/{len(video_files)}: {vf.name}")
         mp3 = extract_audio_from_video(vf, tmp_dir)
         if mp3:
-            t = transcribe_audio(mp3, whisper_model)
+            t, dur = transcribe_audio(mp3, whisper_model)
             if t:
-                sources["carne"].append({"filename": vf.name, "text": t})
+                sources["carne"].append({"filename": vf.name, "text": t, "duration_sec": dur})
                 sources["has_audio"] = True
                 source_names.append(vf.name)
 
@@ -1116,13 +1315,13 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     # ─────────────────────────────────────────────
     for sf in by["slide"]:
         print(f"\n  [PPTX → SCHELETRO] {sf.name}")
+        _report_progress(output_dir, 35, "Estrazione slide PPTX", sf.name)
         if COLLEAGUE_MODULES:
             slides_obj, plain = process_pptx_full(sf, images_dir, skip_ocr=skip_ocr)
             pptx_slides = slides_obj
 
             # ← PRIMA renderizza le slide come PNG
-            from slide_renderer import render_slide_images
-            slide_images = render_slide_images(sf, images_dir)
+            slide_images = render_slide_images(sf, images_dir) if COLLEAGUE_MODULES else {}
 
             # ← POI costruisci lo scheletro LaTeX con i PNG
             skeleton_latex = build_fallback_latex(
@@ -1151,7 +1350,79 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
             })
         source_names.append(sf.name)
     # ─────────────────────────────────────────────
-    # STEP 4: PDF — SCHELETRO se c'è audio, SUPPORTO se no
+    # STEP 4: TXT/MD — processato PRIMA di PDF/DOCX
+    # perché PDF e DOCX dipendono da has_audio per la gerarchia.
+    #
+    # Rilevamento trascrizione (in cascata, basta uno vero):
+    #   1. Timestamp [MM:SS] in ≥10% delle righe  → trascrizione Whisper/automatica
+    #   2. Nome file contiene parole chiave         → trascrizione manuale dichiarata
+    #   3. Unico .txt + c'è PDF/PPTX + nessun audio → assume trascrizione
+    # ─────────────────────────────────────────────
+    import re as _re
+
+    def _strip_rtf(raw: str) -> str:
+        """Rimuove markup RTF e restituisce testo pulito."""
+        if not raw.lstrip().startswith('{\\rtf'):
+            return raw
+        # Prova striprtf se installato
+        try:
+            from striprtf.striprtf import rtf_to_text
+            return rtf_to_text(raw)
+        except ImportError:
+            pass
+        # Fallback regex: rimuove control words, gruppi e caratteri speciali RTF
+        t = _re.sub(r'\\\n', '\n', raw)               # a capo letterali
+        t = _re.sub(r'\\par\b', '\n', t)              # paragrafi
+        t = _re.sub(r'\\line\b', '\n', t)             # line break
+        t = _re.sub(r'\\\\\s?', '', t)                # backslash escapati
+        t = _re.sub(r'\\[a-z]+\-?\d*\s?', '', t)     # control words
+        t = _re.sub(r'\{[^{}]{0,200}\}', '', t)       # gruppi brevi (fonttbl, colortbl…)
+        t = _re.sub(r'[{}]', '', t)                   # parentesi graffe residue
+        t = _re.sub(r"\\\'([0-9a-f]{2})",             # caratteri hex \' cp1252 (include €, ', " ecc.)
+                    lambda m: bytes.fromhex(m.group(1)).decode('cp1252', errors='replace'),
+                    t)
+        t = _re.sub(r'\n{3,}', '\n\n', t)            # righe vuote multiple
+        return t.strip()
+
+    _ts_pat  = _re.compile(r'^\[\d{2}:\d{2}\]')
+    _name_kw = _re.compile(
+        r'(transcript|trascrizione|lezione|audio|registr|carne)',
+        _re.IGNORECASE
+    )
+    _has_structure = bool(by["slide"] or by["pdf"] or by["doc"])
+    _only_one_txt  = len(by["text"]) == 1
+
+    for tf in by["text"]:
+        raw  = tf.read_text(encoding="utf-8", errors="ignore")
+        text = _strip_rtf(raw)
+        if not text.strip():
+            continue
+        lines = [l for l in text.splitlines() if l.strip()]
+        ts_count = sum(1 for l in lines if _ts_pat.match(l.strip()))
+
+        # Segnale 1: timestamp
+        has_timestamps  = len(lines) > 0 and ts_count / len(lines) >= 0.10
+        # Segnale 2: nome file suggerisce trascrizione
+        has_kw_name     = bool(_name_kw.search(tf.stem))
+        # Segnale 3: unico txt + struttura presente + nessun audio reale
+        is_solo_companion = _only_one_txt and _has_structure and not sources["has_audio"]
+
+        is_transcript = has_timestamps or has_kw_name or is_solo_companion
+
+        if is_transcript:
+            reason = ("timestamp" if has_timestamps
+                      else "nome file" if has_kw_name
+                      else "unico txt + struttura presente")
+            print(f"\n  [TXT → CARNE] {tf.name}  ({reason})")
+            sources["carne"].append({"filename": tf.name, "text": text, "duration_sec": 0})
+            sources["has_audio"] = True
+        else:
+            print(f"\n  [TXT → CONTORNO] {tf.name}")
+            sources["contorno"].append({"filename": tf.name, "text": text})
+        source_names.append(tf.name)
+
+    # ─────────────────────────────────────────────
+    # STEP 5: PDF — SCHELETRO se c'è audio, SUPPORTO se no
     # ─────────────────────────────────────────────
     for pf in by["pdf"]:
         pages = extract_pdf_pages(pf)
@@ -1162,19 +1433,23 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         if len(pages) > 20 and not sources["has_audio"]:
             print(f"\n  [PDF grande → chunking] {pf.name}")
             chunk_files = process_pdf_chunked(
-                pdf_path           = pf,
-                output_dir         = output_dir,
-                base_lesson_number = lesson_number,
-                title              = source_dir.name.replace("_"," ").replace("-"," ").title(),
-                skip_ai            = skip_ai,
-                chunk_size         = 10,
+                pdf_path            = pf,
+                output_dir          = output_dir,
+                base_lesson_number  = lesson_number,
+                title               = source_dir.name.replace("_"," ").replace("-"," ").title(),
+                skip_ai             = skip_ai,
+                chunk_size          = 10,
+                subject_hint        = subject_hint,
+                course_context_path = course_context_path,
             )
             shutil.rmtree(tmp_dir, ignore_errors=True)
             return chunk_files
 
         # PDF piccolo o con audio → rendering + entry normale
-        from pdf_renderer import render_pdf_pages
-        page_images, latex_skeleton = render_pdf_pages(pf, images_dir, pages)
+        if COLLEAGUE_MODULES:
+            page_images, latex_skeleton = render_pdf_pages(pf, images_dir, pages)
+        else:
+            page_images, latex_skeleton = {}, None
 
         text  = "\n".join(f"[PAG {p['page']}]\n{p['text']}" for p in pages)
         entry = {
@@ -1194,13 +1469,13 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
 
         source_names.append(pf.name)
     # ─────────────────────────────────────────────
-    # STEP 5: DOCX — SCHELETRO se c'è audio, SUPPORTO se no
+    # STEP 6: DOCX — SCHELETRO se c'è audio, SUPPORTO se no
     # ─────────────────────────────────────────────
     for df in by["doc"]:
         text = extract_docx(df)
         if not text:
             continue
-        entry = {"filename": df.name, "text": text}
+        entry = {"filename": df.name, "text": text, "latex": None, "pages": None}
 
         if sources["has_audio"]:
             print(f"\n  [DOCX → SCHELETRO] {df.name}  (c'è audio)")
@@ -1210,16 +1485,6 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
             sources["supporto"].append(entry)
 
         source_names.append(df.name)
-
-    # ─────────────────────────────────────────────
-    # STEP 6: TXT/MD → CONTORNO (sempre)
-    # ─────────────────────────────────────────────
-    for tf in by["text"]:
-        print(f"\n  [TXT → CONTORNO] {tf.name}")
-        text = tf.read_text(encoding="utf-8", errors="ignore")
-        if text.strip():
-            sources["contorno"].append({"filename": tf.name, "text": text})
-            source_names.append(tf.name)
 
     # ─────────────────────────────────────────────
     # LOG GERARCHIA RISOLTA
@@ -1260,19 +1525,24 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     print()
     if skip_ai:
         print("  [--skip-ai] LaTeX strutturato senza Claude")
+        _report_progress(output_dir, 70, "Generazione LaTeX (skip-ai)", "")
         content = _latex_from_skeleton(sources, lesson_number, title, pptx_slides)
     else:
+        _report_progress(output_dir, 60, "Claude — Costruzione prompt", "")
         content = generate_with_claude(
             lesson_number       = lesson_number,
             title               = title,
             sources             = sources,
             subject_hint        = subject_hint,
             course_context_path = course_context_path,
+            _progress_output_dir = output_dir,
         )
         if not content:
             print("  [fallback] Claude non raggiunto, uso scheletro")
+            _report_progress(output_dir, 80, "Fallback — Claude non raggiunto", "")
             content = _latex_from_skeleton(sources, lesson_number, title, pptx_slides)
 
+    _report_progress(output_dir, 90, "Scrittura file LaTeX", out_tex.name)
     write_lesson_tex(lesson_number, title, content, source_names, out_tex)
     shutil.rmtree(tmp_dir, ignore_errors=True)
     return out_tex
@@ -1300,8 +1570,8 @@ def main():
     parser.add_argument("--whisper-model", default=CONFIG["whisper_model"],
         choices=["tiny","base","small","medium","large"],
         help="Modello Whisper (default: base)")
-    parser.add_argument("--start-from", type=int, default=1,
-        help="Inizia numerazione lezioni da N")
+    parser.add_argument("--start-from", type=int, default=None,
+        help="Forza la numerazione a partire da N (default: auto da state.json)")
     parser.add_argument("--subject",
         choices=["ingegneria","matematica","fisica","medicina",
                 "economia","giurisprudenza","generico"],
@@ -1335,16 +1605,48 @@ def main():
     print(f"  Contesto: {ctx_str}")
     print(f"{'═'*58}")
 
+    # ── Carica stato persistente del corso ──────────────────
+    state = load_state(output_dir)
+    if args.title and args.title != "Appunti del Corso":
+        state["course_title"] = args.title
+    if args.subject:
+        state["subject"] = args.subject
+
+    # Determina da quale numero partire
+    if args.start_from is not None:
+        # Override esplicito → rispetta sempre (utile per correzioni)
+        next_lesson = args.start_from
+        print(f"  Numerazione : forzata da {next_lesson} (--start-from)")
+    else:
+        next_lesson = state["next_lesson"]
+        print(f"  Numerazione : auto da state.json (prossima lezione {next_lesson})")
+
     lesson_files = []
 
-    def collect(result):
-        """Gestisce sia Path singolo che lista di Path (PDF chunked)."""
+    def collect(result, source_dir_name: str = ""):
+        """Gestisce sia Path singolo che lista di Path (PDF chunked).
+        Aggiorna state.json dopo ogni lezione processata con successo."""
         if result is None:
             return
-        if isinstance(result, list):
-            lesson_files.extend(result)
-        else:
-            lesson_files.append(result)
+        results = result if isinstance(result, list) else [result]
+        for tex_path in results:
+            lesson_files.append(tex_path)
+            # Aggiorna lista lezioni nello stato
+            # Evita duplicati: rimuovi eventuale voce precedente con stesso tex_file
+            state["lessons"] = [
+                e for e in state["lessons"] if e["tex_file"] != tex_path.name
+            ]
+            state["lessons"].append({
+                "number":       int(tex_path.stem.split("_")[-1]),
+                "source_dir":   source_dir_name,
+                "tex_file":     tex_path.name,
+                "processed_at": datetime.now().isoformat(timespec="seconds"),
+            })
+        # Ricalcola next_lesson come max numero usato + 1
+        if state["lessons"]:
+            state["next_lesson"] = max(e["number"] for e in state["lessons"]) + 1
+        save_state(output_dir, state)
+        print(f"  [state] salvato → prossima lezione: {state['next_lesson']}")
 
     if args.batch:
         subdirs = sorted(d for d in source_path.iterdir() if d.is_dir())
@@ -1352,29 +1654,44 @@ def main():
             print(f"[ERRORE] Nessuna sottocartella in {source_path}")
             sys.exit(1)
         print(f"\n  {len(subdirs)} lezioni trovate")
-        for i, subdir in enumerate(subdirs, start=args.start_from):
+        processed_dirs = {e["source_dir"] for e in state["lessons"]}
+        for subdir in subdirs:
+            if subdir.name in processed_dirs:
+                print(f"  [SKIP] {subdir.name} già processata (presente in state.json)")
+                continue
+            lesson_num = state["next_lesson"]
             result = process_lesson(
-                subdir, i, output_dir,
+                subdir, lesson_num, output_dir,
                 skip_ai             = args.skip_ai,
                 skip_ocr            = args.skip_ocr,
                 whisper_model       = args.whisper_model,
                 subject_hint        = args.subject,
                 course_context_path = course_context_path,
             )
-            collect(result)
+            collect(result, subdir.name)
     else:
         result = process_lesson(
-            source_path, args.start_from, output_dir,
+            source_path, next_lesson, output_dir,
             skip_ai             = args.skip_ai,
             skip_ocr            = args.skip_ocr,
             whisper_model       = args.whisper_model,
             subject_hint        = args.subject,
             course_context_path = course_context_path,
         )
-        collect(result)
+        collect(result, source_path.name)
 
-    if lesson_files:
-        generate_main_tex(args.title, lesson_files, output_dir)
+    # ── main.tex: include TUTTE le lezioni dello stato, non solo quella corrente
+    all_tex_files = []
+    for entry in sorted(state["lessons"], key=lambda e: e["number"]):
+        tex_path = output_dir / entry["tex_file"]
+        if tex_path.exists():
+            all_tex_files.append(tex_path)
+
+    if all_tex_files:
+        _report_progress(output_dir, 95, "Generazione main.tex",
+                         f"{len(all_tex_files)} lezioni")
+        generate_main_tex(state["course_title"] or args.title, all_tex_files, output_dir)
+        _report_progress(output_dir, 100, "Completato", "")
         print(f"\n{'═'*58}")
         print(f"  COMPLETATO — {len(lesson_files)} lezioni")
         print(f"\n  Compila il PDF:")

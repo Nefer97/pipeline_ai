@@ -135,7 +135,21 @@
   .toast{position:fixed;bottom:28px;right:28px;background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--c3);border-radius:10px;padding:12px 18px;font-family:'JetBrains Mono',monospace;font-size:.73rem;color:var(--text);z-index:100;transform:translateY(20px);opacity:0;transition:transform .3s,opacity .3s;max-width:320px;}
   .toast.show{transform:translateY(0);opacity:1;}
   .toast .toast-title{color:var(--c3);font-weight:700;margin-bottom:2px;}
-  @media(max-width:800px){.input-row{grid-template-columns:repeat(3,1fr);}.config-grid{grid-template-columns:1fr;}.subject-grid{grid-template-columns:repeat(3,1fr);}.branch-row{grid-template-columns:1fr;}.output-row{grid-template-columns:1fr 1fr;}.step{grid-template-columns:40px 1fr;}.step-badge{display:none;}}
+  .live-status{background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:14px 18px;margin:20px 0;font-family:'JetBrains Mono',monospace;display:flex;flex-direction:column;gap:8px;}
+  .live-header{display:flex;align-items:center;gap:10px;}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:#10b981;flex-shrink:0;}
+  .live-status.is-running .live-dot{animation:pulse 1.2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+  .live-phase{flex:1;font-size:.82rem;font-weight:600;color:var(--text);}
+  .live-pct{font-size:.72rem;color:var(--muted);font-variant-numeric:tabular-nums;min-width:3ch;text-align:right;}
+  .live-detail{font-size:.67rem;color:var(--muted);opacity:.7;padding-left:18px;min-height:.9em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  button.running{opacity:.6;cursor:not-allowed;transform:none !important;}
+  /* GLOBAL PROGRESS */
+  .global-progress{width:100%;height:6px;background:#11151c;border-radius:6px;overflow:hidden;margin:1px 0;border:1px solid var(--border2);}
+  .global-progress-bar{height:100%;width:0%;background:linear-gradient(90deg,#00e5ff,#7c3aed);transition:width .4s ease;}
+  /* UPLOAD COL */
+  .upload-col{display:flex;flex-direction:column;gap:6px;}
+  @media(max-width:800px){.input-row{grid-template-columns:repeat(3,1fr);}.config-grid{grid-template-columns:1fr;}.subject-grid{grid-template-columns:repeat(3,1fr);}.branch-row{grid-template-columns:1fr;}.output-row{grid-template-columns:1fr 1fr !important;}.step{grid-template-columns:40px 1fr;}.step-badge{display:none;}}
   @media(max-width:500px){.input-row{grid-template-columns:repeat(2,1fr);}.subject-grid{grid-template-columns:repeat(2,1fr);}}
 </style>
 </head>
@@ -144,7 +158,6 @@
   <span class="nav-logo">Appunti AI</span>
   <div class="nav-links">
     <a class="nav-link active" href="index.htm"><span class="nd"></span>Pipeline</a>
-    <a class="nav-link" href="schema.htm"><span class="nd"></span>Schema</a>
   </div>
 </nav>
 <div class="container">
@@ -154,13 +167,7 @@
   </header>
 
   <div class="pipeline">
-    <audio id="bgMusic" src="assets/audio/ambient.mp3" autoplay loop muted></audio>
-    <script>
-    const bgMusic = document.getElementById('bgMusic');
-    bgMusic.volume = 0.05; // 15% del volume massimo
-    bgMusic.muted = false;  // togli il mute se vuoi far sentire subito
-    bgMusic.play().catch(e => console.log('Autoplay bloccato:', e));
-    </script>
+    <audio id="bgMusic" src="assets/audio/ambient.mp3" loop></audio>
     <div class="section-label">// 01 · carica le tue fonti</div>
     <div class="input-row">
       <div class="upload-col">
@@ -274,7 +281,7 @@
             <div class="config-field" style="gap:6px">
               <label>Modello Whisper</label>
               <div class="whisper-row">
-                <select class="config-select" id="opt-whisper" onchange="updateWhisperSpeed()">
+                <select class="config-select" id="opt-whisper">
                   <option value="tiny">tiny — più veloce</option>
                   <option value="base" selected>base — bilanciato</option>
                   <option value="small">small</option>
@@ -291,8 +298,8 @@
             </div>
 
             <div class="config-field" style="gap:6px">
-              <label>Start-from (numerazione lezioni)</label>
-              <input type="number" id="opt-startfrom" value="1" min="1" style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-left:3px solid var(--c2);border-radius:9px;padding:11px 14px;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--text);outline:none;">
+              <label>Start-from (0 = auto da state.json)</label>
+              <input type="number" id="opt-startfrom" value="0" min="0" style="border-left-color:var(--c2)">
             </div>
           </div>
         </div>
@@ -301,14 +308,14 @@
         <div class="config-group">
           <div class="config-group-label">Tipo di materia — profilo prompt LaTeX</div>
           <div class="subject-grid" id="subjectGrid">
-            <button class="subject-btn selected" data-subject="auto" onclick="selectSubject(this)"><span class="s-icon">🔍</span>auto-detect</button>
-            <button class="subject-btn" data-subject="ingegneria" onclick="selectSubject(this)"><span class="s-icon">⚙️</span>Ingegneria</button>
-            <button class="subject-btn" data-subject="matematica" onclick="selectSubject(this)"><span class="s-icon">∑</span>Matematica</button>
-            <button class="subject-btn" data-subject="fisica" onclick="selectSubject(this)"><span class="s-icon">⚛️</span>Fisica</button>
-            <button class="subject-btn" data-subject="medicina" onclick="selectSubject(this)"><span class="s-icon">🩺</span>Medicina</button>
-            <button class="subject-btn" data-subject="economia" onclick="selectSubject(this)"><span class="s-icon">📈</span>Economia</button>
-            <button class="subject-btn" data-subject="giurisprudenza" onclick="selectSubject(this)"><span class="s-icon">⚖️</span>Diritto</button>
-            <button class="subject-btn" data-subject="generico" onclick="selectSubject(this)"><span class="s-icon">📚</span>Generico</button>
+            <button class="subject-btn selected" data-subject="auto"><span class="s-icon">🔍</span>auto-detect</button>
+            <button class="subject-btn" data-subject="ingegneria"><span class="s-icon">⚙️</span>Ingegneria</button>
+            <button class="subject-btn" data-subject="matematica"><span class="s-icon">∑</span>Matematica</button>
+            <button class="subject-btn" data-subject="fisica"><span class="s-icon">⚛️</span>Fisica</button>
+            <button class="subject-btn" data-subject="medicina"><span class="s-icon">🩺</span>Medicina</button>
+            <button class="subject-btn" data-subject="economia"><span class="s-icon">📈</span>Economia</button>
+            <button class="subject-btn" data-subject="giurisprudenza"><span class="s-icon">⚖️</span>Diritto</button>
+            <button class="subject-btn" data-subject="generico"><span class="s-icon">📚</span>Generico</button>
           </div>
         </div>
 
@@ -320,7 +327,7 @@
           <span class="config-tag active" id="tag-whisper" style="--tag-color:#7c3aed">whisper:base</span>
           <span class="config-tag active" id="tag-subject" style="--tag-color:#f59e0b">subject:auto</span>
           <span class="config-tag active" id="tag-output" style="--tag-color:#64748b">out:./output</span>
-          <span class="config-tag active" id="tag-start" style="--tag-color:#64748b">start:1</span>
+          <span class="config-tag active" id="tag-start" style="--tag-color:#64748b">start:0</span>
         </div>
 
       </div>
@@ -329,9 +336,18 @@
     <div class="run-section">
       <button class="run-btn" id="runBtn">▶ AVVIA PIPELINE</button>
     </div>
-
+    <div class="live-status" id="liveStatus">
+      <div class="live-header">
+        <div class="live-dot"></div>
+        <div class="live-phase" id="livePhase">In attesa…</div>
+        <span class="live-pct" id="livePercent">—</span>
+      </div>
+      <div id="liveDetail" class="live-detail"></div>
+      <div class="global-progress">
+        <div class="global-progress-bar" id="globalProgressBar"></div>
+      </div>
+    </div>
     <div class="arrow-down"><div class="chevron"></div></div>
-
     <div class="section-label">// 03 · preprocessing</div>
     <div class="steps">
       <div class="step" style="--sc:#ef4444">
@@ -357,7 +373,7 @@
     <div class="steps">
       <div class="step" style="--sc:#f59e0b">
         <div class="step-num">04</div>
-        <div><div class="step-title">extractor · Parsing .pptx</div><div class="step-desc">Ogni shape → <strong>testo</strong> / <strong>immagine</strong> / <strong>formula OMML</strong> — ordinati per posizione Y</div></div>
+        <div><div class="step-title">extractor · Parsing .pptx</div><div class="step-desc">Ogni shape → <strong>testo</strong> / <strong>immagine</strong> / <strong>formula OMML</strong> — ordinati per posizione Y · slide_renderer genera le anteprime PNG delle slide</div></div>
         <div class="step-badge">extractor.py</div>
       </div>
       <div class="step" style="--sc:#f59e0b">
@@ -414,7 +430,7 @@
     <div class="steps" style="margin-top:0">
       <div class="step" style="--sc:#10b981">
         <div class="step-num">07</div>
-        <div><div class="step-title">builder · Assemblaggio file .tex</div><div class="step-desc">Un <strong>lezione_NN.tex</strong> per lezione + <strong>main.tex</strong> con \include — Preambolo: amsmath, theorems, hyperref, fancyhdr</div></div>
+        <div><div class="step-title">builder · Assemblaggio file .tex</div><div class="step-desc">Un <strong>lezione_NN.tex</strong> per lezione + <strong>main.tex</strong> con \include — Preambolo: tcolorbox, tikz, amsmath, hyperref, fancyhdr, enumitem, pifont</div></div>
         <div class="step-badge">builder.py</div>
       </div>
     </div>
@@ -422,10 +438,11 @@
     <div class="arrow-down"><div class="chevron"></div></div>
 
     <div class="section-label">// 07 · output</div>
-    <div class="output-row">
+    <div class="output-row" style="grid-template-columns:repeat(4,1fr)">
       <div class="output-card"><div class="icon">📘</div><div class="name">main.tex</div><div class="desc">Documento principale<br>\include tutte le lezioni<br>Compila con pdflatex</div></div>
       <div class="output-card"><div class="icon">📝</div><div class="name">lezione_NN.tex</div><div class="desc">Un file per lezione<br>sezioni + formule + immagini</div></div>
       <div class="output-card"><div class="icon">🧠</div><div class="name">corso_context.json</div><div class="desc">Memoria del corso<br>concetti, definizioni, simboli<br>aggiornata ad ogni lezione</div></div>
+      <div class="output-card"><div class="icon">💾</div><div class="name">state.json</div><div class="desc">Numerazione lezioni persistente<br>resume automatico batch<br>aggiornato dopo ogni lezione</div></div>
     </div>
 
     <div class="legend">
@@ -454,6 +471,39 @@
 
 
 <script>
+function setUIRunning(isRunning){
+  const inputs = document.querySelectorAll('input, select, textarea, button');
+
+  inputs.forEach(el=>{
+    if(el.id !== 'runBtn'){ // lasciamo gestire run separatamente
+      el.disabled = isRunning;
+    }
+  });
+
+  const runBtn = document.getElementById('runBtn');
+
+  if(isRunning){
+    runBtn.disabled = true;
+    runBtn.classList.add('running');
+  }else{
+    runBtn.disabled = false;
+    runBtn.classList.remove('running');
+  }
+}
+function updateGlobalProgress(p){
+  const bar=document.getElementById('globalProgressBar');
+  const pct=document.getElementById('livePercent');
+  if(!bar) return;
+  const v=Math.max(0,Math.min(100,p));
+  bar.style.width=v+'%';
+  if(pct) pct.textContent=v>0?Math.round(v)+'%':'—';
+}
+function updateLiveStatus(phase,detail='',color='#10b981',isRunning=false){
+  document.getElementById('livePhase').textContent=phase;
+  document.getElementById('liveDetail').textContent=detail;
+  document.querySelector('.live-dot').style.background=color;
+  document.getElementById('liveStatus').classList.toggle('is-running',isRunning);
+}
 const fileState = {audio:[],video:[],slide:[],doc:[],teams:[]};
 let selectedSubject = 'auto';
 
@@ -465,13 +515,12 @@ const sounds = {
   toggleAI: document.getElementById('ToggleAI'),
   selectSubject: document.getElementById('SelectSubject')
 };
+Object.values(sounds).forEach(s=>{ s.volume=0.15; });
 
-// VOLUME SETTINGS
-sounds.play.volume = 0.15;
-sounds.download.volume = 0.15;
-sounds.addFile.volume = 0.15;
-sounds.toggleAI.volume = 0.15;
-sounds.selectSubject.volume = 0.15;
+// AMBIENT MUSIC
+const bgMusic = document.getElementById('bgMusic');
+bgMusic.volume = 0.05;
+bgMusic.play().catch(()=>{});
 
 // UTILITY
 function fmt(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(0)+' KB';return(b/1048576).toFixed(1)+' MB';}
@@ -498,9 +547,10 @@ function renderFiles(type){
   list.innerHTML='';
   files.forEach((file,idx)=>{
     const item=document.createElement('div');item.className='file-item';
-    item.innerHTML=`<span class="file-item-name" title="${file.name}">${file.name}</span>
-      <span class="file-item-size">${fmt(file.size||0)}</span>
-      <button class="file-item-remove" data-type="${type}" data-idx="${idx}">✕</button>`;
+    const nameEl=document.createElement('span');nameEl.className='file-item-name';nameEl.title=file.name;nameEl.textContent=file.name;
+    const sizeEl=document.createElement('span');sizeEl.className='file-item-size';sizeEl.textContent=fmt(file.size||0);
+    const removeBtn=document.createElement('button');removeBtn.className='file-item-remove';removeBtn.dataset.type=type;removeBtn.dataset.idx=idx;removeBtn.textContent='✕';
+    item.append(nameEl,sizeEl,removeBtn);
     list.appendChild(item);
   });
   statusEl.textContent=files.length;
@@ -557,28 +607,31 @@ document.addEventListener('click',e=>{
 });
 
 // SUBJECT SELECTION
-function selectSubject(btn){
+document.getElementById('subjectGrid').addEventListener('click',e=>{
+  const btn=e.target.closest('.subject-btn');
+  if(!btn) return;
   document.querySelectorAll('.subject-btn').forEach(b=>b.classList.remove('selected'));
-  btn.classList.add('selected');selectedSubject=btn.dataset.subject;updateConfigStatus();
-  sounds.selectSubject.play().catch(e=>console.log("Suono selezione materia bloccato:", e));
-}
+  btn.classList.add('selected');
+  selectedSubject=btn.dataset.subject;
+  updateConfigStatus(false);
+  sounds.selectSubject.play().catch(()=>{});
+});
 
 // WHISPER SPEED
 const whisperSpeeds={tiny:'4×',base:'1×',small:'0.5×',medium:'0.25×',large:'0.1×'};
 function updateWhisperSpeed(){
   const val=document.getElementById('opt-whisper').value;
   document.getElementById('whisperSpeedLabel').textContent=whisperSpeeds[val]||'1×';
-  updateConfigStatus();
 }
 
 // CONFIG STATUS
-function updateConfigStatus(){
+function updateConfigStatus(playSound){
   const claude=document.getElementById('opt-claude').checked;
   const ocr=document.getElementById('opt-ocr').checked;
   const context=document.getElementById('opt-context').checked;
   const whisper=document.getElementById('opt-whisper').value;
   const output=document.getElementById('opt-output').value||'./output';
-  const start=document.getElementById('opt-startfrom').value||'1';
+  const start=document.getElementById('opt-startfrom').value||'0';
   setTag('tag-claude',claude,`claude ${claude?'ON':'OFF'}`);
   setTag('tag-ocr',ocr,`ocr ${ocr?'ON':'OFF'}`);
   setTag('tag-context',context,`context ${context?'ON':'OFF'}`);
@@ -586,8 +639,7 @@ function updateConfigStatus(){
   setTag('tag-subject',true,`subject:${selectedSubject}`,'#f59e0b');
   setTag('tag-output',true,`out:${output}`,'#64748b');
   setTag('tag-start',true,`start:${start}`,'#64748b');
-  // Suono toggle AI se cambiano i checkbox
-  sounds.toggleAI.play().catch(e=>console.log("Suono toggle AI bloccato:", e));
+  if(playSound) sounds.toggleAI.play().catch(e=>console.log("Suono toggle AI bloccato:", e));
 }
 function setTag(id,active,text,color){
   const el=document.getElementById(id);
@@ -595,15 +647,18 @@ function setTag(id,active,text,color){
   if(color)el.style.setProperty('--tag-color',color);
 }
 
-['opt-claude','opt-ocr','opt-context'].forEach(id=>document.getElementById(id).addEventListener('change',updateConfigStatus));
-document.getElementById('opt-whisper').addEventListener('change',updateConfigStatus);
-document.getElementById('opt-output').addEventListener('input',updateConfigStatus);
-document.getElementById('opt-startfrom').addEventListener('input',updateConfigStatus);
-updateConfigStatus();
+['opt-claude','opt-ocr','opt-context'].forEach(id=>
+  document.getElementById(id).addEventListener('change',()=>updateConfigStatus(true))
+);
+document.getElementById('opt-whisper').addEventListener('change',()=>{updateWhisperSpeed();updateConfigStatus(false);});
+document.getElementById('opt-output').addEventListener('input',()=>updateConfigStatus(false));
+document.getElementById('opt-startfrom').addEventListener('input',()=>updateConfigStatus(false));
+updateConfigStatus(false);
 
 // RUN PIPELINE
 const runBtn = document.getElementById('runBtn');
 runBtn.addEventListener('click',async()=>{
+  updateLiveStatus('Avvio pipeline…','Preparazione upload…','#f59e0b',true);
   const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);
   if(!total)return;
   // PLAY START SOUND
@@ -619,7 +674,7 @@ runBtn.addEventListener('click',async()=>{
   fd.append('no_context',document.getElementById('opt-context').checked?'false':'true');
   fd.append('whisper_model',document.getElementById('opt-whisper').value);
   fd.append('output',document.getElementById('opt-output').value||'./output');
-  fd.append('start_from',document.getElementById('opt-startfrom').value||'1');
+  fd.append('start_from',document.getElementById('opt-startfrom').value||'0');
   if(selectedSubject!=='auto')fd.append('subject',selectedSubject);
   Object.values(fileState).forEach(cat=>cat.forEach(item=>{if(item.file)fd.append('files',item.file);}));
 
@@ -639,12 +694,43 @@ runBtn.addEventListener('click',async()=>{
     const j=await r.json();
     showToast('Pipeline avviata!',`job ${j.job_id} — polling ogni 3s`,'#10b981');
     btn.textContent='⏳ In esecuzione…';
+    setUIRunning(true);
+
+    // Fake progress: scorre lentamente fino a 88%, poi rallenta drasticamente
+    // Viene sovrascritta dai valori reali del backend quando arrivano
+    let fakeP = 5;
+    let realP  = 0;
+    updateGlobalProgress(fakeP);
+    const fakeInterval = setInterval(()=>{
+      if(fakeP < realP) { fakeP = realP; }           // il reale ha superato il fake
+      const gap   = 88 - fakeP;                       // quanto manca all'88%
+      const step  = Math.max(0.2, gap * 0.025);       // passo proporzionale, si riduce avvicinandosi
+      if(fakeP < 88) { fakeP = Math.min(88, fakeP + step); updateGlobalProgress(fakeP); }
+    }, 800);
 
     const poll=setInterval(async()=>{
       try{
         const s=await(await fetch(`http://127.0.0.1:8000/job/${j.job_id}`)).json();
+        // 🔵 AGGIORNAMENTO LIVE STATUS
+        if(s.current_step){
+          updateLiveStatus(s.current_step,s.detail||'','#00e5ff',true);
+        }
+        // 🔷 PROGRESS REALE — sovrascrive il fake solo se più avanzato
+        if(typeof s.progress === "number" && s.progress > fakeP){
+          realP = s.progress;
+          fakeP = s.progress;
+          updateGlobalProgress(fakeP);
+        }
         if(s.status==='done'){
+          clearInterval(fakeInterval);
+          updateGlobalProgress(100);
+          updateLiveStatus('Completato','Download avviato…','#10b981',false);
           clearInterval(poll);
+          setUIRunning(false);
+          setTimeout(()=>{
+            updateGlobalProgress(0);
+            updateLiveStatus('In attesa…','','#10b981',false);
+          },3000);
           Object.keys(fileState).forEach(type=>{
             const bar=document.getElementById(`progress-${type}`);
             const card=document.getElementById(`card-${type}`);
@@ -653,7 +739,6 @@ runBtn.addEventListener('click',async()=>{
           });
           btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
           showToast('✓ Completato!','Download in corso…','#10b981');
-          // PLAY DOWNLOAD SOUND
           sounds.download.play().catch(e=>console.log("Suono download bloccato:", e));
           const a=document.createElement('a');
           const title=document.getElementById('titleInput').value.trim()||'appunti';
@@ -661,7 +746,10 @@ runBtn.addEventListener('click',async()=>{
           a.download=`${title.replace(/\s+/g,'_')}.zip`;a.click();
         }
         if(s.status==='error'){
+          clearInterval(fakeInterval);
           clearInterval(poll);
+          setUIRunning(false);
+          updateLiveStatus('Errore pipeline',s.stderr?.slice(0,120)||'errore sconosciuto','#ef4444',false);
           Object.keys(fileState).forEach(type=>document.getElementById(`card-${type}`)?.classList.remove('uploading'));
           btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
           showToast('Errore',s.stderr?.slice(0,120)||'errore sconosciuto','#ef4444');

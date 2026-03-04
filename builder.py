@@ -4,7 +4,7 @@ Genera il file .tex finale a partire dai dati estratti.
 """
 
 import os
-from extractor import SlideData, SlideObject
+from extractor import SlideData
 
 
 LATEX_HEADER = r"""\documentclass[12pt,a4paper]{article}

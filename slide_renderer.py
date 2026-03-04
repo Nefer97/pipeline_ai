@@ -296,7 +296,7 @@ def _render_placeholder(pptx_path: Path, images_dir: Path) -> dict:
 
             title = ""
             try:
-                title = slide.shapes.title.text if slide.shapes.title else ""
+                title = (slide.shapes.title.text or "") if slide.shapes.title else ""
             except Exception:
                 pass
 

@@ -240,8 +240,10 @@ def _parse_transcript_segments(transcript: str) -> list[dict]:
         parts = m.group(1).split(":")
         if len(parts) == 2:
             secs = int(parts[0]) * 60 + int(parts[1])
-        else:
+        elif len(parts) >= 3:
             secs = int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+        else:
+            continue
         segments.append({"time_sec": secs, "text": m.group(2).strip()})
     return segments
 

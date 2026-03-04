@@ -41,7 +41,7 @@ jobs: dict[str, dict] = {}
 def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                        title: str, skip_ai: bool, skip_ocr: bool,
                        whisper_model: str, subject: Optional[str],
-                       no_context: bool, start_from: int):
+                       no_context: bool, start_from: Optional[int]):
     """Eseguito in background thread da BackgroundTasks."""
     jobs[job_id]["status"] = "running"
     cmd = [
@@ -50,8 +50,11 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
         "--title", title,
         "--output", str(output_dir),
         "--whisper-model", whisper_model,
-        "--start-from", str(start_from),
     ]
+    # --start-from solo se l'utente lo ha specificato esplicitamente (> 0)
+    # altrimenti la pipeline usa state.json per la numerazione automatica
+    if start_from is not None and start_from > 0:
+        cmd.extend(["--start-from", str(start_from)])
     if skip_ai:
         cmd.append("--skip-ai")
     if skip_ocr:
@@ -79,8 +82,11 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                 for f in output_dir.rglob("*"):
                     if f.is_file():
-                        # Mantieni la cartella output_name come root dello ZIP
-                        zf.write(f, Path(output_dir.name) / f.relative_to(output_dir))  
+                        try:
+                            # Mantieni la cartella output_name come root dello ZIP
+                            zf.write(f, Path(output_dir.name) / f.relative_to(output_dir))
+                        except (FileNotFoundError, OSError):
+                            pass  # file rimosso tra rglob e write
             jobs[job_id]["status"]   = "done"
             jobs[job_id]["zip_path"] = str(zip_path)
         else:
@@ -103,7 +109,7 @@ async def run_pipeline(
     no_context: str = Form("false"),
     whisper_model: str = Form("base"),
     output: str = Form("./output"),
-    start_from: str = Form("1"),
+    start_from: str = Form("0"),
     subject: Optional[str] = Form(None),
     files: list[UploadFile] = File(...),
 ):
@@ -115,8 +121,12 @@ async def run_pipeline(
     _skip_ai    = skip_ai.lower()    in ("true", "1", "yes")
     _skip_ocr   = skip_ocr.lower()   in ("true", "1", "yes")
     _no_context = no_context.lower()  in ("true", "1", "yes")
-    _start_from = max(1, int(start_from)) if start_from.isdigit() else 1
-    _subject    = subject.strip() if subject and subject.strip() not in ("", "auto") else None
+    # 0 o stringa non numerica → auto (usa state.json nella cartella output)
+    _start_from = int(start_from) if start_from.isdigit() and int(start_from) > 0 else None
+    _VALID_SUBJECTS = {"ingegneria","matematica","fisica","medicina","economia","giurisprudenza","generico"}
+    _subject    = subject.strip().lower() if subject and subject.strip() not in ("", "auto") else None
+    if _subject and _subject not in _VALID_SUBJECTS:
+        _subject = None
 
     # Crea job
     job_id     = str(uuid.uuid4())[:8]
@@ -147,6 +157,7 @@ async def run_pipeline(
         "skip_ai":       _skip_ai,
         "skip_ocr":      _skip_ocr,
         "output_name":   output_name,
+        "output_dir":    str(output_dir),   # per leggere progress.json
         "stdout":        "",
         "stderr":        "",
         "returncode":    None,
@@ -171,14 +182,37 @@ async def run_pipeline(
 
 @app.get("/job/{job_id}")
 async def get_job(job_id: str):
-    """Restituisce lo stato attuale del job."""
+    """Restituisce lo stato attuale del job, inclusi progress/current_step/detail."""
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job non trovato")
 
     job = jobs[job_id]
+
+    # Leggi progress.json scritto dalla pipeline (aggiornato in real-time)
+    progress     = 100 if job["status"] == "done" else 0
+    current_step = "Completato" if job["status"] == "done" else \
+                   "In coda"    if job["status"] == "queued" else \
+                   "Errore"     if job["status"] == "error"  else ""
+    detail       = ""
+
+    if job["status"] in ("running", "done"):
+        try:
+            import json as _json
+            prog_path = Path(job["output_dir"]) / "progress.json"
+            if prog_path.exists():
+                p = _json.loads(prog_path.read_text(encoding="utf-8"))
+                progress     = p.get("progress",     progress)
+                current_step = p.get("current_step", current_step)
+                detail       = p.get("detail",       "")
+        except Exception:
+            pass
+
     response = {
         "job_id":        job_id,
         "status":        job["status"],
+        "progress":      progress,
+        "current_step":  current_step,
+        "detail":        detail,
         "title":         job["title"],
         "files":         job["files"],
         "subject":       job.get("subject"),

@@ -276,8 +276,20 @@ def _build_pdf_latex_skeleton(pdf_path: Path, pages_data: list[dict],
         list(page_text_map.keys()) + list(page_images.keys())
     ))
 
+    # Pattern per righe-footer da rimuovere (email, URL soli, pagine numerate sole)
+    import re as _re
+    _footer_line = _re.compile(
+        r'^\s*([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}|https?://\S+|\d+\s*/\s*\d+)\s*$'
+    )
+
+    def _clean_page_text(t: str) -> str:
+        """Rimuove righe che sono solo footer (email, URL, numeri di pagina)."""
+        lines = [l for l in t.splitlines() if not _footer_line.match(l)]
+        return "\n".join(lines).strip()
+
     for page_num in all_pages:
-        text        = page_text_map.get(page_num, "")
+        raw_text     = page_text_map.get(page_num, "")
+        text         = _clean_page_text(raw_text) if raw_text else ""
         img_filename = page_images.get(page_num)
 
         # Prova a rilevare sezioni nel testo della pagina
