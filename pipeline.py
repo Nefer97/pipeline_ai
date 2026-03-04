@@ -1424,7 +1424,8 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     # ─────────────────────────────────────────────
     # STEP 5: PDF — SCHELETRO se c'è audio, SUPPORTO se no
     # ─────────────────────────────────────────────
-    for pf in by["pdf"]:
+    for idx, pf in enumerate(by["pdf"]):
+        _report_progress(output_dir, 40 + idx * 3, "Estrazione pagine PDF", pf.name)
         pages = extract_pdf_pages(pf)
         if not pages:
             continue
@@ -1471,7 +1472,8 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     # ─────────────────────────────────────────────
     # STEP 6: DOCX — SCHELETRO se c'è audio, SUPPORTO se no
     # ─────────────────────────────────────────────
-    for df in by["doc"]:
+    for idx, df in enumerate(by["doc"]):
+        _report_progress(output_dir, 50 + idx * 3, "Estrazione DOCX", df.name)
         text = extract_docx(df)
         if not text:
             continue

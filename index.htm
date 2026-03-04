@@ -677,6 +677,7 @@ runBtn.addEventListener('click',async()=>{
   fd.append('start_from',document.getElementById('opt-startfrom').value||'0');
   if(selectedSubject!=='auto')fd.append('subject',selectedSubject);
   Object.values(fileState).forEach(cat=>cat.forEach(item=>{if(item.file)fd.append('files',item.file);}));
+  if(fileState.teams.length>0)showToast('⚠ TeamsHack','Gli URL Teams non sono ancora supportati — verranno ignorati','#f59e0b');
 
   Object.entries(fileState).forEach(([type,files])=>{
     if(!files.length)return;
@@ -744,6 +745,8 @@ runBtn.addEventListener('click',async()=>{
           const title=document.getElementById('titleInput').value.trim()||'appunti';
           a.href=`http://127.0.0.1:8000/download/${j.job_id}`;
           a.download=`${title.replace(/\s+/g,'_')}.zip`;a.click();
+          // Cleanup file temporanei lato server dopo 5s (tempo di avvio download)
+          setTimeout(()=>fetch(`http://127.0.0.1:8000/job/${j.job_id}`,{method:'DELETE'}).catch(()=>{}),5000);
         }
         if(s.status==='error'){
           clearInterval(fakeInterval);
