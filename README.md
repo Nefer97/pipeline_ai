@@ -119,17 +119,17 @@ fonti grezze
 | File | Ruolo |
 |------|-------|
 | `pipeline.py` | Orchestratore principale — coordina tutti i moduli |
-| `slide_renderer.py` | Renderizza ogni slide PPTX come PNG (pymupdf via LibreOffice) |
-| `pdf_renderer.py` | Renderizza ogni pagina PDF come PNG (pymupdf diretto) |
+| `server.py` | Backend FastAPI — espone la pipeline via HTTP, gestisce download Teams |
+| `index.htm` | Frontend web — drag & drop, opzioni, polling stato, download |
 | `preprocessor.py` | Normalizza e comprime il testo; rileva la materia; allinea trascrizione e slide; gestisce il contesto corso |
 | `extractor.py` | Parsing approfondito dei file `.pptx` |
+| `slide_renderer.py` | Renderizza ogni slide PPTX come PNG (pymupdf) |
+| `pdf_renderer.py` | Renderizza ogni pagina PDF come PNG (pymupdf) |
 | `omml2latex.py` | Conversione formule OMML (PowerPoint) → LaTeX |
 | `formula_detector.py` | Riconosce immagini che contengono formule matematiche |
 | `ocr_math.py` | OCR su immagini-formula tramite pix2tex |
 | `builder.py` | Costruisce il file `.tex` finale dalla struttura estratta |
-| `api.py` | Backend FastAPI — espone la pipeline via HTTP |
-| `index.html` | Frontend web — drag & drop, opzioni, polling stato, download |
-| `TeamsHack.py` | Scarica video da Microsoft Teams tramite ffmpeg |
+| `TeamsHack.py` | Scarica video da Microsoft Teams tramite ffmpeg (anche standalone) |
 
 ---
 
@@ -186,13 +186,13 @@ python pipeline.py --batch ./corso/ --skip-ai --skip-ocr
 |------|---------|-------------|
 | `--title` | `"Appunti del Corso"` | Titolo per `main.tex` |
 | `--output` | `./output` | Cartella di output |
-| `--subject` | auto-detect | Tipo materia: `ingegneria` `matematica` `fisica` `medicina` `economia` `giurisprudenza` |
+| `--subject` | auto-detect | Tipo materia: `ingegneria` `matematica` `fisica` `medicina` `economia` `giurisprudenza` `generico` |
 | `--no-context` | off | Non usare/aggiornare `corso_context.json` |
 | `--skip-ai` | off | Non chiamare Claude (usa struttura automatica con immagini) |
 | `--skip-ocr` | off | Non usare pix2tex (più veloce) |
 | `--whisper-model` | `base` | Modello Whisper: tiny/base/small/medium/large |
 | `--batch` | off | Ogni sottocartella = una lezione |
-| `--start-from` | `1` | Numero iniziale per le lezioni |
+| `--start-from` | auto | Numero iniziale lezioni (default: auto da `state.json`) |
 
 ### Compilazione PDF
 
@@ -212,25 +212,28 @@ La doppia esecuzione è necessaria per generare correttamente il sommario.
 ```bash
 source ~/appunti_ai/venv/bin/activate
 cd ~/appunti_ai
-uvicorn api:app --reload --host 0.0.0.0 --port 8000
+uvicorn server:app --reload --host 0.0.0.0 --port 8000
 ```
 
 ### Apri il frontend
 
-Apri `index.html` nel browser. Il frontend permette di:
+Apri `index.htm` nel browser. Il frontend permette di:
 
 - Trascinare file audio, video, slide, documenti
-- Impostare titolo, modalità skip-ai/skip-ocr, modello Whisper
-- Avviare la pipeline e monitorare lo stato in tempo reale
-- Scaricare lo `.zip` con il risultato quando pronto
+- Incollare URL manifest di Microsoft Teams (scaricati automaticamente via ffmpeg)
+- Scegliere la materia tra 7 profili disciplinari (o auto-detect)
+- Impostare titolo, Claude on/off, OCR, contesto corso, modello Whisper, output dir
+- Avviare la pipeline e monitorare lo stato in tempo reale con percentuale
+- Scaricare lo `.zip` con il risultato quando pronto (cleanup automatico dopo download)
 
 ### Endpoint API
 
 | Endpoint | Metodo | Descrizione |
 |----------|--------|-------------|
-| `/run-pipeline` | POST | Avvia pipeline, ritorna `job_id` immediatamente |
-| `/job/{job_id}` | GET | Stato del job: `queued / running / done / error` |
+| `/run-pipeline` | POST | Avvia pipeline, ritorna `job_id` immediatamente. Parametri: `title`, `files[]`, `teams_url[]`, `skip_ai`, `skip_ocr`, `no_context`, `whisper_model`, `output`, `start_from`, `subject` |
+| `/job/{job_id}` | GET | Stato del job: `queued / running / done / error` + progress, step, detail |
 | `/download/{job_id}` | GET | Scarica lo `.zip` con i file `.tex` + `images/` |
+| `/job/{job_id}` | DELETE | Elimina job e tutti i file temporanei dal disco |
 | `/jobs` | GET | Lista tutti i job (debug) |
 | `/docs` | GET | Documentazione interattiva FastAPI |
 
@@ -240,12 +243,13 @@ Apri `index.html` nel browser. Il frontend permette di:
 
 | Tipo | Estensioni | Come viene processato |
 |------|-----------|----------------------|
-| Audio | `.mp3` `.wav` `.m4a` `.ogg` `.flac` | Whisper → testo con timestamp |
+| Audio | `.mp3` `.wav` `.m4a` `.ogg` `.flac` | Whisper → testo con timestamp [MM:SS] |
 | Video | `.mp4` `.mkv` `.avi` `.mov` `.webm` | ffmpeg → mp3 → Whisper |
-| Slide | `.pptx` | extractor → testo + OMML + immagini + PNG per slide |
+| Teams URL | URL manifest (incollato in UI) | server.py → ffmpeg → mp3 mono → Whisper |
+| Slide | `.pptx` | extractor → testo + OMML + immagini; slide_renderer → PNG per slide |
 | Word | `.docx` | python-docx → testo plain |
-| PDF | `.pdf` | pdfplumber → testo + pymupdf → PNG per pagina |
-| Testo | `.txt` `.md` | lettura diretta |
+| PDF | `.pdf` | pdfplumber → testo; pdf_renderer → PNG per pagina |
+| Testo | `.txt` `.md` `.rtf` | lettura diretta (RTF con strip automatico) |
 
 I PDF con più di 20 pagine vengono divisi automaticamente in chunk da 10 pagine. Ogni chunk genera un `lezione_NN.tex` separato (es. 275 pagine → 27 file).
 
@@ -316,7 +320,7 @@ output/
 ## Note pratiche
 
 **Velocità Whisper su CPU:**
-Il modello `base` su CPU impiega circa 1 minuto ogni 10 minuti di audio. Per test usa `--whisper-model tiny` (4x più veloce). La trascrizione viene salvata in cache `.transcript.txt` — esecuzioni successive saltano Whisper se il file esiste già.
+Il modello `base` su CPU impiega circa 1 minuto ogni 10 minuti di audio. Per test usa `--whisper-model tiny` (4× più veloce). La trascrizione viene salvata in cache `.transcript.txt` — esecuzioni successive saltano Whisper se il file esiste già. Durante la trascrizione la UI aggiorna il progresso ogni 15 secondi stimando la percentuale completata in base alla durata del file (rilevata con ffprobe).
 
 **`--skip-ai` non salta Whisper:**
 `--skip-ai` disattiva solo Claude. Whisper gira sempre perché è trascrizione locale. Il contesto corso (`corso_context.json`) non viene aggiornato se Claude non viene chiamato.
@@ -327,8 +331,11 @@ Un PDF da 275 pagine genera automaticamente 27-28 file `lezione_NN.tex` (chunk d
 **Cache immagini:**
 Se i PNG esistono già in `images/`, non vengono rirenderizzati. Per forzare il rirenderizzamento cancella i file PNG dalla cartella.
 
-**Moduli collega opzionali:**
-Se `extractor.py`, `builder.py` e gli altri moduli non sono presenti, la pipeline usa un fallback base che funziona comunque. La qualità dell'output `.pptx` è però significativamente migliore con i moduli completi.
+**TeamsHack — URL manifest:**
+Il frontend accetta URL di videomanifest Teams (es. `.m3u8` o URL stream). Incollati nella zona Teams dell'UI, vengono inviati a `server.py` che li scarica via `ffmpeg -i <url> -vn ... .mp3` prima di avviare la pipeline. Non è necessario scaricare manualmente il video. `TeamsHack.py` rimane disponibile anche come script standalone da terminale con modalità video+mp3 e contatori automatici.
+
+**Moduli opzionali:**
+Se `extractor.py`, `slide_renderer.py`, `pdf_renderer.py` e gli altri moduli collega non sono presenti, la pipeline usa un fallback base che funziona comunque. La qualità dell'output (immagini slide, formule OMML) è però significativamente migliore con i moduli completi.
 
 **Cartella lezione — nome:**
 Il nome della cartella della lezione viene usato come titolo. Usa nomi leggibili tipo `lezione_01_limiti` invece di hash o nomi generici.
@@ -353,6 +360,7 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | `images/` vuota | pymupdf non trovato al momento dell'esecuzione | Verifica `python -c "import fitz"` nel venv attivo |
 | Unico `lezione_01.tex` per PDF grande | Chunking non attivato | Assicurarsi che il PDF non abbia audio associato nella stessa cartella |
 | Titolo lezione incomprensibile | Nome cartella hash o generico | Rinomina la cartella con un nome descrittivo |
+| `ffprobe: command not found` | ffprobe non installato | `sudo apt install ffmpeg` (include ffprobe) |
 | `ValueError: document closed` | Bug print in pdf_renderer | Aggiorna `pdf_renderer.py` all'ultima versione |
 | Claude non risponde | API key mancante o errata | `echo $ANTHROPIC_API_KEY` per verificare |
 | `pdflatex` fallisce | Pacchetti LaTeX mancanti | `sudo apt install texlive-full` |

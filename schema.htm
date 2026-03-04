@@ -535,14 +535,14 @@ header p {
 
       <!-- COL 4: Teams -->
       <div class="group">
-        <div class="conn" style="--conn-color:#f472b6;height:20px">
-          <div class="arrow" style="border-top-color:#f472b6"></div>
+        <div class="conn" style="--conn-color:#ef4444;height:20px">
+          <div class="arrow" style="border-top-color:#ef4444"></div>
         </div>
-        <div class="block" style="--bc:#f472b6" data-id="teams">
-          <div class="block-icon">🌐</div>
+        <div class="block" style="--bc:#ef4444" data-id="teams">
+          <div class="block-icon">📹</div>
           <div class="block-name">TeamsHack</div>
-          <div class="block-sub">URL manifest<br>→ .mkv download</div>
-          <div class="block-file">TeamsHack.py</div>
+          <div class="block-sub">URL manifest<br>→ .mp3 mono</div>
+          <div class="block-file">server.py + ffmpeg</div>
         </div>
       </div>
 
@@ -723,12 +723,12 @@ const details = {
     file: "Browser · nessuna dipendenza",
     color: "#00e5ff",
     items: [
-      "Drag & drop su 5 zone: Audio, Video, Slide, Doc, Teams URL",
-      "Pannello configurazione: Claude on/off, OCR, context, Whisper model, subject, output dir, start-from",
-      "Bottone AVVIA → FormData POST a server.py",
-      "Polling GET /job/{id} ogni 3s per lo stato",
+      "Drag & drop su 5 zone: Audio, Video, Slide, Doc, Teams URL (incolla manifest URL)",
+      "Pannello configurazione: Claude on/off, OCR, context, Whisper model, subject (7 profili), output dir, start-from",
+      "Bottone AVVIA → FormData POST a server.py con files[] + teams_url[]",
+      "Polling GET /job/{id} ogni 3s → live status con dot animato, fase, percentuale",
       "Download automatico ZIP quando status = done",
-      "Barra di stato con tag colorati in tempo reale"
+      "DELETE /job/{id} chiamato automaticamente 5s dopo il download (cleanup)"
     ]
   },
   server: {
@@ -736,25 +736,26 @@ const details = {
     file: "FastAPI + uvicorn · porta 8000",
     color: "#7c3aed",
     items: [
-      "POST /run-pipeline: salva file su disco, crea job UUID, lancia pipeline.py in BackgroundTask",
-      "Parametri: title, skip_ai, skip_ocr, no_context, whisper_model, output, start_from, subject",
-      "GET /job/{id}: ritorna status (queued/running/done/error), stdout, stderr",
+      "POST /run-pipeline: salva file, scarica Teams URL via ffmpeg, lancia pipeline.py in BackgroundTask",
+      "Parametri: title, files[], teams_url[], skip_ai, skip_ocr, no_context, whisper_model, output, start_from, subject",
+      "GET /job/{id}: status (queued/running/done/error) + progress, current_step, detail da progress.json",
       "GET /download/{id}: serve ZIP come FileResponse",
-      "DELETE /job/{id}: pulisce file da disco",
-      "Job store in memoria (dict) — da sostituire con Redis in produzione"
+      "DELETE /job/{id}: pulisce uploads/ e outputs/ dal disco (chiamato automaticamente 5s dopo download)",
+      "Job store in memoria — ogni job ha UUID, stdout, stderr, zip_path"
     ]
   },
   pipeline: {
     title: "pipeline.py — Orchestratore",
-    file: "pipeline.py · ~880 righe",
+    file: "pipeline.py · ~1700 righe",
     color: "#f59e0b",
     items: [
-      "Riceve argomenti CLI da server.py (subprocess)",
-      "Scansiona la cartella lezione per tipo file",
-      "Coordina: ffmpeg → Whisper → extractor → preprocessor → Claude/skip-ai → builder",
-      "Cache .transcript.txt: salta Whisper se già esiste",
-      "Modalità batch: ogni sottocartella = una lezione",
-      "Chunking PDF auto: >20 pagine → chunk da 10pp ciascuno"
+      "Riceve argomenti CLI da server.py (subprocess): --title, --subject, --no-context, --skip-ai, --skip-ocr, --whisper-model, --start-from",
+      "Scansiona la cartella lezione per tipo file (audio/video/slide/pdf/docx/txt)",
+      "Coordina: ffmpeg → Whisper → extractor → pdf_renderer/slide_renderer → preprocessor → Claude/skip-ai → builder",
+      "Cache .transcript.txt: salta Whisper se già esiste per quel file",
+      "Modalità batch: ogni sottocartella = una lezione; resume automatico da state.json",
+      "Chunking PDF auto: >20 pagine senza audio → chunk da 10pp → lezione_NN.tex per chunk",
+      "Scrive progress.json ad ogni step → server.py lo rilegge per il polling UI"
     ]
   },
   ffmpeg: {
@@ -763,9 +764,10 @@ const details = {
     color: "#00e5ff",
     items: [
       "Video (.mp4 .mkv .avi .mov .webm) → audio .mp3 mono",
-      "Usato anche da TeamsHack.py per i manifest Teams",
+      "Teams manifest URL → .mp3 mono direttamente (via server.py, senza .mkv intermedio)",
+      "ffprobe (incluso in ffmpeg) misura la durata audio per il progress heartbeat Whisper",
       "Cache automatica: se .mp3 esiste già, viene saltato",
-      "Output: {nome_video}.mp3 nella cartella lezione"
+      "Output: {nome}.mp3 nella cartella lezione"
     ]
   },
   whisper: {
@@ -777,7 +779,8 @@ const details = {
       "Output: testo con timestamp [MM:SS] ogni segmento",
       "Cache: salva .transcript.txt — lezioni successive saltano Whisper",
       "I timestamp vengono usati da preprocessor per allineare slide e audio",
-      "Gira sempre anche con --skip-ai (è locale, non è AI esterna)"
+      "Gira sempre anche con --skip-ai (trascrizione locale, nessuna API)",
+      "Progress heartbeat: ffprobe misura durata audio, thread daemon aggiorna progress.json ogni 15s"
     ]
   },
   extractor: {
@@ -837,14 +840,15 @@ const details = {
     ]
   },
   teams: {
-    title: "TeamsHack.py — Download Teams",
-    file: "TeamsHack.py · ffmpeg",
-    color: "#f472b6",
+    title: "TeamsHack — Download Teams",
+    file: "server.py + ffmpeg (integrato) · TeamsHack.py (standalone)",
+    color: "#ef4444",
     items: [
-      "Riceve URL del videomanifest Teams (.m3u8 o simile)",
-      "Usa ffmpeg per scaricare e assemblare il video in .mkv",
-      "Estrae automaticamente audio .mp3 mono",
-      "Il .mkv viene poi processato normalmente dalla pipeline"
+      "Riceve URL del videomanifest Teams (incollato nella zona Teams dell'UI)",
+      "server.py chiama ffmpeg -i <url> -vn -ac 1 -codec:a libmp3lame → teams_NN.mp3",
+      "Il .mp3 viene salvato nella lesson_dir → pipeline lo processa come normale audio",
+      "clean_teams_url() rimuove &altTranscode=1 e parametri successivi prima del download",
+      "TeamsHack.py rimane disponibile come script standalone (con .mkv + contatori)"
     ]
   },
   preprocessor: {
