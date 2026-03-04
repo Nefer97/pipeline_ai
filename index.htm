@@ -677,7 +677,7 @@ runBtn.addEventListener('click',async()=>{
   fd.append('start_from',document.getElementById('opt-startfrom').value||'0');
   if(selectedSubject!=='auto')fd.append('subject',selectedSubject);
   Object.values(fileState).forEach(cat=>cat.forEach(item=>{if(item.file)fd.append('files',item.file);}));
-  if(fileState.teams.length>0)showToast('⚠ TeamsHack','Gli URL Teams non sono ancora supportati — verranno ignorati','#f59e0b');
+  fileState.teams.forEach(item=>{if(item.isUrl&&item.name)fd.append('teams_url',item.name);});
 
   Object.entries(fileState).forEach(([type,files])=>{
     if(!files.length)return;

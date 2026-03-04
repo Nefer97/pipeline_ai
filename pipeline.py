@@ -101,10 +101,26 @@ def extract_audio_from_video(video_path: Path, out_dir: Path):
 # ─────────────────────────────────────────────
 # STEP 2: TRASCRIZIONE WHISPER
 # ─────────────────────────────────────────────
-def transcribe_audio(audio_path: Path, model_name: str = "base") -> tuple[str, int]:
+def _get_audio_duration(audio_path: Path) -> float:
+    """Stima la durata audio in secondi tramite ffprobe (0 se non disponibile)."""
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "csv=p=0", str(audio_path)],
+            capture_output=True, text=True, timeout=10,
+        )
+        return float(r.stdout.strip() or 0)
+    except Exception:
+        return 0.0
+
+
+def transcribe_audio(audio_path: Path, model_name: str = "base",
+                     _prog_dir: Path = None, _prog_base: int = 10,
+                     _prog_end: int = 30) -> tuple[str, int]:
     """
     Trascrive l'audio con Whisper.
     Ritorna (testo_con_timestamp, durata_secondi).
+    _prog_dir / _prog_base / _prog_end: se forniti, scrive aggiornamenti periodici.
     """
     cache      = audio_path.with_suffix(".transcript.txt")
     cache_dur  = audio_path.with_suffix(".duration.txt")
@@ -117,10 +133,34 @@ def transcribe_audio(audio_path: Path, model_name: str = "base") -> tuple[str, i
     except ImportError:
         print("    [MANCANTE] whisper — pip install openai-whisper")
         return "", 0
+
+    # Stima durata per heartbeat
+    audio_dur = _get_audio_duration(audio_path)
+    # Whisper base: ~1× realtime; large: ~0.3×. Usiamo 1× come stima conservativa.
+    estimated_sec = audio_dur if audio_dur > 0 else 600.0
+
     print(f"    Whisper ({model_name}): {audio_path.name} ...")
     t0 = time.time()
+
+    # Thread heartbeat: aggiorna progress ogni 15s durante la trascrizione
+    if _prog_dir:
+        import threading
+        _stop = threading.Event()
+        def _heartbeat():
+            while not _stop.wait(timeout=15):
+                elapsed = time.time() - t0
+                frac    = min(elapsed / estimated_sec, 0.95)
+                pct     = int(_prog_base + frac * (_prog_end - _prog_base))
+                _report_progress(_prog_dir, pct,
+                                 f"Whisper — {audio_path.name}",
+                                 f"{int(elapsed)}s / ~{int(estimated_sec)}s stimati")
+        threading.Thread(target=_heartbeat, daemon=True).start()
+
     model = whisper.load_model(model_name)
     result = model.transcribe(str(audio_path), language="it", verbose=False)
+
+    if _prog_dir:
+        _stop.set()
     elapsed = time.time() - t0
     lines = []
     duration = 0
@@ -1284,10 +1324,13 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     audio_files = by["audio"]
     for idx, af in enumerate(audio_files):
         print(f"\n  [Audio → CARNE] {af.name}")
-        _report_progress(output_dir, 10 + idx * 5,
+        prog_base = 10 + idx * 5
+        _report_progress(output_dir, prog_base,
                          "Whisper — Trascrizione audio",
                          f"File {idx+1}/{len(audio_files)}: {af.name}")
-        t, dur = transcribe_audio(af, whisper_model)
+        t, dur = transcribe_audio(af, whisper_model,
+                                  _prog_dir=output_dir,
+                                  _prog_base=prog_base, _prog_end=prog_base + 5)
         if t:
             sources["carne"].append({"filename": af.name, "text": t, "duration_sec": dur})
             sources["has_audio"] = True
@@ -1299,12 +1342,15 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     video_files = by["video"]
     for idx, vf in enumerate(video_files):
         print(f"\n  [Video → CARNE] {vf.name}")
-        _report_progress(output_dir, 15 + idx * 5,
+        prog_base = 15 + idx * 5
+        _report_progress(output_dir, prog_base,
                          "Whisper — Trascrizione video",
                          f"File {idx+1}/{len(video_files)}: {vf.name}")
         mp3 = extract_audio_from_video(vf, tmp_dir)
         if mp3:
-            t, dur = transcribe_audio(mp3, whisper_model)
+            t, dur = transcribe_audio(mp3, whisper_model,
+                                      _prog_dir=output_dir,
+                                      _prog_base=prog_base, _prog_end=prog_base + 5)
             if t:
                 sources["carne"].append({"filename": vf.name, "text": t, "duration_sec": dur})
                 sources["has_audio"] = True

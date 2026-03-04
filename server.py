@@ -38,12 +38,40 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 jobs: dict[str, dict] = {}
 
 
+def _clean_teams_url(url: str) -> str:
+    """Rimuove &altTranscode=1 e parametri successivi (come TeamsHack.py)."""
+    import re
+    m = re.search(r'&altTranscode=1', url)
+    return url[:m.start()] if m else url
+
+
 def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                        title: str, skip_ai: bool, skip_ocr: bool,
                        whisper_model: str, subject: Optional[str],
-                       no_context: bool, start_from: Optional[int]):
+                       no_context: bool, start_from: Optional[int],
+                       teams_urls: list[str] | None = None):
     """Eseguito in background thread da BackgroundTasks."""
     jobs[job_id]["status"] = "running"
+
+    # ── Download audio da URL Teams (videomanifest) ──────────────────
+    if teams_urls:
+        for i, raw_url in enumerate(teams_urls):
+            url = _clean_teams_url(raw_url.strip())
+            if not url:
+                continue
+            mp3_out = lesson_dir / f"teams_{i+1:02d}.mp3"
+            print(f"[TeamsHack] Download audio {i+1}/{len(teams_urls)}: {url[:80]}…")
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", url,
+                     "-vn", "-ac", "1", "-codec:a", "libmp3lame", "-qscale:a", "4",
+                     str(mp3_out)],
+                    timeout=7200,
+                    check=False,
+                )
+            except Exception as e:
+                print(f"[TeamsHack] Errore download: {e}")
+
     cmd = [
         "python3", "pipeline.py",
         str(lesson_dir),
@@ -111,7 +139,8 @@ async def run_pipeline(
     output: str = Form("./output"),
     start_from: str = Form("0"),
     subject: Optional[str] = Form(None),
-    files: list[UploadFile] = File(...),
+    teams_url: list[str] = Form([]),
+    files: list[UploadFile] = File([]),
 ):
     """
     Avvia la pipeline in background e restituisce subito un job_id.
@@ -158,6 +187,7 @@ async def run_pipeline(
         "skip_ocr":      _skip_ocr,
         "output_name":   output_name,
         "output_dir":    str(output_dir),   # per leggere progress.json
+        "teams_urls":    teams_url,
         "stdout":        "",
         "stderr":        "",
         "returncode":    None,
@@ -169,7 +199,7 @@ async def run_pipeline(
         _run_pipeline_job,
         job_id, lesson_dir, output_dir,
         title, _skip_ai, _skip_ocr, whisper_model,
-        _subject, _no_context, _start_from
+        _subject, _no_context, _start_from, teams_url or []
     )
 
     return JSONResponse({
