@@ -26,9 +26,15 @@ def leggi_contatori():
             for line in f:
                 line = line.strip()
                 if line.startswith("lezioni="):
-                    contatori["lezioni"] = int(line.split("=")[1])
+                    try:
+                        contatori["lezioni"] = int(line.split("=")[1])
+                    except ValueError:
+                        pass
                 elif line.startswith("registrazioni="):
-                    contatori["registrazioni"] = int(line.split("=")[1])
+                    try:
+                        contatori["registrazioni"] = int(line.split("=")[1])
+                    except ValueError:
+                        pass
     return contatori
 
 

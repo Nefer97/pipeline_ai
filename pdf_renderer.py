@@ -74,8 +74,8 @@ def render_pdf_pages(pdf_path: Path, images_dir: Path,
     deps = _check_deps()
 
     if deps["pymupdf"]:
-            page_numbers = {p["page"] for p in pages_data} if pages_data else None
-            page_images = _render_with_pymupdf(pdf_path, images_dir, dpi, page_numbers)
+        page_numbers = {p["page"] for p in pages_data} if pages_data else None
+        page_images = _render_with_pymupdf(pdf_path, images_dir, dpi, page_numbers)
     elif deps["pdf2image"] and deps["pillow"]:
         print(f"    [pdf_renderer] pdf2image")
         page_images = _render_with_pdf2image(pdf_path, images_dir, dpi)

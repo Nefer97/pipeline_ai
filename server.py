@@ -123,9 +123,11 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
     except subprocess.TimeoutExpired:
         jobs[job_id]["status"] = "error"
         jobs[job_id]["stderr"] = "Timeout: pipeline impiegato più di 1 ora"
+        shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
     except Exception as e:
         jobs[job_id]["status"] = "error"
         jobs[job_id]["stderr"] = str(e)
+        shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
 
 
 @app.post("/run-pipeline")

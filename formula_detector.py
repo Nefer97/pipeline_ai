@@ -9,10 +9,6 @@ import numpy as np
 
 
 def is_formula_image(image_path: str) -> bool:
-    # Skippa formati non supportati da Pillow
-    ext = os.path.splitext(image_path)[1].lower()
-    if ext in ('.wmf', '.emf', '.svg'):
-        return False
     """
     Restituisce True se l'immagine ha caratteristiche tipiche di una formula:
     - Sfondo chiaro (bianco/quasi bianco)
@@ -20,6 +16,10 @@ def is_formula_image(image_path: str) -> bool:
     - Aspect ratio orizzontale (più larga che alta)
     - Non troppo grande (non è un grafico a piena pagina)
     """
+    # Skippa formati non supportati da Pillow
+    ext = os.path.splitext(image_path)[1].lower()
+    if ext in ('.wmf', '.emf', '.svg'):
+        return False
     try:
         img = Image.open(image_path).convert('RGB')
         arr = np.array(img)
@@ -56,9 +56,7 @@ def is_formula_image(image_path: str) -> bool:
         if dark_ratio < 0.02:
             return False
 
-        # Saturazione bassa = quasi monocromatica
-        img_hsv = img_small.convert('HSV') if hasattr(img_small, 'convert') else None
-        # Uso approccio numpy per saturazione
+        # Saturazione bassa = quasi monocromatica — approccio numpy
         r, g, b = arr_small[:,:,0].astype(float), arr_small[:,:,1].astype(float), arr_small[:,:,2].astype(float)
         max_c = np.maximum(np.maximum(r, g), b)
         min_c = np.minimum(np.minimum(r, g), b)
