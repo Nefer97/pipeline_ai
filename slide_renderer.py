@@ -250,19 +250,20 @@ def _render_with_pymupdf(pptx_path: Path, images_dir: Path) -> dict:
 
     # Renderizza ogni pagina del PDF
     doc = fitz.open(str(pdf_path))
-    for page_idx, page in enumerate(doc, start=1):
-        img_filename = f"slide_{page_idx:03d}.png"
-        img_path     = images_dir / img_filename
-        if img_path.exists():
+    try:
+        for page_idx, page in enumerate(doc, start=1):
+            img_filename = f"slide_{page_idx:03d}.png"
+            img_path     = images_dir / img_filename
+            if img_path.exists():
+                result[page_idx] = img_filename
+                continue
+            mat = fitz.Matrix(150/72, 150/72)  # 150 DPI
+            pix = page.get_pixmap(matrix=mat)
+            pix.save(str(img_path))
             result[page_idx] = img_filename
-            continue
-        mat = fitz.Matrix(150/72, 150/72)  # 150 DPI
-        pix = page.get_pixmap(matrix=mat)
-        pix.save(str(img_path))
-        result[page_idx] = img_filename
-        print(f"    ✓ slide_{page_idx:03d}.png")
-
-    doc.close()
+            print(f"    ✓ slide_{page_idx:03d}.png")
+    finally:
+        doc.close()
     return result
 
 
@@ -274,14 +275,18 @@ def _render_with_pymupdf(pptx_path: Path, images_dir: Path) -> dict:
 def _render_placeholder(pptx_path: Path, images_dir: Path) -> dict:
     """
     Genera PNG placeholder (rettangolo grigio con numero slide).
-    Richiede solo Pillow — se anche quello manca, genera file vuoti.
+    Usa pptx per il conteggio slide se disponibile; fallback a 1 placeholder.
     """
-    from pptx import Presentation
+    try:
+        from pptx import Presentation
+        prs    = Presentation(str(pptx_path))
+        slides = list(prs.slides)
+    except ImportError:
+        slides = [None]  # pptx non disponibile: genera 1 placeholder
 
-    prs    = Presentation(str(pptx_path))
     result = {}
 
-    for slide_idx, slide in enumerate(prs.slides, start=1):
+    for slide_idx, slide in enumerate(slides, start=1):
         img_filename = f"slide_{slide_idx:03d}.png"
         img_path     = images_dir / img_filename
         if img_path.exists():
