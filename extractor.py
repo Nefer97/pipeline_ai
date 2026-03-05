@@ -36,7 +36,10 @@ def _convert_to_png(src_path: str) -> str:
                 capture_output=True, timeout=30
             )
             if result.returncode == 0 and os.path.exists(png_path):
-                os.remove(src_path)
+                try:
+                    os.remove(src_path)
+                except OSError:
+                    pass  # file in uso o già rimosso — non critico
                 return png_path
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
@@ -47,7 +50,10 @@ def _convert_to_png(src_path: str) -> str:
                 capture_output=True, timeout=30
             )
             if result.returncode == 0 and os.path.exists(png_path):
-                os.remove(src_path)
+                try:
+                    os.remove(src_path)
+                except OSError:
+                    pass
                 return png_path
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
@@ -59,7 +65,10 @@ def _convert_to_png(src_path: str) -> str:
             from PIL import Image
             img = Image.open(src_path)
             img.convert('RGBA').save(png_path, 'PNG')
-            os.remove(src_path)
+            try:
+                os.remove(src_path)
+            except OSError:
+                pass
             return png_path
         except Exception as e:
             print(f"  [WARN] Conversione {os.path.basename(src_path)} fallita: {e}")

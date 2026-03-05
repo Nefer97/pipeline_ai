@@ -57,6 +57,8 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                        no_context: bool, start_from: Optional[int],
                        teams_urls: list[str] | None = None):
     """Eseguito in background thread da BackgroundTasks."""
+    if job_id not in jobs:
+        return  # job eliminato prima che il thread partisse
     jobs[job_id]["status"] = "running"
 
     # ── Download audio da URL Teams (videomanifest) ──────────────────
@@ -302,7 +304,7 @@ async def list_jobs():
     """Lista tutti i job (utile per debug)."""
     return JSONResponse({
         jid: {"status": j["status"], "title": j["title"], "files": j["files"]}
-        for jid, j in jobs.items()
+        for jid, j in list(jobs.items())  # snapshot per evitare RuntimeError su dict cambiato
     })
 
 

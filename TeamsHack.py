@@ -174,13 +174,12 @@ def main():
     print(f"\nEstrazione audio MP3 mono...")
     if estrai_mp3(video_file, mp3_file):
         print(f"✓ Audio estratto: {mp3_file}")
+        # Incrementa contatore solo se tutto è andato a buon fine
+        contatori[tipo] = prossimo_num
+        salva_contatori(contatori)
+        print(f"\n✓ Contatore aggiornato: {tipo_label} #{prossimo_num:02d}")
     else:
-        print(f"✗ Errore estrazione audio (il video è comunque salvato)")
-
-    # Incrementa contatore SOLO se download ok
-    contatori[tipo] = prossimo_num
-    salva_contatori(contatori)
-    print(f"\n✓ Contatore aggiornato: {tipo_label} #{prossimo_num:02d}")
+        print(f"✗ Errore estrazione audio (il video è salvato ma il contatore non viene incrementato)")
 
 
 if __name__ == "__main__":
