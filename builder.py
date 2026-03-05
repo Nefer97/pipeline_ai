@@ -3,8 +3,6 @@ builder.py
 Genera il file .tex finale a partire dai dati estratti.
 """
 
-import os
-from extractor import SlideData
 
 
 LATEX_HEADER = r"""\documentclass[12pt,a4paper]{article}
@@ -53,6 +51,8 @@ def _escape_latex(text: str) -> str:
         ('{', r'\{'),
         ('}', r'\}'),
         ('~', r'\textasciitilde{}'),
+        ('<', r'\textless{}'),
+        ('>', r'\textgreater{}'),
     ]
     for old, new in replacements:
         text = text.replace(old, new)
@@ -110,7 +110,7 @@ def build_latex(slides: list, output_path: str, title: str = "Note del Corso", i
 
     for slide in slides:
         # Section con titolo slide
-        sec_title = slide.title.strip() if slide.title.strip() else f"Slide {slide.slide_number}"
+        sec_title = (slide.title or '').strip() or f"Slide {slide.slide_number}"
         lines.append(f'\\section{{{_escape_latex(sec_title)}}}')
         lines.append('')
 
@@ -139,7 +139,7 @@ def build_latex(slides: list, output_path: str, title: str = "Note del Corso", i
 
             elif obj.obj_type == 'image':
                 latex_formula = getattr(obj, 'latex_result', None)
-                img_filename = obj.content
+                img_filename = obj.content or ''
 
                 if latex_formula and latex_formula.strip():
                     # È una formula riconosciuta da pix2tex
