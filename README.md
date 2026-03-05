@@ -153,6 +153,7 @@ fonti grezze
 | `pipeline.py` | Orchestratore principale — coordina tutti i moduli |
 | `server.py` | Backend FastAPI — espone la pipeline via HTTP, gestisce download Teams |
 | `index.htm` | Frontend web — drag & drop, opzioni, polling stato, download |
+| `schema.htm` | Diagramma architettura interattivo — clicca su ogni blocco per i dettagli |
 | `preprocessor.py` | Normalizza e comprime il testo; rileva la materia; allinea trascrizione e slide; gestisce il contesto corso |
 | `extractor.py` | Parsing approfondito dei file `.pptx` |
 | `slide_renderer.py` | Renderizza ogni slide PPTX come PNG (pymupdf) |
@@ -249,7 +250,10 @@ uvicorn server:app --reload --host 0.0.0.0 --port 8000
 
 ### Apri il frontend
 
-Apri `index.htm` nel browser. Il frontend permette di:
+Apri `http://localhost:8000` nel browser (il server serve automaticamente `index.htm`).
+Da remoto usa l'IP o hostname del server al posto di `localhost`.
+
+Il frontend permette di:
 
 - Trascinare file audio, video, slide, documenti
 - Incollare URL manifest di Microsoft Teams (scaricati automaticamente via ffmpeg)
@@ -258,16 +262,41 @@ Apri `index.htm` nel browser. Il frontend permette di:
 - Avviare la pipeline e monitorare lo stato in tempo reale con percentuale
 - Scaricare lo `.zip` con il risultato quando pronto (cleanup automatico dopo download)
 
+La pagina **Schema** (`http://localhost:8000/schema.htm`) mostra un diagramma
+interattivo dell'architettura del sistema — cliccando su ogni blocco si vedono
+i dettagli del modulo corrispondente.
+
 ### Endpoint API
 
 | Endpoint | Metodo | Descrizione |
 |----------|--------|-------------|
+| `/` | GET | Serve `index.htm` (pipeline frontend) |
+| `/schema.htm` | GET | Serve `schema.htm` (diagramma architettura interattivo) |
 | `/run-pipeline` | POST | Avvia pipeline, ritorna `job_id` immediatamente. Parametri: `title`, `files[]`, `teams_url[]`, `skip_ai`, `skip_ocr`, `no_context`, `whisper_model`, `output`, `start_from`, `subject` |
 | `/job/{job_id}` | GET | Stato del job: `queued / running / done / error` + progress, step, detail |
 | `/download/{job_id}` | GET | Scarica lo `.zip` con i file `.tex` + `images/` |
-| `/job/{job_id}` | DELETE | Elimina job e tutti i file temporanei dal disco |
+| `/job/{job_id}` | DELETE | Elimina uploads temporanei. Aggiungere `?full=true` per eliminare anche zip e output definitivi |
 | `/jobs` | GET | Lista tutti i job (debug) |
 | `/docs` | GET | Documentazione interattiva FastAPI |
+
+### Accesso remoto
+
+Il server ascolta su `0.0.0.0` quindi è raggiungibile da qualsiasi dispositivo nella stessa rete locale usando l'IP del server (es. `http://192.168.1.x:8000`).
+
+Per accesso da reti esterne (es. Mac fuori casa → Linux a casa) il modo più semplice è **Tailscale**:
+
+```bash
+# Sul server Linux
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up
+
+# Sul Mac client
+# Scarica Tailscale da https://tailscale.com/download
+```
+
+Dopo aver fatto login con lo stesso account su entrambi i dispositivi, il server è raggiungibile tramite il suo Tailscale IP o hostname (es. `http://nome-macchina:8000`). Il Tailscale IP del server si trova con `tailscale ip -4`.
+
+> Tutti gli URL nel frontend si adattano automaticamente: usano `window.location.origin` invece di indirizzi hardcoded.
 
 ---
 
@@ -396,8 +425,8 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | Unico `lezione_01.tex` per PDF grande | Chunking non attivato | Assicurarsi che il PDF non abbia audio associato nella stessa cartella |
 | Titolo lezione incomprensibile | Nome cartella hash o generico | Rinomina la cartella con un nome descrittivo |
 | `ffprobe: command not found` | ffprobe non installato | `sudo apt install ffmpeg` (include ffprobe) |
-| `ValueError: document closed` | Bug print in pdf_renderer | Aggiorna `pdf_renderer.py` all'ultima versione |
 | Claude non risponde | API key mancante o errata | `echo $ANTHROPIC_API_KEY` per verificare |
+| Frontend non raggiungibile da remoto | Server non in ascolto su `0.0.0.0` | Avvia con `--host 0.0.0.0`; da remoto usa l'IP del server (o Tailscale IP) |
 | `pdflatex` fallisce | Pacchetti LaTeX mancanti | `sudo apt install texlive-full` |
 | pix2tex non trovato (`['heuristic']` only) | Venv non nei path cercati | Usa `~/pix2tex_venv` oppure `~/Scrivania/venv` (italiano) o `~/venv` |
 | `NNPACK: Unsupported hardware` in stderr | CPU senza istruzioni NNPACK | Warning innocuo — pix2tex funziona ugualmente su CPU normale |
