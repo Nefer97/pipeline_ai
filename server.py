@@ -298,6 +298,12 @@ async def serve_index():
     index_path = Path(__file__).parent / "index.htm"
     return FileResponse(str(index_path), media_type="text/html")
 
+@app.get("/schema.htm")
+async def serve_schema():
+    """Serve il frontend (schema.htm) — accessibile da qualsiasi browser in rete."""
+    index_path = Path(__file__).parent / "schema.htm"
+    return FileResponse(str(index_path), media_type="text/html")
+
 
 @app.get("/jobs")
 async def list_jobs():
