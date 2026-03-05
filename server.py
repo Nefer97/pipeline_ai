@@ -292,15 +292,21 @@ async def list_jobs():
 
 
 @app.delete("/job/{job_id}")
-async def delete_job(job_id: str):
-    """Elimina job e file associati."""
+async def delete_job(job_id: str, full: bool = False):
+    """
+    Elimina job e file associati.
+    - Default (full=false): rimuove solo uploads e zip temporaneo, mantiene output/.
+    - full=true: rimuove tutto inclusa la cartella output con tex e immagini.
+    """
     if job_id not in jobs:
         raise HTTPException(status_code=404, detail="Job non trovato")
-    # Rimuovi file
-    for d in [UPLOAD_DIR / job_id, OUTPUT_DIR / job_id]:
-        shutil.rmtree(d, ignore_errors=True)
+    # Rimuovi sempre: file caricati dall'utente e zip temporaneo
+    shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
     zip_p = OUTPUT_DIR / f"{job_id}.zip"
     if zip_p.exists():
         zip_p.unlink()
+    # Rimuovi output solo se richiesto esplicitamente
+    if full:
+        shutil.rmtree(OUTPUT_DIR / job_id, ignore_errors=True)
     del jobs[job_id]
-    return JSONResponse({"deleted": job_id})
+    return JSONResponse({"deleted": job_id, "output_kept": not full})

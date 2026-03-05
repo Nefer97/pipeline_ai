@@ -745,7 +745,7 @@ runBtn.addEventListener('click',async()=>{
           const title=document.getElementById('titleInput').value.trim()||'appunti';
           a.href=`http://127.0.0.1:8000/download/${j.job_id}`;
           a.download=`${title.replace(/\s+/g,'_')}.zip`;a.click();
-          // Cleanup file temporanei lato server dopo 5s (tempo di avvio download)
+          // Cleanup uploads e zip dopo 5s — l'output (tex + immagini) rimane in outputs/
           setTimeout(()=>fetch(`http://127.0.0.1:8000/job/${j.job_id}`,{method:'DELETE'}).catch(()=>{}),5000);
         }
         if(s.status==='error'){
