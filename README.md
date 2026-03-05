@@ -34,15 +34,37 @@ pip install openai-whisper pdfplumber python-pptx python-docx \
 
 ### 4. pix2tex — OCR formule (opzionale, ambiente separato)
 
-pix2tex ha dipendenze che possono confliggere con il venv principale. Va installato in un venv dedicato:
+pix2tex converte immagini di formule matematiche in LaTeX. Ha dipendenze pesanti (PyTorch ~2GB) che possono confliggere con il venv principale, quindi va installato in un venv separato.
+
+**Percorsi supportati** (ocr_math.py cerca in ordine):
+- `~/pix2tex_venv/bin/python` ← **consigliato, funziona su tutti i sistemi**
+- `~/Scrivania/venv/bin/python` ← alias Desktop italiano
+- `~/venv/bin/python`
+- `~/.venv/bin/python`
+- `/opt/pix2tex_venv/bin/python`
 
 ```bash
-python3 -m venv ~/Scrivania/venv
-source ~/Scrivania/venv/bin/activate
+# Crea il venv dedicato
+python3 -m venv ~/pix2tex_venv
+source ~/pix2tex_venv/bin/activate
+
+# Installa pix2tex (scarica PyTorch + dipendenze, ~2GB)
 pip install pix2tex
+
+# Verifica che funzioni
+python -c "from pix2tex.cli import LatexOCR; print('import OK'); m = LatexOCR(); print('modello OK')"
+# Al primo avvio scarica automaticamente i pesi del modello (~116MB in ~/.cache o nel venv)
 ```
 
-`ocr_math.py` lo chiama automaticamente via subprocess. Se non è installato, le immagini-formula vengono saltate senza errori.
+**Verifica che ocr_math.py lo trovi:**
+```bash
+source ~/appunti_ai/venv/bin/activate
+python -c "from ocr_math import get_available_backends; print(get_available_backends())"
+# Deve mostrare: ['pix2tex (subprocess)', 'heuristic']
+```
+
+> Se non è installato, le immagini-formula vengono saltate senza errori — la pipeline continua normalmente.
+> Le formule scritte con l'editor equazioni di PowerPoint (OMML) vengono sempre convertite correttamente tramite `omml2latex.py`, indipendentemente da pix2tex.
 
 ### 5. API key Claude (opzionale)
 
@@ -61,7 +83,17 @@ source venv/bin/activate
 python -c "import fitz; print('pymupdf OK:', fitz.__version__)"
 python -c "import pdfplumber; print('pdfplumber OK')"
 python -c "import whisper; print('whisper OK')"
+python -c "import fastapi, uvicorn; print('server OK')"
 python pipeline.py --help
+
+# Verifica pix2tex (se installato nel venv separato)
+python -c "from ocr_math import get_available_backends; print(get_available_backends())"
+```
+
+Output atteso se tutto è installato:
+```
+['pix2tex (subprocess)', 'heuristic']   ← pix2tex trovato
+['heuristic']                            ← pix2tex non trovato (funziona uguale)
 ```
 
 ---
@@ -334,6 +366,9 @@ Se i PNG esistono già in `images/`, non vengono rirenderizzati. Per forzare il 
 **TeamsHack — URL manifest:**
 Il frontend accetta URL di videomanifest Teams (es. `.m3u8` o URL stream). Incollati nella zona Teams dell'UI, vengono inviati a `server.py` che li scarica via `ffmpeg -i <url> -vn ... .mp3` prima di avviare la pipeline. Non è necessario scaricare manualmente il video. `TeamsHack.py` rimane disponibile anche come script standalone da terminale con modalità video+mp3 e contatori automatici.
 
+**pix2tex e formule:**
+Le formule nei file `.pptx` vengono gestite in due modi distinti: quelle create con l'editor equazioni di PowerPoint (OMML) vengono convertite direttamente dall'XML tramite `omml2latex.py` — zero OCR, qualità alta. Le formule inserite come immagini (screenshot, foto di lavagna, PNG incollati) vengono rilevate da `formula_detector.py` in base ad aspect ratio, sfondo chiaro e bassa saturazione, e poi passate a pix2tex. Usa `--skip-ocr` per saltare questo step e velocizzare l'esecuzione. I risultati sono salvati in cache `.ocr_cache.json` accanto all'immagine.
+
 **Moduli opzionali:**
 Se `extractor.py`, `slide_renderer.py`, `pdf_renderer.py` e gli altri moduli collega non sono presenti, la pipeline usa un fallback base che funziona comunque. La qualità dell'output (immagini slide, formule OMML) è però significativamente migliore con i moduli completi.
 
@@ -364,3 +399,7 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | `ValueError: document closed` | Bug print in pdf_renderer | Aggiorna `pdf_renderer.py` all'ultima versione |
 | Claude non risponde | API key mancante o errata | `echo $ANTHROPIC_API_KEY` per verificare |
 | `pdflatex` fallisce | Pacchetti LaTeX mancanti | `sudo apt install texlive-full` |
+| pix2tex non trovato (`['heuristic']` only) | Venv non nei path cercati | Usa `~/pix2tex_venv` oppure `~/Scrivania/venv` (italiano) o `~/venv` |
+| `NNPACK: Unsupported hardware` in stderr | CPU senza istruzioni NNPACK | Warning innocuo — pix2tex funziona ugualmente su CPU normale |
+| pix2tex lento (30-60s per formula) | Modello ML su CPU, nessuna GPU | Normale su CPU; la cache `.ocr_cache.json` evita di riprocessare le stesse immagini |
+| Prima esecuzione pix2tex scarica pesi | Download automatico ~116MB | Attendi il download; successive esecuzioni usano la cache |
