@@ -17,6 +17,7 @@ from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 app = FastAPI(title="Appunti AI API")
 
@@ -27,6 +28,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve assets statici (audio, css, ecc.)
+_ASSETS_DIR = Path(__file__).parent / "assets"
+if _ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(_ASSETS_DIR)), name="assets")
 
 UPLOAD_DIR = Path("uploads")
 OUTPUT_DIR = Path("outputs")
@@ -282,6 +288,13 @@ async def download_output(job_id: str):
         media_type="application/zip",
         filename=f"appunti_{title_safe}.zip"
     )
+
+
+@app.get("/")
+async def serve_index():
+    """Serve il frontend (index.htm) — accessibile da qualsiasi browser in rete."""
+    index_path = Path(__file__).parent / "index.htm"
+    return FileResponse(str(index_path), media_type="text/html")
 
 
 @app.get("/jobs")

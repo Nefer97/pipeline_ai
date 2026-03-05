@@ -471,6 +471,9 @@
 
 
 <script>
+// URL base del server — funziona sia in locale (127.0.0.1) che da remoto (Tailscale, LAN)
+const API = window.location.origin;
+
 function setUIRunning(isRunning){
   const inputs = document.querySelectorAll('input, select, textarea, button');
 
@@ -690,7 +693,7 @@ runBtn.addEventListener('click',async()=>{
   });
 
   try{
-    const r=await fetch('http://127.0.0.1:8000/run-pipeline',{method:'POST',body:fd});
+    const r=await fetch(`${API}/run-pipeline`,{method:'POST',body:fd});
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const j=await r.json();
     showToast('Pipeline avviata!',`job ${j.job_id} — polling ogni 3s`,'#10b981');
@@ -711,7 +714,7 @@ runBtn.addEventListener('click',async()=>{
 
     const poll=setInterval(async()=>{
       try{
-        const s=await(await fetch(`http://127.0.0.1:8000/job/${j.job_id}`)).json();
+        const s=await(await fetch(`${API}/job/${j.job_id}`)).json();
         // 🔵 AGGIORNAMENTO LIVE STATUS
         if(s.current_step){
           updateLiveStatus(s.current_step,s.detail||'','#00e5ff',true);
@@ -743,10 +746,10 @@ runBtn.addEventListener('click',async()=>{
           sounds.download.play().catch(e=>console.log("Suono download bloccato:", e));
           const a=document.createElement('a');
           const title=document.getElementById('titleInput').value.trim()||'appunti';
-          a.href=`http://127.0.0.1:8000/download/${j.job_id}`;
+          a.href=`${API}/download/${j.job_id}`;
           a.download=`${title.replace(/\s+/g,'_')}.zip`;a.click();
           // Cleanup uploads e zip dopo 5s — l'output (tex + immagini) rimane in outputs/
-          setTimeout(()=>fetch(`http://127.0.0.1:8000/job/${j.job_id}`,{method:'DELETE'}).catch(()=>{}),5000);
+          setTimeout(()=>fetch(`${API}/job/${j.job_id}`,{method:'DELETE'}).catch(()=>{}),5000);
         }
         if(s.status==='error'){
           clearInterval(fakeInterval);
