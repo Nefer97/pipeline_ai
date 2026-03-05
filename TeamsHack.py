@@ -53,17 +53,22 @@ def clean_url(url):
     return url
 
 
+def _run_ffmpeg(cmd, timeout=None):
+    """Esegue un comando ffmpeg, gestisce FileNotFoundError se non installato."""
+    try:
+        return subprocess.run(cmd, timeout=timeout)
+    except FileNotFoundError:
+        print("✗ ffmpeg non trovato — installa ffmpeg e riprova.")
+        sys.exit(1)
+    except subprocess.TimeoutExpired:
+        print("✗ Timeout ffmpeg superato.")
+        sys.exit(1)
+
+
 def download_standard(url, output_file):
     """Download normale con ffmpeg - copia stream, audio mono"""
-    cmd = [
-        'ffmpeg',
-        '-i', url,
-        '-c:v', 'copy',
-        '-ac', '1',
-        '-c:a', 'aac',
-        output_file
-    ]
-    return subprocess.run(cmd)
+    cmd = ['ffmpeg', '-i', url, '-c:v', 'copy', '-ac', '1', '-c:a', 'aac', output_file]
+    return _run_ffmpeg(cmd, timeout=7200)
 
 
 def download_vaapi(url, output_file):
@@ -74,28 +79,18 @@ def download_vaapi(url, output_file):
         '-hwaccel_device', '/dev/dri/renderD128',
         '-hwaccel_output_format', 'vaapi',
         '-i', url,
-        '-c:v', 'hevc_vaapi',
-        '-qp', '28',
-        '-ac', '1',
-        '-c:a', 'aac',
-        '-b:a', '48k',
+        '-c:v', 'hevc_vaapi', '-qp', '28',
+        '-ac', '1', '-c:a', 'aac', '-b:a', '48k',
         output_file
     ]
-    return subprocess.run(cmd)
+    return _run_ffmpeg(cmd, timeout=7200)
 
 
 def estrai_mp3(video_file, mp3_file):
     """Estrae audio mono mp3 dal video"""
-    cmd = [
-        'ffmpeg',
-        '-i', video_file,
-        '-vn',
-        '-ac', '1',
-        '-codec:a', 'libmp3lame',
-        '-qscale:a', '4',
-        mp3_file
-    ]
-    result = subprocess.run(cmd)
+    cmd = ['ffmpeg', '-i', video_file, '-vn', '-ac', '1',
+           '-codec:a', 'libmp3lame', '-qscale:a', '4', mp3_file]
+    result = _run_ffmpeg(cmd, timeout=3600)
     return result.returncode == 0
 
 

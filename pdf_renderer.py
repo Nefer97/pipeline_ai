@@ -107,25 +107,27 @@ def _render_with_pymupdf(pdf_path: Path, images_dir: Path,
     mat    = fitz.Matrix(dpi / 72, dpi / 72)
     total  = len(doc)
 
-    for page_idx, page in enumerate(doc, start=1):
-        # ← salta le pagine fuori dal chunk
-        if page_numbers and page_idx not in page_numbers:
-            continue
+    try:
+        for page_idx, page in enumerate(doc, start=1):
+            # ← salta le pagine fuori dal chunk
+            if page_numbers and page_idx not in page_numbers:
+                continue
 
-        img_filename = f"{stem}_pag_{page_idx:03d}.png"
-        img_path     = images_dir / img_filename
-        if img_path.exists():
-            result[page_idx] = img_filename
-            continue
-        try:
-            pix = page.get_pixmap(matrix=mat, alpha=False)
-            pix.save(str(img_path))
-            result[page_idx] = img_filename
-            print(f"    ✓ {img_filename}  ({pix.width}×{pix.height}px)")
-        except Exception as e:
-            print(f"    [WARN] pagina {page_idx} non renderizzata: {e}")
+            img_filename = f"{stem}_pag_{page_idx:03d}.png"
+            img_path     = images_dir / img_filename
+            if img_path.exists():
+                result[page_idx] = img_filename
+                continue
+            try:
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+                pix.save(str(img_path))
+                result[page_idx] = img_filename
+                print(f"    ✓ {img_filename}  ({pix.width}×{pix.height}px)")
+            except Exception as e:
+                print(f"    [WARN] pagina {page_idx} non renderizzata: {e}")
+    finally:
+        doc.close()
 
-    doc.close()
     print(f"    ✓ Renderizzate {len(result)}/{total} pagine")
     return result
 
@@ -277,8 +279,7 @@ def _build_pdf_latex_skeleton(pdf_path: Path, pages_data: list[dict],
     ))
 
     # Pattern per righe-footer da rimuovere (email, URL soli, pagine numerate sole)
-    import re as _re
-    _footer_line = _re.compile(
+    _footer_line = re.compile(
         r'^\s*([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}|https?://\S+|\d+\s*/\s*\d+)\s*$'
     )
 

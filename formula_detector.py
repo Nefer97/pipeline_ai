@@ -26,6 +26,11 @@ def is_formula_image(image_path: str) -> bool:
 
         h, w = arr.shape[:2]
 
+        # --- Criterio 0: dimensione minima ---
+        # Immagini troppo piccole non sono formule riconoscibili
+        if w < 20 or h < 10:
+            return False
+
         # --- Criterio 1: aspect ratio orizzontale ---
         # Le formule tendono ad essere più larghe che alte
         aspect = w / h if h > 0 else 0

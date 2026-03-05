@@ -3,8 +3,6 @@ builder.py
 Genera il file .tex finale a partire dai dati estratti.
 """
 
-
-
 LATEX_HEADER = r"""\documentclass[12pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -89,9 +87,14 @@ def build_latex(slides: list, output_path: str, title: str = "Note del Corso", i
     """
     Genera il file .tex finale.
     slides: lista di SlideData con obj.latex_result popolato
+    images_rel_path: percorso relativo alla cartella immagini (usato in \\graphicspath)
     """
+    header = LATEX_HEADER.replace(
+        r"\graphicspath{{./images/}}",
+        f"\\graphicspath{{{{{images_rel_path}/}}}}"
+    )
     lines = []
-    lines.append(LATEX_HEADER)
+    lines.append(header)
 
     # Title page
     lines.append(r'\begin{titlepage}')
@@ -117,7 +120,7 @@ def build_latex(slides: list, output_path: str, title: str = "Note del Corso", i
         for obj in slide.objects:
             if obj.obj_type == 'text':
                 # Salta testo uguale al titolo
-                if obj.content.strip() == slide.title.strip():
+                if (obj.content or '').strip() == (slide.title or '').strip():
                     continue
                 lines.append(_format_text_block(obj.content))
                 lines.append('')

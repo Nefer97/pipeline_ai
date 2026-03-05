@@ -152,7 +152,7 @@ def extract_slides(pptx_path: str, image_output_dir: str) -> list:
         # Titolo
         title = ''
         try:
-            title = slide.shapes.title.text if slide.shapes.title else ''
+            title = (slide.shapes.title.text or '') if slide.shapes.title else ''
         except Exception:
             pass
 
