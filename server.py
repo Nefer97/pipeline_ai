@@ -63,13 +63,23 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
     jobs[job_id]["status"] = "running"
 
     # ── Continua un corso precedente: copia state.json e corso_context.json ──
-    if continue_from and continue_from in jobs:
-        prev_out = Path(jobs[continue_from]["output_dir"])
-        for fname in ("state.json", "corso_context.json"):
-            src = prev_out / fname
-            if src.exists():
-                shutil.copy2(src, output_dir / fname)
-                print(f"[continue] copiato {fname} da job {continue_from}")
+    if continue_from:
+        # Prima cerca in memoria (job ancora presente), poi su disco (server riavviato)
+        if continue_from in jobs:
+            prev_out = Path(jobs[continue_from]["output_dir"])
+        else:
+            # Fallback su disco: cerca ricorsivamente in outputs/{prev_job_id}/
+            candidates = list((OUTPUT_DIR / continue_from).rglob("state.json"))
+            prev_out = candidates[0].parent if candidates else None
+
+        if prev_out:
+            for fname in ("state.json", "corso_context.json"):
+                src = prev_out / fname
+                if src.exists():
+                    shutil.copy2(src, output_dir / fname)
+                    print(f"[continue] copiato {fname} da {prev_out}")
+        else:
+            print(f"[continue] job {continue_from} non trovato in memoria né su disco — ignoro")
 
     # ── Download audio da URL Teams (videomanifest) ──────────────────
     if teams_urls:

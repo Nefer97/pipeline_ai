@@ -335,6 +335,7 @@
           <span class="config-tag active" id="tag-subject" style="--tag-color:#f59e0b">subject:auto</span>
           <span class="config-tag active" id="tag-output" style="--tag-color:#64748b">out:./output</span>
           <span class="config-tag active" id="tag-start" style="--tag-color:#64748b">start:0</span>
+          <span class="config-tag" id="tag-continue" style="--tag-color:#f59e0b;display:none">continue:—</span>
         </div>
 
       </div>
@@ -490,6 +491,9 @@ function copyJobId(){
   const id=document.getElementById('jobIdText').textContent;
   navigator.clipboard.writeText(id).catch(()=>{});
   document.getElementById('opt-continue').value=id;
+  // Aggiorna visibilità startfrom-field (l'evento input non scatta su set programmatico)
+  document.getElementById('startfrom-field').style.display='none';
+  document.getElementById('continue-hint').style.display='block';
   showToast('Job ID copiato','Incollato nel campo "Continua corso" — carica i file della prossima lezione e avvia','#f59e0b');
 }
 
@@ -676,9 +680,15 @@ document.getElementById('opt-whisper').addEventListener('change',()=>{updateWhis
 document.getElementById('opt-output').addEventListener('input',()=>updateConfigStatus(false));
 document.getElementById('opt-startfrom').addEventListener('input',()=>updateConfigStatus(false));
 document.getElementById('opt-continue').addEventListener('input',()=>{
-  const hasContinue=document.getElementById('opt-continue').value.trim().length>0;
-  document.getElementById('startfrom-field').style.display=hasContinue?'none':'flex';
-  document.getElementById('continue-hint').style.display=hasContinue?'block':'none';
+  const val=document.getElementById('opt-continue').value.trim();
+  const has=val.length>0;
+  document.getElementById('startfrom-field').style.display=has?'none':'flex';
+  document.getElementById('continue-hint').style.display=has?'block':'none';
+  const tagStart=document.getElementById('tag-start');
+  const tagCont=document.getElementById('tag-continue');
+  tagStart.style.display=has?'none':'';
+  tagCont.style.display=has?'':'none';
+  if(has){tagCont.textContent=`continue:${val}`;tagCont.classList.add('active');}
 });
 updateConfigStatus(false);
 
