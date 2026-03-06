@@ -55,11 +55,21 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                        title: str, skip_ai: bool, skip_ocr: bool,
                        whisper_model: str, subject: Optional[str],
                        no_context: bool, start_from: Optional[int],
-                       teams_urls: list[str] | None = None):
+                       teams_urls: list[str] | None = None,
+                       continue_from: str = ""):
     """Eseguito in background thread da BackgroundTasks."""
     if job_id not in jobs:
         return  # job eliminato prima che il thread partisse
     jobs[job_id]["status"] = "running"
+
+    # ── Continua un corso precedente: copia state.json e corso_context.json ──
+    if continue_from and continue_from in jobs:
+        prev_out = Path(jobs[continue_from]["output_dir"])
+        for fname in ("state.json", "corso_context.json"):
+            src = prev_out / fname
+            if src.exists():
+                shutil.copy2(src, output_dir / fname)
+                print(f"[continue] copiato {fname} da job {continue_from}")
 
     # ── Download audio da URL Teams (videomanifest) ──────────────────
     if teams_urls:
@@ -149,6 +159,7 @@ async def run_pipeline(
     output: str = Form("./output"),
     start_from: str = Form("0"),
     subject: Optional[str] = Form(None),
+    continue_from: str = Form(""),
     teams_url: list[str] = Form([]),
     files: list[UploadFile] = File([]),
 ):
@@ -184,6 +195,8 @@ async def run_pipeline(
             shutil.copyfileobj(f.file, out)
         saved.append(f.filename)
 
+    _continue_from = continue_from.strip()
+
     # Inizializza job
     jobs[job_id] = {
         "status":        "queued",
@@ -198,6 +211,7 @@ async def run_pipeline(
         "output_name":   output_name,
         "output_dir":    str(output_dir),   # per leggere progress.json
         "teams_urls":    teams_url,
+        "continue_from": _continue_from,
         "stdout":        "",
         "stderr":        "",
         "returncode":    None,
@@ -209,7 +223,8 @@ async def run_pipeline(
         _run_pipeline_job,
         job_id, lesson_dir, output_dir,
         title, _skip_ai, _skip_ocr, whisper_model,
-        _subject, _no_context, _start_from, teams_url or []
+        _subject, _no_context, _start_from, teams_url or [],
+        _continue_from
     )
 
     return JSONResponse({

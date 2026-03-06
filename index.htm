@@ -302,6 +302,11 @@
               <label>Start-from (0 = auto da state.json)</label>
               <input type="number" id="opt-startfrom" value="0" min="0" style="border-left-color:var(--c2)">
             </div>
+
+            <div class="config-field" style="gap:6px">
+              <label>Continua corso da Job ID precedente</label>
+              <input type="text" id="opt-continue" placeholder="es. 8ccdc0a7 — lascia vuoto per nuovo corso" style="border-left-color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.72rem;">
+            </div>
           </div>
         </div>
 
@@ -347,6 +352,11 @@
       <div class="global-progress">
         <div class="global-progress-bar" id="globalProgressBar"></div>
       </div>
+    </div>
+    <div id="jobIdBadge" style="display:none;background:color-mix(in srgb,var(--c4) 8%,var(--surface2));border:1px solid color-mix(in srgb,var(--c4) 30%,transparent);border-radius:10px;padding:10px 16px;margin:8px 0 4px;font-family:'JetBrains Mono',monospace;font-size:.72rem;display:none;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="color:var(--muted2)">Job ID lezione completata:</span>
+      <span id="jobIdText" style="color:var(--c4);font-weight:700;letter-spacing:.06em;"></span>
+      <button onclick="copyJobId()" style="background:color-mix(in srgb,var(--c4) 15%,transparent);border:1px solid color-mix(in srgb,var(--c4) 40%,transparent);border-radius:6px;color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.65rem;padding:4px 10px;cursor:pointer;">📋 Usa per lezione successiva</button>
     </div>
     <div class="arrow-down"><div class="chevron"></div></div>
     <div class="section-label">// 03 · preprocessing</div>
@@ -474,6 +484,13 @@
 <script>
 // URL base del server — funziona sia in locale (127.0.0.1) che da remoto (Tailscale, LAN)
 const API = window.location.origin;
+
+function copyJobId(){
+  const id=document.getElementById('jobIdText').textContent;
+  navigator.clipboard.writeText(id).catch(()=>{});
+  document.getElementById('opt-continue').value=id;
+  showToast('Job ID copiato','Incollato nel campo "Continua corso" — carica i file della prossima lezione e avvia','#f59e0b');
+}
 
 function setUIRunning(isRunning){
   const inputs = document.querySelectorAll('input, select, textarea, button');
@@ -663,6 +680,7 @@ updateConfigStatus(false);
 const runBtn = document.getElementById('runBtn');
 runBtn.addEventListener('click',async()=>{
   updateLiveStatus('Avvio pipeline…','Preparazione upload…','#f59e0b',true);
+  document.getElementById('jobIdBadge').style.display='none';
   const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);
   if(!total)return;
   // PLAY START SOUND
@@ -679,6 +697,7 @@ runBtn.addEventListener('click',async()=>{
   fd.append('whisper_model',document.getElementById('opt-whisper').value);
   fd.append('output',document.getElementById('opt-output').value||'./output');
   fd.append('start_from',document.getElementById('opt-startfrom').value||'0');
+  fd.append('continue_from',document.getElementById('opt-continue').value.trim()||'');
   if(selectedSubject!=='auto')fd.append('subject',selectedSubject);
   Object.values(fileState).forEach(cat=>cat.forEach(item=>{if(item.file)fd.append('files',item.file);}));
   fileState.teams.forEach(item=>{if(item.isUrl&&item.name)fd.append('teams_url',item.name);});
@@ -745,6 +764,10 @@ runBtn.addEventListener('click',async()=>{
           btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
           showToast('✓ Completato!','Download in corso…','#10b981');
           sounds.download.play().catch(e=>console.log("Suono download bloccato:", e));
+          // Mostra badge Job ID per poter continuare il corso alla lezione successiva
+          document.getElementById('jobIdText').textContent=j.job_id;
+          const badge=document.getElementById('jobIdBadge');
+          badge.style.display='flex';
           const a=document.createElement('a');
           const title=document.getElementById('titleInput').value.trim()||'appunti';
           a.href=`${API}/download/${j.job_id}`;
