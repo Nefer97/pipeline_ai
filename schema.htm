@@ -442,7 +442,7 @@ header p {
       <div class="block wide" style="--bc:#f59e0b" data-id="pipeline">
         <div class="block-icon">🔧</div>
         <div class="block-name">pipeline.py</div>
-        <div class="block-sub">Coordina tutti i moduli in sequenza<br>Cache trascrizioni · gestione errori<br>Chunking PDF · batch lezioni</div>
+        <div class="block-sub">Coordina tutti i moduli in sequenza<br>Cache trascrizioni · gestione errori<br>Batch lezioni · continue_from</div>
         <div class="block-file">pipeline.py</div>
       </div>
     </div>
@@ -519,7 +519,7 @@ header p {
         <div class="block" style="--bc:#f59e0b" data-id="pdf">
           <div class="block-icon">📄</div>
           <div class="block-name">pdfplumber</div>
-          <div class="block-sub">.pdf → testo pagine<br>chunking auto 10pp</div>
+          <div class="block-sub">.pdf → testo per pagina<br>rendering PNG · budget token</div>
           <div class="block-file">pipeline.py</div>
         </div>
         <div class="conn" style="--conn-color:#f59e0b;height:20px">
@@ -624,7 +624,7 @@ header p {
         <div class="block medium" style="--bc:#10b981" data-id="claude">
           <div class="block-icon">✦</div>
           <div class="block-name">Claude API</div>
-          <div class="block-sub">claude-sonnet-4-x<br>prompt context cache<br>LaTeX semantico</div>
+          <div class="block-sub">claude-sonnet-4-6<br>prompt context cache<br>LaTeX semantico</div>
           <div class="block-file">Anthropic API</div>
         </div>
       </div>
@@ -737,7 +737,8 @@ const details = {
     color: "#7c3aed",
     items: [
       "POST /run-pipeline: salva file, scarica Teams URL via ffmpeg, lancia pipeline.py in BackgroundTask",
-      "Parametri: title, files[], teams_url[], skip_ai, skip_ocr, no_context, whisper_model, output, start_from, subject",
+      "Parametri: title, files[], teams_url[], skip_ai, skip_ocr, no_context, whisper_model, output, start_from, subject, continue_from",
+      "continue_from: copia state.json + corso_context.json dal job precedente (in memoria o su disco)",
       "GET /job/{id}: status (queued/running/done/error) + progress, current_step, detail da progress.json",
       "GET /download/{id}: serve ZIP come FileResponse",
       "DELETE /job/{id}: pulisce uploads/ e outputs/ dal disco (chiamato automaticamente 5s dopo download)",
@@ -746,16 +747,17 @@ const details = {
   },
   pipeline: {
     title: "pipeline.py — Orchestratore",
-    file: "pipeline.py · ~1700 righe",
+    file: "pipeline.py · ~1900 righe",
     color: "#f59e0b",
     items: [
       "Riceve argomenti CLI da server.py (subprocess): --title, --subject, --no-context, --skip-ai, --skip-ocr, --whisper-model, --start-from",
-      "Scansiona la cartella lezione per tipo file (audio/video/slide/pdf/docx/txt)",
+      "Scansiona la cartella lezione per tipo file (audio/video/slide/pdf/docx/txt/rtf)",
       "Coordina: ffmpeg → Whisper → extractor → pdf_renderer/slide_renderer → preprocessor → Claude/skip-ai → builder",
       "Cache .transcript.txt: salta Whisper se già esiste per quel file",
+      "1 sessione upload = 1 lezione_NN.tex; PDF grandi troncati da _trunc() nel budget token",
       "Modalità batch: ogni sottocartella = una lezione; resume automatico da state.json",
-      "Chunking PDF auto: >20 pagine senza audio → chunk da 10pp → lezione_NN.tex per chunk",
-      "Scrive progress.json ad ogni step → server.py lo rilegge per il polling UI"
+      "Scrive progress.json ad ogni step → server.py lo rilegge per il polling UI",
+      "Debug: salva prompt, riepilogo fonti e uploads originali in output/debug/"
     ]
   },
   ffmpeg: {
@@ -819,14 +821,14 @@ const details = {
     ]
   },
   pdf: {
-    title: "pdfplumber — Estrazione PDF",
-    file: "pipeline.py · pdfplumber",
+    title: "pdfplumber + pdf_renderer — Estrazione PDF",
+    file: "pipeline.py · pdfplumber + pymupdf",
     color: "#f59e0b",
     items: [
       "Estrae testo pagina per pagina da file .pdf",
-      "Chunking automatico: PDF >20 pagine → chunk da 10pp",
-      "Ogni chunk genera un lezione_NN.tex separato incluso in main.tex",
-      "Aggiunge marker --- PAG N --- per il preprocessor"
+      "pdf_renderer.py renderizza ogni pagina come PNG in images/",
+      "1 sessione = 1 lezione_NN.tex; contenuti grandi troncati da _trunc()",
+      "Aggiunge marker [PAG N] per il preprocessor"
     ]
   },
   docx: {
@@ -899,7 +901,7 @@ const details = {
       "Prompt include: tipo materia + contesto corso + slide allineate alla trascrizione",
       "Genera LaTeX semantico: \\section/\\subsection logici, definizioni, teoremi, esempi",
       "Prompt caching: sistema (trascrizione+slide) in cache, risparmio token",
-      "Tier-based: Free usa Gemini, Paid usa Claude Sonnet"
+      "Modello: claude-sonnet-4-6 · max_tokens: 32000"
     ]
   },
   builder: {
@@ -930,7 +932,7 @@ const details = {
     file: "output/lezione_01.tex, lezione_02.tex ...",
     color: "#f472b6",
     items: [
-      "Un file per ogni lezione/chunk PDF processato",
+      "Un file per ogni sessione di upload (1 sessione = 1 lezione_NN.tex)",
       "Contiene: \\chapter o \\section, sottosezioni, formule, \\includegraphics",
       "Header commento con lista file sorgente usati",
       "Compilabile autonomamente o incluso in main.tex"

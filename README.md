@@ -227,6 +227,10 @@ python pipeline.py --batch ./corso/ --skip-ai --skip-ocr
 | `--batch` | off | Ogni sottocartella = una lezione |
 | `--start-from` | auto | Numero iniziale lezioni (default: auto da `state.json`) |
 
+### Continuità tra lezioni (frontend)
+
+Il campo **Continua da job** nel frontend accetta il `job_id` di una sessione precedente. Il server copia automaticamente `state.json` e `corso_context.json` dall'output del job precedente prima di avviare la pipeline — in questo modo la numerazione delle lezioni e la memoria del corso proseguono da dove si era rimasti. Funziona anche dopo il riavvio del server: se il job non è più in memoria viene cercato su disco in `outputs/{job_id}/`.
+
 ### Compilazione PDF
 
 ```bash
@@ -272,7 +276,7 @@ i dettagli del modulo corrispondente.
 |----------|--------|-------------|
 | `/` | GET | Serve `index.htm` (pipeline frontend) |
 | `/schema.htm` | GET | Serve `schema.htm` (diagramma architettura interattivo) |
-| `/run-pipeline` | POST | Avvia pipeline, ritorna `job_id` immediatamente. Parametri: `title`, `files[]`, `teams_url[]`, `skip_ai`, `skip_ocr`, `no_context`, `whisper_model`, `output`, `start_from`, `subject` |
+| `/run-pipeline` | POST | Avvia pipeline, ritorna `job_id` immediatamente. Parametri: `title`, `files[]`, `teams_url[]`, `skip_ai`, `skip_ocr`, `no_context`, `whisper_model`, `output`, `start_from`, `subject`, `continue_from` |
 | `/job/{job_id}` | GET | Stato del job: `queued / running / done / error` + progress, step, detail |
 | `/download/{job_id}` | GET | Scarica lo `.zip` con i file `.tex` + `images/` |
 | `/job/{job_id}` | DELETE | Elimina uploads temporanei. Aggiungere `?full=true` per eliminare anche zip e output definitivi |
@@ -312,7 +316,7 @@ Dopo aver fatto login con lo stesso account su entrambi i dispositivi, il server
 | PDF | `.pdf` | pdfplumber → testo; pdf_renderer → PNG per pagina |
 | Testo | `.txt` `.md` `.rtf` | lettura diretta (RTF con strip automatico) |
 
-I PDF con più di 20 pagine vengono divisi automaticamente in chunk da 10 pagine. Ogni chunk genera un `lezione_NN.tex` separato (es. 275 pagine → 27 file).
+Ogni sessione di upload genera esattamente **un** `lezione_NN.tex`, indipendentemente dalla dimensione del PDF. I contenuti grandi vengono gestiti dal budget token (`_trunc()`) prima dell'invio a Claude.
 
 ---
 
@@ -387,7 +391,10 @@ Il modello `base` su CPU impiega circa 1 minuto ogni 10 minuti di audio. Per tes
 `--skip-ai` disattiva solo Claude. Whisper gira sempre perché è trascrizione locale. Il contesto corso (`corso_context.json`) non viene aggiornato se Claude non viene chiamato.
 
 **PDF grandi:**
-Un PDF da 275 pagine genera automaticamente 27-28 file `lezione_NN.tex` (chunk da 10 pagine), tutti inclusi in `main.tex`. Le immagini PNG delle pagine vengono generate una sola volta e salvate in `images/` con naming `nomefile_pag_001.png`.
+Un PDF da 275 pagine viene processato come un'unica lezione. Il testo viene troncato in base al budget token (`_trunc()`) per rispettare i limiti del contesto Claude. Le immagini PNG delle pagine vengono generate e salvate in `images/` con naming `nomefile_pag_001.png`.
+
+**WHISPER_LANG:**
+Per default Whisper auto-rileva la lingua. Per forzarla: `export WHISPER_LANG=it` (o qualsiasi codice BCP-47).
 
 **Cache immagini:**
 Se i PNG esistono già in `images/`, non vengono rirenderizzati. Per forzare il rirenderizzamento cancella i file PNG dalla cartella.
@@ -404,8 +411,13 @@ Se `extractor.py`, `slide_renderer.py`, `pdf_renderer.py` e gli altri moduli col
 **Cartella lezione — nome:**
 Il nome della cartella della lezione viene usato come titolo. Usa nomi leggibili tipo `lezione_01_limiti` invece di hash o nomi generici.
 
-**Debug prompt:**
-Ogni chiamata a Claude salva il prompt completo in `debug/prompt_lezione_NN.txt`. Utile per verificare cosa riceve Claude e stimare i token.
+**Debug prompt e upload:**
+Ogni job scrive nella cartella `output/{job_id}/{output_name}/debug/`:
+- `prompt_lezione_NN.txt` — prompt completo inviato a Claude (testo + slide allineate)
+- `riepilogo_lezione_NN.txt` — classificazione sorgenti (SCHELETRO/CARNE/SUPPORTO/CONTORNO) con nomi file e char count
+- `uploads/` — copia dei file caricati, disponibile anche se la pipeline fallisce
+
+Utile per verificare cosa riceve Claude, stimare i token e riprodurre il job.
 
 **API key Claude:**
 ```bash
@@ -422,7 +434,7 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 |----------|-------|-----------|
 | `ModuleNotFoundError: fitz` | pymupdf non installato nel venv attivo | `pip install pymupdf` con il venv attivo |
 | `images/` vuota | pymupdf non trovato al momento dell'esecuzione | Verifica `python -c "import fitz"` nel venv attivo |
-| Unico `lezione_01.tex` per PDF grande | Chunking non attivato | Assicurarsi che il PDF non abbia audio associato nella stessa cartella |
+| Più di un `lezione_NN.tex` generato | Modalità batch attiva (`--batch`) | In modalità normale ogni sessione produce sempre un unico file |
 | Titolo lezione incomprensibile | Nome cartella hash o generico | Rinomina la cartella con un nome descrittivo |
 | `ffprobe: command not found` | ffprobe non installato | `sudo apt install ffmpeg` (include ffprobe) |
 | Claude non risponde | API key mancante o errata | `echo $ANTHROPIC_API_KEY` per verificare |
