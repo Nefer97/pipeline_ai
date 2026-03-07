@@ -423,6 +423,22 @@ def context_to_prompt(ctx: dict, current_lesson_number: int = 0) -> str:
                 line += f" → {', '.join(les['key_concepts'][:4])}"
             parts.append(line)
 
+        # Raccordo dalla lezione immediatamente precedente
+        last_les = prev_lessons[-1]
+        last_topic = last_les.get("last_verbal_topic", "")
+        if last_topic:
+            parts.append(
+                f"\n## RACCORDO CON LEZIONE PRECEDENTE"
+                f"\nNella Lezione {last_les['number']} il professore si è fermato verbalmente su:"
+                f"\n  \"{last_topic}\""
+                f"\n"
+                f"\nREGOLE DI RACCORDO:"
+                f"\n• Questa lezione DEVE iniziare esattamente da dove il professore si era fermato"
+                f"\n• Se la trascrizione riprende da un punto già spiegato, fai un raccordo breve (1-2 righe) senza ripetere la spiegazione completa"
+                f"\n• LIMITE CRITICO: fermati dove si ferma la trascrizione audio di questa lezione — anche se le slide coprono argomenti successivi non ancora spiegati verbalmente, NON anticiparli"
+                f"\n• Non inventare contenuto che non sia esplicitamente presente nella trascrizione o nelle slide corrispondenti alla spiegazione orale"
+            )
+
         # Concetti e definizioni già noti (per evitare che Claude ri-spieghi)
         all_concepts = []
         all_defs     = []
@@ -528,14 +544,20 @@ def update_course_context(
 
     extracted = _extract_concepts_from_latex(latex_content)
 
+    # Ultimo argomento trattato verbalmente = ultima section/subsection del LaTeX generato
+    # Usato nella lezione successiva come punto di raccordo
+    all_sections = re.findall(r'\\(?:sub)*section\*?\{([^}]+)\}', latex_content)
+    last_verbal_topic = all_sections[-1].strip() if all_sections else ""
+
     # Rimuovi entry precedente con stesso numero (riesecuzione)
     ctx["lessons"] = [l for l in ctx["lessons"] if l.get("number") != lesson_number]
     ctx["lessons"].append({
-        "number":       lesson_number,
-        "title":        lesson_title,
-        "key_concepts": extracted["key_concepts"],
-        "definitions":  extracted["definitions"],
-        "symbols":      extracted["symbols"],
+        "number":           lesson_number,
+        "title":            lesson_title,
+        "key_concepts":     extracted["key_concepts"],
+        "definitions":      extracted["definitions"],
+        "symbols":          extracted["symbols"],
+        "last_verbal_topic": last_verbal_topic,
     })
     ctx["lessons"].sort(key=lambda l: l.get("number", 0))
     ctx["global_symbols"].update(extracted["symbols"])

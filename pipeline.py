@@ -625,7 +625,9 @@ REGOLE OBBLIGATORIE:
 14. Lo SCHELETRO contiene già formule in \\begin{equation}...\\end{equation} — mantienile senza modificarle
 15. I blocchi \\begin{figure}...\\end{figure} nello SCHELETRO vanno mantenuti nella posizione esatta
 16. Le tabelle del professore o del documento → \\begin{tabular} con header appropriato
-17. Usa la lingua della trascrizione/slide per i contenuti (non forzare l'italiano se le fonti sono in un'altra lingua)"""
+17. Usa la lingua della trascrizione/slide per i contenuti (non forzare l'italiano se le fonti sono in un'altra lingua)
+18. LIMITE ORALE — REGOLA ASSOLUTA: la lezione termina dove termina la spiegazione verbale del professore nella trascrizione. Se le slide contengono argomenti non ancora spiegati oralmente, NON includerli. Scrivere contenuto non detto dal professore è un errore grave
+19. RACCORDO INTER-LEZIONE: se il CONTESTO CORSO indica "ultimo argomento trattato verbalmente", inizia da quel punto con un raccordo fluido di 1-2 righe. Non ripetere la spiegazione già svolta nella lezione precedente"""
 
     # ─────────────────────────────────────────
     # PREPROCESSOR — pulizia e contesto corso
