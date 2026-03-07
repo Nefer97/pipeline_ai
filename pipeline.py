@@ -46,13 +46,13 @@ sys.path.insert(0, str(SCRIPT_DIR))
 CONFIG = {
     "whisper_model":     "base",
     "claude_model":      "claude-sonnet-4-20250514",
-    "claude_max_tokens": 8000,
+    "claude_max_tokens": 32000,
     "ext_audio":  [".mp3", ".wav", ".m4a", ".ogg", ".flac"],
     "ext_video":  [".mp4", ".mkv", ".avi", ".mov", ".webm"],
     "ext_slide":  [".pptx"],
     "ext_doc":    [".docx"],
     "ext_pdf":    [".pdf"],
-    "ext_text":   [".txt", ".md"],
+    "ext_text":   [".txt", ".md", ".rtf"],
     "images_subdir": "images",
 }
 
@@ -260,14 +260,19 @@ def extract_pdf_pages(pdf_path: Path) -> list[dict]:
     Ritorna lista di dict: [{page: N, text: "..."}]
     """
     pages = []
+    n_total_pages = 0
     try:
         import pdfplumber
         with pdfplumber.open(str(pdf_path)) as pdf:
+            n_total_pages = len(pdf.pages)
             for i, page in enumerate(pdf.pages, 1):
                 t = page.extract_text()
                 if t and t.strip():
                     pages.append({"page": i, "text": t.strip()})
-        print(f"    ✓ pdf pdfplumber: {len(pages)} pagine con testo")
+        print(f"    ✓ pdf pdfplumber: {len(pages)}/{n_total_pages} pagine con testo")
+        if n_total_pages > 0 and not pages:
+            print(f"    [WARN] {pdf_path.name}: nessun testo estratto — potrebbe essere un PDF scansionato (solo immagini).")
+            print(f"           Per OCR su PDF scansionati: pip install pytesseract pdf2image")
         return pages
     except ImportError:
         pass
@@ -275,11 +280,15 @@ def extract_pdf_pages(pdf_path: Path) -> list[dict]:
         import PyPDF2
         with open(pdf_path, "rb") as f:
             reader = PyPDF2.PdfReader(f)
+            n_total_pages = len(reader.pages)
             for i, page in enumerate(reader.pages, 1):
                 t = page.extract_text()
                 if t and t.strip():
                     pages.append({"page": i, "text": t.strip()})
-        print(f"    ✓ pdf PyPDF2: {len(pages)} pagine con testo")
+        print(f"    ✓ pdf PyPDF2: {len(pages)}/{n_total_pages} pagine con testo")
+        if n_total_pages > 0 and not pages:
+            print(f"    [WARN] {pdf_path.name}: nessun testo estratto — potrebbe essere un PDF scansionato (solo immagini).")
+            print(f"           Per OCR su PDF scansionati: pip install pytesseract pdf2image")
         return pages
     except ImportError:
         print("    [MANCANTE] pdfplumber — pip install pdfplumber")
@@ -428,14 +437,57 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
 # STEP 5: DOCX
 # ─────────────────────────────────────────────
 def extract_docx(docx_path: Path) -> str:
+    """
+    Estrae testo da DOCX preservando:
+      - Paragrafi in ordine, con heading marcati come ## heading
+      - Tabelle inline con delimitatore " | "
+    Le tabelle sono inserite dopo i paragrafi per semplicità, ma vengono
+    comunque integralmente estratte (evita perdita di informazioni strutturate).
+    """
     try:
         from docx import Document
+        from docx.oxml.ns import qn
         doc = Document(str(docx_path))
-        paras = [p.text.strip() for p in doc.paragraphs if p.text.strip()]
-        print(f"    ✓ docx: {len(paras)} paragrafi")
-        return "\n".join(paras)
+        parts = []
+
+        # Percorri il body XML in ordine — paragrafi e tabelle interleaved
+        for child in doc.element.body:
+            local = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+            if local == "p":
+                from docx.text.paragraph import Paragraph
+                para = Paragraph(child, doc)
+                txt = para.text.strip()
+                if not txt:
+                    continue
+                if para.style and para.style.name.startswith("Heading"):
+                    lvl = "".join(filter(str.isdigit, para.style.name)) or "1"
+                    parts.append("#" * int(lvl) + " " + txt)
+                else:
+                    parts.append(txt)
+            elif local == "tbl":
+                from docx.table import Table as DocxTable
+                tbl = DocxTable(child, doc)
+                rows = []
+                prev_cells: list = []          # evita righe duplicate (celle unite)
+                for row in tbl.rows:
+                    cells = [c.text.strip().replace("\n", " ") for c in row.cells]
+                    if cells == prev_cells:    # riga fantasma da merge verticale
+                        continue
+                    prev_cells = cells
+                    if any(cells):
+                        rows.append(" | ".join(cells))
+                if rows:
+                    parts.append("[TABELLA]\n" + "\n".join(rows))
+
+        n_para  = sum(1 for p in doc.paragraphs if p.text.strip())
+        n_table = len(doc.tables)
+        print(f"    ✓ docx: {n_para} paragrafi, {n_table} tabelle")
+        return "\n".join(parts)
     except ImportError:
         print("    [MANCANTE] python-docx — pip install python-docx")
+        return ""
+    except Exception as e:
+        print(f"    [ERRORE] docx: {e}")
         return ""
 
 
@@ -449,20 +501,30 @@ try:
 except ImportError:
     PREPROCESSOR = False
 
-CLAUDE_SYSTEM = """Sei un esperto di LaTeX accademico. Trasforma il contenuto normalizzato di una
-lezione universitaria in un capitolo LaTeX professionale e strutturato.
 
-REGOLE OBBLIGATORIE:
-1. Rispondi SOLO con codice LaTeX valido, iniziando da \\section{...}
-2. NON includere \\documentclass, \\begin{document} o \\end{document}
-3. Struttura: \\section{} > \\subsection{} > \\subsubsection{}
-4. Formule: \\begin{equation}...\\end{equation} oppure $...$ inline
-5. Liste: \\begin{itemize} o \\begin{enumerate}
-6. Aggiungi \\label{sec:...} a ogni section/subsection
-7. Mantieni terminologia tecnica originale
-8. Non copiare verbatim la trascrizione: sintetizza i concetti chiave
-9. Esempi -> \\begin{example}...\\end{example}
-10. Definizioni importanti -> \\begin{definition}...\\end{definition}"""
+def _trunc(text: str, max_chars: int, label: str = "") -> str:
+    """
+    Tronca il testo a max_chars per rispettare il budget token.
+    Tronca al newline più vicino e aggiunge nota di troncamento.
+    """
+    if len(text) <= max_chars:
+        return text
+    cut = text[:max_chars]
+    nl  = cut.rfind("\n")
+    if nl > max_chars * 0.85:
+        cut = cut[:nl]
+    removed = len(text) - len(cut)
+    tag = f" [{label}]" if label else ""
+    print(f"    [WARN] Testo troncato{tag}: {len(text):,} → {len(cut):,} caratteri ({removed:,} rimossi)")
+    return cut + f"\n\n[... {removed:,} caratteri omessi per rispettare il budget token ...]"
+
+
+# Limiti per sezione (caratteri) — bilanciati per il contesto di claude-sonnet
+_MAX_CARNE_CHARS    = 200_000   # trascrizione: la fonte più preziosa, taglio generoso
+_MAX_SCHELETRO_CHARS = 160_000  # scheletro LaTeX: già strutturato, raramente supera
+_MAX_SUPPORTO_CHARS  = 80_000   # PDF/DOCX di supporto: informazione supplementare
+_MAX_CONTORNO_CHARS  = 40_000   # note informali: meno priorità
+
 
 def generate_with_claude(lesson_number: int, title: str,
                           sources: dict,
@@ -496,17 +558,19 @@ REGOLE OBBLIGATORIE:
 2. NON includere \\documentclass, \\begin{document} o \\end{document}
 3. Struttura: \\section{} > \\subsection{} > \\subsubsection{}
 4. Aggiungi \\label{sec:...} a ogni section e subsection
-5. Formule inline: $...$ — formule proprie: \\begin{equation}...\\end{equation}
+5. Formule inline: $...$ — formule a display: \\begin{equation}...\\end{equation}
 6. Liste: \\begin{itemize} o \\begin{enumerate}
 7. Definizioni: \\begin{definition}...\\end{definition}
 8. Teoremi: \\begin{theorem}...\\end{theorem}
 9. Esempi: \\begin{example}...\\end{example}
 10. Osservazioni e intuizioni del professore: \\begin{remark}...\\end{remark}
-11. ZERO perdita di informazione concettuale dalla trascrizione: ogni spiegazione, esempio, intuizione e osservazione del professore deve apparire negli appunti — elimina solo le ripetizioni identiche e i riempitivi verbali (\"allora\", \"quindi\", \"diciamo\", ecc.)
+11. ZERO perdita di informazione concettuale dalla trascrizione: ogni spiegazione, esempio, intuizione e osservazione del professore deve apparire negli appunti — elimina solo le ripetizioni identiche e i riempitivi verbali ("allora", "quindi", "diciamo", ecc.)
 12. Le spiegazioni orali che vanno OLTRE il contenuto delle slide sono il materiale più prezioso: preservale integralmente con lo stile del professore
 13. Mantieni la terminologia tecnica originale del professore
-14. Le formule [FORMULA_OMML] sono già verificate — usale direttamente
-15. I blocchi \\begin{figure}...\\end{figure} nello SCHELETRO vanno mantenuti nella posizione esatta"""
+14. Lo SCHELETRO contiene già formule in \\begin{equation}...\\end{equation} — mantienile senza modificarle
+15. I blocchi \\begin{figure}...\\end{figure} nello SCHELETRO vanno mantenuti nella posizione esatta
+16. Le tabelle del professore o del documento → \\begin{tabular} con header appropriato
+17. Usa la lingua della trascrizione/slide per i contenuti (non forzare l'italiano se le fonti sono in un'altra lingua)"""
 
     # ─────────────────────────────────────────
     # PREPROCESSOR — pulizia e contesto corso
@@ -594,10 +658,11 @@ REGOLE OBBLIGATORIE:
                     "REGOLE:\n"
                     "  • Ogni \\subsection corrisponde a una slide — non cambiare questa struttura\n"
                     "  • I blocchi \\begin{figure} contengono le immagini delle slide — mantienili nella posizione esatta\n"
-                    "  • Le formule [FORMULA_OMML] sono già in LaTeX verificato — usale direttamente\n"
+                    "  • Le formule in \\begin{equation} sono già in LaTeX verificato — mantienile senza modifiche\n"
                     "  • Arricchisci il contenuto testuale con la CARNE (trascrizione)"
                 )
-                content = latex if latex else text
+                raw     = latex if latex else text
+                content = _trunc(raw, _MAX_SCHELETRO_CHARS, filename)
 
             elif is_pdf:
                 meta = f"File: {filename} | {pages} pagine"
@@ -608,22 +673,24 @@ REGOLE OBBLIGATORIE:
                     "  • Ogni [PAG N] è una pagina del documento — usala come unità strutturale\n"
                     "  • Arricchisci con la CARNE (trascrizione audio)"
                 )
-                content = entry.get("latex") or text  # ← usa scheletro se disponibile
+                raw     = entry.get("latex") or text
+                content = _trunc(raw, _MAX_SCHELETRO_CHARS, filename)
 
             elif is_docx:
                 meta = f"File: {filename}"
                 role = (
                     "Documento Word che funge da SCHELETRO perché è presente la trascrizione audio.\n"
                     "REGOLE:\n"
-                    "  • Usa i paragrafi principali come guida per \\subsection\n"
+                    "  • Usa i paragrafi e le tabelle come guida per la struttura \\subsection\n"
+                    "  • Le tabelle [TABELLA] vanno convertite in \\begin{tabular}\n"
                     "  • Arricchisci con la CARNE (trascrizione audio)"
                 )
-                content = text
+                content = _trunc(text, _MAX_SCHELETRO_CHARS, filename)
 
             else:
                 meta    = f"File: {filename}"
                 role    = "Documento strutturale della lezione."
-                content = text
+                content = _trunc(text, _MAX_SCHELETRO_CHARS, filename)
 
             parts.append(
                 f"{sep2}\n{meta}\n\n{role}\n{sep2}\n{content}"
@@ -649,7 +716,7 @@ REGOLE OBBLIGATORIE:
         else:
             for entry in sources["carne"]:
                 filename = entry["filename"]
-                text     = entry["text"]
+                text     = _trunc(entry["text"], _MAX_CARNE_CHARS, filename)
                 parts.append(
                     f"{sep2}\n"
                     f"File: {filename}\n\n"
@@ -669,7 +736,7 @@ REGOLE OBBLIGATORIE:
 
         for entry in sources["supporto"]:
             filename = entry["filename"]
-            text     = entry["text"]
+            text     = _trunc(entry["text"], _MAX_SUPPORTO_CHARS, filename)
             pages    = entry.get("pages", "")
             meta     = f"File: {filename}" + (f" | {pages} pagine" if pages else "")
             parts.append(
@@ -678,6 +745,7 @@ REGOLE OBBLIGATORIE:
                 f"Materiale di SUPPORTO — non è la struttura della lezione.\n"
                 f"REGOLE:\n"
                 f"  • Usalo per arricchire definizioni formali dove scheletro/carne sono sintetici\n"
+                f"  • Le tabelle [TABELLA] → \\begin{{tabular}} con intestazioni chiare\n"
                 f"  • Non cambiare la struttura \\subsection per adattarla a questo documento\n"
                 f"{sep2}\n{text}"
             )
@@ -688,7 +756,7 @@ REGOLE OBBLIGATORIE:
 
         for entry in sources["contorno"]:
             filename = entry["filename"]
-            text     = entry["text"]
+            text     = _trunc(entry["text"], _MAX_CONTORNO_CHARS, filename)
             parts.append(
                 f"{sep2}\n"
                 f"File: {filename}\n\n"
@@ -709,10 +777,10 @@ REGOLE OBBLIGATORIE:
     user_prompt = "\n\n".join(parts)
 
     # ─────────────────────────────────────────
-    # DEBUG — salva prompt su disco
+    # DEBUG — salva prompt su disco (per-job, sotto output_dir)
     # ─────────────────────────────────────────
-    debug_dir  = Path("debug")
-    debug_dir.mkdir(exist_ok=True)
+    debug_dir  = (_progress_output_dir / "debug") if _progress_output_dir else Path("debug")
+    debug_dir.mkdir(parents=True, exist_ok=True)
     debug_path = debug_dir / f"prompt_lezione_{lesson_number:02d}.txt"
     debug_path.write_text(
         f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_prompt}",
@@ -1246,10 +1314,32 @@ MAIN_TEMPLATE = r"""\documentclass[12pt,a4paper]{{report}}
 \end{{document}}
 """
 
+def _latex_escape_title(t: str) -> str:
+    """Escape caratteri speciali LaTeX nel titolo (usato solo in generate_main_tex)."""
+    if COLLEAGUE_MODULES:
+        return _escape_latex(t)
+    # Fallback inline se _escape_latex non è disponibile
+    for a, b in [
+        ("\\", "\\textbackslash{}"),
+        ("&",  "\\&"),
+        ("%",  "\\%"),
+        ("$",  "\\$"),
+        ("#",  "\\#"),
+        ("_",  "\\_"),
+        ("^",  "\\^{}"),
+        ("{",  "\\{"),
+        ("}",  "\\}"),
+        ("~",  "\\~{}"),
+    ]:
+        t = t.replace(a, b)
+    return t
+
+
 def generate_main_tex(title: str, lesson_files: list, output_dir: Path) -> Path:
+    title_tex = _latex_escape_title(title)
     includes = "\n".join(f"\\include{{{f.stem}}}" for f in sorted(lesson_files))
     content = MAIN_TEMPLATE.format(
-        title=title,
+        title=title_tex,
         date=datetime.now().strftime("%B %Y"),
         images_path=CONFIG["images_subdir"] + "/",
         includes=includes,
@@ -1274,7 +1364,18 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     print(f"  LEZIONE {lesson_number:02d}  ←  {source_dir.name}")
     print(f"{'─'*58}")
 
-    all_files = list(source_dir.iterdir()) if source_dir.is_dir() else [source_dir]
+    # Raccogli file: escludi file nascosti/sistema e ordina per nome (output deterministico)
+    _SKIP_NAMES = {".ds_store", "thumbs.db", "desktop.ini", ".gitkeep", ".gitignore"}
+    all_files = sorted(
+        (
+            f for f in (source_dir.iterdir() if source_dir.is_dir() else [source_dir])
+            if f.is_file()
+            and not f.name.startswith(".")
+            and not f.name.startswith("__")
+            and f.name.lower() not in _SKIP_NAMES
+        ),
+        key=lambda p: p.name.lower(),
+    )
 
     by = {k: [] for k in ("audio", "video", "slide", "doc", "pdf", "text")}
     for f in all_files:
@@ -1359,15 +1460,23 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     # ─────────────────────────────────────────────
     # STEP 3: PPTX → SCHELETRO (sempre)
     # ─────────────────────────────────────────────
-    for sf in by["slide"]:
+    for pptx_idx, sf in enumerate(by["slide"]):
         print(f"\n  [PPTX → SCHELETRO] {sf.name}")
         _report_progress(output_dir, 35, "Estrazione slide PPTX", sf.name)
         if COLLEAGUE_MODULES:
             slides_obj, plain = process_pptx_full(sf, images_dir, skip_ocr=skip_ocr)
             pptx_slides = slides_obj
 
-            # ← PRIMA renderizza le slide come PNG
-            slide_images = render_slide_images(sf, images_dir) if COLLEAGUE_MODULES else {}
+            # Con più PPTX: usa una sottocartella per PPTX per evitare collisioni
+            # nei nomi delle immagini (entrambi generano slide_001.png, ...)
+            if len(by["slide"]) > 1:
+                pptx_img_dir = images_dir / sf.stem
+                pptx_img_dir.mkdir(exist_ok=True)
+                slide_images_raw = render_slide_images(sf, pptx_img_dir)
+                # Prefissa con il nome della sottocartella per \includegraphics
+                slide_images = {k: f"{sf.stem}/{v}" for k, v in slide_images_raw.items()}
+            else:
+                slide_images = render_slide_images(sf, images_dir)
 
             # ← POI costruisci lo scheletro LaTeX con i PNG
             skeleton_latex = build_fallback_latex(
@@ -1435,8 +1544,8 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         r'(transcript|trascrizione|lezione|audio|registr|carne)',
         _re.IGNORECASE
     )
-    _has_structure = bool(by["slide"] or by["pdf"] or by["doc"])
-    _only_one_txt  = len(by["text"]) == 1
+    _has_structure   = bool(by["slide"] or by["pdf"] or by["doc"])
+    _has_real_audio  = bool(by["audio"] or by["video"])
 
     for tf in by["text"]:
         raw  = tf.read_text(encoding="utf-8", errors="ignore")
@@ -1450,8 +1559,10 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         has_timestamps  = len(lines) > 0 and ts_count / len(lines) >= 0.10
         # Segnale 2: nome file suggerisce trascrizione
         has_kw_name     = bool(_name_kw.search(tf.stem))
-        # Segnale 3: unico txt + struttura presente + nessun audio reale
-        is_solo_companion = _only_one_txt and _has_structure and not sources["has_audio"]
+        # Segnale 3: struttura presente + nessun audio reale
+        # (vale anche con più txt: se non ci sono audio/video, i txt sono probabilmente
+        #  trascrizioni manuali o esportate, non note informali)
+        is_solo_companion = _has_structure and not _has_real_audio and not sources["has_audio"]
 
         is_transcript = has_timestamps or has_kw_name or is_solo_companion
 
@@ -1477,7 +1588,8 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
             continue
 
         # PDF grande senza audio → chunking (una lezione per chunk)
-        if len(pages) > 20 and not sources["has_audio"]:
+        # Solo se è l'unico PDF: con più PDF si processa tutto normalmente
+        if len(pages) > 20 and not sources["has_audio"] and len(by["pdf"]) == 1:
             print(f"\n  [PDF grande → chunking] {pf.name}")
             chunk_files = process_pdf_chunked(
                 pdf_path            = pf,
@@ -1535,13 +1647,47 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         source_names.append(df.name)
 
     # ─────────────────────────────────────────────
-    # LOG GERARCHIA RISOLTA
+    # LOG GERARCHIA RISOLTA + riepilogo debug
     # ─────────────────────────────────────────────
     print(f"\n  Gerarchia risolta:")
     print(f"    SCHELETRO : {[s['filename'] for s in sources['scheletro']] or '—'}")
     print(f"    CARNE     : {[s['filename'] for s in sources['carne']] or '—'}")
     print(f"    SUPPORTO  : {[s['filename'] for s in sources['supporto']] or '—'}")
     print(f"    CONTORNO  : {[s['filename'] for s in sources['contorno']] or '—'}")
+
+    # Salva riepilogo classificazione nel debug dir
+    try:
+        _dbg_dir = output_dir / "debug"
+        _dbg_dir.mkdir(parents=True, exist_ok=True)
+        _dbg_report_path = _dbg_dir / f"riepilogo_lezione_{lesson_number:02d}.txt"
+        _char_count = lambda lst: sum(len(s.get("text","")) for s in lst)
+        _report_lines = [
+            f"Lezione {lesson_number:02d} — {source_dir.name}",
+            f"Processata: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+            "",
+            "FILE TROVATI:",
+        ]
+        for f in all_files:
+            _report_lines.append(f"  {f.name}  ({f.stat().st_size // 1024 + 1} KB)")
+        _report_lines += [
+            "",
+            "CLASSIFICAZIONE SEMANTICA:",
+            f"  SCHELETRO ({len(sources['scheletro'])} file, ~{_char_count(sources['scheletro']):,} char):",
+        ]
+        for s in sources["scheletro"]:
+            _report_lines.append(f"    • {s['filename']}")
+        _report_lines.append(f"  CARNE ({len(sources['carne'])} file, ~{_char_count(sources['carne']):,} char):")
+        for s in sources["carne"]:
+            _report_lines.append(f"    • {s['filename']}  (dur: {s.get('duration_sec',0)}s)")
+        _report_lines.append(f"  SUPPORTO ({len(sources['supporto'])} file, ~{_char_count(sources['supporto']):,} char):")
+        for s in sources["supporto"]:
+            _report_lines.append(f"    • {s['filename']}")
+        _report_lines.append(f"  CONTORNO ({len(sources['contorno'])} file, ~{_char_count(sources['contorno']):,} char):")
+        for s in sources["contorno"]:
+            _report_lines.append(f"    • {s['filename']}")
+        _dbg_report_path.write_text("\n".join(_report_lines), encoding="utf-8")
+    except Exception:
+        pass  # debug non deve mai bloccare la pipeline
 
     # ─────────────────────────────────────────────
     # STEP 7: GENERAZIONE LaTeX

@@ -81,6 +81,16 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
         else:
             print(f"[continue] job {continue_from} non trovato in memoria né su disco — ignoro")
 
+    # ── Copia file uploadati nel debug dir — per ispezione e riproducibilità ──
+    # Vengono copiati PRIMA che la pipeline parta, così sono disponibili
+    # anche se la pipeline fallisce o se uploads/ viene pulita in seguito.
+    debug_uploads_dir = output_dir / "debug" / "uploads"
+    debug_uploads_dir.mkdir(parents=True, exist_ok=True)
+    for f_name in jobs.get(job_id, {}).get("files", []):
+        src = lesson_dir / f_name
+        if src.exists():
+            shutil.copy2(src, debug_uploads_dir / f_name)
+
     # ── Download audio da URL Teams (videomanifest) ──────────────────
     if teams_urls:
         for i, raw_url in enumerate(teams_urls):
@@ -197,13 +207,17 @@ async def run_pipeline(
     lesson_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Salva file caricati
+    # Salva file caricati — Path(f.filename).name rimuove eventuali componenti
+    # di directory (es. "../../etc/passwd") prevenendo path traversal
     saved = []
     for f in files:
-        dest = lesson_dir / f.filename
+        safe_name = Path(f.filename).name   # strip directory component
+        if not safe_name:
+            continue
+        dest = lesson_dir / safe_name
         with open(dest, "wb") as out:
             shutil.copyfileobj(f.file, out)
-        saved.append(f.filename)
+        saved.append(safe_name)
 
     _continue_from = continue_from.strip()
 
