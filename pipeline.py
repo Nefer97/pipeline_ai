@@ -1602,24 +1602,13 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         if not pages:
             continue
 
-        # PDF grande senza audio → chunking (una lezione per chunk)
-        # Solo se è l'unico PDF: con più PDF si processa tutto normalmente
-        if len(pages) > 20 and not sources["has_audio"] and len(by["pdf"]) == 1:
-            print(f"\n  [PDF grande → chunking] {pf.name}")
-            chunk_files = process_pdf_chunked(
-                pdf_path            = pf,
-                output_dir          = output_dir,
-                base_lesson_number  = lesson_number,
-                title               = source_dir.name.replace("_"," ").replace("-"," ").title(),
-                skip_ai             = skip_ai,
-                chunk_size          = 10,
-                subject_hint        = subject_hint,
-                course_context_path = course_context_path,
-            )
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            return chunk_files
+        # Ogni sessione di upload = una lezione: non si chunka mai nel flusso normale.
+        # Il testo lungo viene troncato da _trunc() in generate_with_claude().
+        # (process_pdf_chunked è disponibile solo per la CLI --batch)
+        if len(pages) > 20 and not sources["has_audio"]:
+            print(f"\n  [PDF grande] {pf.name} — {len(pages)} pagine, processato come unica lezione")
 
-        # PDF piccolo o con audio → rendering + entry normale
+        # Rendering + entry normale
         if COLLEAGUE_MODULES:
             page_images, latex_skeleton = render_pdf_pages(pf, images_dir, pages)
         else:
