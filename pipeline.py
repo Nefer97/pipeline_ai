@@ -312,6 +312,46 @@ def extract_pdf_pages(pdf_path: Path) -> list[dict]:
 # ──────────────────────────────
 # PDF → singole pagine salvate
 # ──────────────────────────────
+def _ocr_pages_with_tesseract(images_dir: Path, page_images: dict) -> list[dict]:
+    """
+    OCR fallback per PDF scansionati (pdfplumber ha estratto 0 testo).
+    Usa pytesseract sulle pagine già renderizzate come PNG da pdf_renderer.
+    Ritorna lista [{page: N, text: "..."}] oppure [] se tesseract non installato.
+    """
+    try:
+        import pytesseract
+        from PIL import Image as _PILImage
+    except ImportError:
+        print("    [OCR PDF] pytesseract non installato — skip")
+        print("              sudo apt install tesseract-ocr tesseract-ocr-ita")
+        print("              pip install pytesseract")
+        return []
+
+    # Determina la lingua: mappa codici Whisper/BCP-47 → Tesseract
+    _whisper_lang = os.environ.get("WHISPER_LANG") or ""
+    _lang_map = {"it": "ita", "en": "eng", "fr": "fra", "de": "deu", "es": "spa",
+                 "pt": "por", "nl": "nld", "ru": "rus", "zh": "chi_sim"}
+    tess_lang = _lang_map.get(_whisper_lang, _whisper_lang) if _whisper_lang else "ita+eng"
+
+    print(f"    [OCR PDF] pytesseract fallback — {len(page_images)} pagine, lang={tess_lang}")
+    pages = []
+    for page_num, img_filename in sorted(page_images.items()):
+        img_path = images_dir / img_filename
+        if not img_path.exists():
+            continue
+        try:
+            text = pytesseract.image_to_string(_PILImage.open(img_path), lang=tess_lang)
+            text = text.strip()
+            if text:
+                pages.append({"page": page_num, "text": text})
+                print(f"    ✓ pag {page_num}: {len(text)} char")
+        except Exception as e:
+            print(f"    [OCR PDF] pagina {page_num}: {e}")
+
+    print(f"    ✓ OCR completato: {len(pages)}/{len(page_images)} pagine con testo")
+    return pages
+
+
 def save_pdf_pages_as_txt(pdf_path: Path, output_dir: Path) -> list[Path]:
     """
     Estrae ogni pagina del PDF e la salva come file .txt nella cartella output_dir.
@@ -1599,20 +1639,31 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     for idx, pf in enumerate(by["pdf"]):
         _report_progress(output_dir, 40 + idx * 3, "Estrazione pagine PDF", pf.name)
         pages = extract_pdf_pages(pf)
+
+        # Rendering — eseguito sempre, anche se pages è vuoto:
+        # serve le PNG per il fallback OCR su PDF scansionati.
+        if COLLEAGUE_MODULES:
+            page_images, latex_skeleton = render_pdf_pages(pf, images_dir, pages or None)
+        else:
+            page_images, latex_skeleton = {}, None
+
+        # PDF scansionato: se pdfplumber → 0 testo, tenta OCR con pytesseract
+        if not pages and page_images:
+            _report_progress(output_dir, 40 + idx * 3, "OCR PDF scansionato", pf.name)
+            pages = _ocr_pages_with_tesseract(images_dir, page_images)
+            if pages and COLLEAGUE_MODULES:
+                # Rigenera lo scheletro LaTeX con il testo OCR
+                from pdf_renderer import _build_pdf_latex_skeleton
+                latex_skeleton = _build_pdf_latex_skeleton(pf, pages, page_images)
+
         if not pages:
+            print(f"    [WARN] {pf.name}: nessun testo disponibile — saltato")
             continue
 
         # Ogni sessione di upload = una lezione: non si chunka mai nel flusso normale.
         # Il testo lungo viene troncato da _trunc() in generate_with_claude().
-        # (process_pdf_chunked è disponibile solo per la CLI --batch)
         if len(pages) > 20 and not sources["has_audio"]:
             print(f"\n  [PDF grande] {pf.name} — {len(pages)} pagine, processato come unica lezione")
-
-        # Rendering + entry normale
-        if COLLEAGUE_MODULES:
-            page_images, latex_skeleton = render_pdf_pages(pf, images_dir, pages)
-        else:
-            page_images, latex_skeleton = {}, None
 
         text  = "\n".join(f"[PAG {p['page']}]\n{p['text']}" for p in pages)
         entry = {
