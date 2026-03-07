@@ -6,11 +6,11 @@ Converte fonti miste in un libro LaTeX strutturato.
 
 Fonti supportate:
   Audio:  .mp3 .wav .m4a .ogg .flac
-  Video:  .mp4 .mkv .avi .mov .webm  -> ffmpeg -> Whisper
+  Video:  .mp4 .mkv .avi .mov .webm  -> ffmpeg -> Whisper (auto-detect lingua)
   Slide:  .pptx                       -> extractor + omml2latex + pix2tex
-  Word:   .docx                       -> python-docx
+  Word:   .docx                       -> python-docx (paragrafi + tabelle)
   PDF:    .pdf                        -> pdfplumber
-  Testo:  .txt .md                    -> diretto
+  Testo:  .txt .md .rtf               -> diretto (RTF auto-stripped)
 
 Output:
   output/
@@ -45,7 +45,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 # ─────────────────────────────────────────────
 CONFIG = {
     "whisper_model":     "base",
-    "claude_model":      "claude-sonnet-4-20250514",
+    "claude_model":      "claude-sonnet-4-6",
     "claude_max_tokens": 32000,
     "ext_audio":  [".mp3", ".wav", ".m4a", ".ogg", ".flac"],
     "ext_video":  [".mp4", ".mkv", ".avi", ".mov", ".webm"],
@@ -72,6 +72,18 @@ try:
 except ImportError as e:
     COLLEAGUE_MODULES = False
     print(f"⚠  Moduli collega non disponibili ({e}) — uso fallback base")
+
+    # Fallback: _escape_latex non importata da builder.py → definizione inline
+    # Usata da process_pdf_chunked e altri punti che richiedono escape LaTeX
+    def _escape_latex(t: str) -> str:  # noqa: F811
+        for a, b in [
+            ("\\", "\\textbackslash{}"),
+            ("&",  "\\&"), ("%",  "\\%"), ("$",  "\\$"),
+            ("#",  "\\#"), ("_",  "\\_"), ("^",  "\\^{}"),
+            ("{",  "\\{"), ("}",  "\\}"), ("~",  "\\~{}"),
+        ]:
+            t = t.replace(a, b)
+        return t
 
 
 # ───────────────────────────────────────────────────────────────────────────────────
@@ -157,7 +169,10 @@ def transcribe_audio(audio_path: Path, model_name: str = "base",
         threading.Thread(target=_heartbeat, daemon=True).start()
 
     model = whisper.load_model(model_name)
-    result = model.transcribe(str(audio_path), language="it", verbose=False)
+    # language=None → Whisper auto-rileva la lingua (funziona per italiano, inglese, ecc.)
+    # Imposta WHISPER_LANG=it (o altra lingua) come variabile d'ambiente per forzarla
+    whisper_lang = os.environ.get("WHISPER_LANG") or None
+    result = model.transcribe(str(audio_path), language=whisper_lang, verbose=False)
 
     if _prog_dir:
         _stop.set()
