@@ -544,10 +544,19 @@ def update_course_context(
 
     extracted = _extract_concepts_from_latex(latex_content)
 
-    # Ultimo argomento trattato verbalmente = ultima section/subsection del LaTeX generato
-    # Usato nella lezione successiva come punto di raccordo
-    all_sections = re.findall(r'\\(?:sub)*section\*?\{([^}]+)\}', latex_content)
-    last_verbal_topic = all_sections[-1].strip() if all_sections else ""
+    # Ultimo argomento trattato verbalmente = ultima section/subsection NUMERATA
+    # Esclude \subsection* usate per note/conclusioni/raccordi interni.
+    # Usato nella lezione successiva come punto di raccordo.
+    _skip_titles = re.compile(
+        r'^(note|osservazioni?|conclusioni?|riferimenti|bibliografia|sommario|summary|remark)s?$',
+        re.I,
+    )
+    all_sections = [
+        m.group(1).strip()
+        for m in re.finditer(r'\\(?:sub)*section\{([^}]+)\}', latex_content)
+        if not _skip_titles.match(m.group(1).strip())
+    ]
+    last_verbal_topic = all_sections[-1] if all_sections else ""
 
     # Rimuovi entry precedente con stesso numero (riesecuzione)
     ctx["lessons"] = [l for l in ctx["lessons"] if l.get("number") != lesson_number]

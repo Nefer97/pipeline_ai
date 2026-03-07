@@ -1230,6 +1230,7 @@ MAIN_TEMPLATE = r"""\documentclass[12pt,a4paper]{{report}}
 \usepackage[utf8]{{inputenc}}
 \usepackage[T1]{{fontenc}}
 \usepackage[english,italian]{{babel}}
+% Lingua principale: impostata da \selectlanguage in titlepage
 \usepackage{{lmodern}}
 
 % ---------------------------------------------------------
@@ -1392,14 +1393,23 @@ def _latex_escape_title(t: str) -> str:
     return t
 
 
-def generate_main_tex(title: str, lesson_files: list, output_dir: Path) -> Path:
+def generate_main_tex(title: str, lesson_files: list, output_dir: Path,
+                      lang: str = "italian") -> Path:
     title_tex = _latex_escape_title(title)
     includes = "\n".join(f"\\include{{{f.stem}}}" for f in sorted(lesson_files))
+    # Seleziona lingua principale in base alla lingua rilevata del corso
+    _babel_lang = {
+        "it": "italian", "en": "english", "fr": "french",
+        "de": "ngerman", "es": "spanish", "pt": "portuguese",
+    }.get(lang[:2] if lang else "it", "italian")
     content = MAIN_TEMPLATE.format(
         title=title_tex,
         date=datetime.now().strftime("%B %Y"),
         images_path=CONFIG["images_subdir"] + "/",
         includes=includes,
+    ).replace(
+        "% Lingua principale: impostata da \\selectlanguage in titlepage",
+        f"% Lingua principale: impostata da \\selectlanguage in titlepage\n\\selectlanguage{{{_babel_lang}}}",
     )
     main_path = output_dir / "main.tex"
     main_path.write_text(content, encoding="utf-8")
@@ -1415,7 +1425,8 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
                    skip_ai: bool = False, skip_ocr: bool = False,
                    whisper_model: str = "base",
                    subject_hint: str = None,
-                   course_context_path: str = None):
+                   course_context_path: str = None,
+                   title: str = None):
 
     print(f"\n{'─'*58}")
     print(f"  LEZIONE {lesson_number:02d}  ←  {source_dir.name}")
@@ -1749,7 +1760,11 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     # ─────────────────────────────────────────────
     # STEP 7: GENERAZIONE LaTeX
     # ─────────────────────────────────────────────
-    title   = source_dir.name.replace("_", " ").replace("-", " ").title()
+    # Il titolo viene passato dall'esterno (frontend/CLI).
+    # Fallback: deriva dal nome cartella (utile solo in --batch dove ogni
+    # sottocartella ha un nome semantico tipo "lezione_01_analisi").
+    if not title:
+        title = source_dir.name.replace("_", " ").replace("-", " ").title()
     out_tex = output_dir / f"lezione_{lesson_number:02d}.tex"
 
     def _latex_from_skeleton(sources, lesson_number, title, pptx_slides):
@@ -1918,6 +1933,8 @@ def main():
                 whisper_model       = args.whisper_model,
                 subject_hint        = args.subject,
                 course_context_path = course_context_path,
+                # In batch ogni sottocartella ha nome semantico → fallback al nome cartella
+                title               = None,
             )
             collect(result, subdir.name)
     else:
@@ -1928,6 +1945,7 @@ def main():
             whisper_model       = args.whisper_model,
             subject_hint        = args.subject,
             course_context_path = course_context_path,
+            title               = args.title if args.title != "Appunti del Corso" else None,
         )
         collect(result, source_path.name)
 
@@ -1941,7 +1959,12 @@ def main():
     if all_tex_files:
         _report_progress(output_dir, 95, "Generazione main.tex",
                          f"{len(all_tex_files)} lezioni")
-        generate_main_tex(state["course_title"] or args.title, all_tex_files, output_dir)
+        generate_main_tex(
+            state["course_title"] or args.title,
+            all_tex_files,
+            output_dir,
+            lang = os.environ.get("WHISPER_LANG") or state.get("subject_lang") or "it",
+        )
         _report_progress(output_dir, 100, "Completato", "")
         print(f"\n{'═'*58}")
         print(f"  COMPLETATO — {len(lesson_files)} lezioni")
