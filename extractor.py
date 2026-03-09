@@ -25,14 +25,17 @@ def _convert_to_png(src_path: str) -> str:
     Ritorna il path del PNG, o src_path originale se la conversione fallisce.
     """
     ext = os.path.splitext(src_path)[1].lower()
-    png_path = src_path.rsplit('.', 1)[0] + '.png'
+    abs_src  = os.path.abspath(src_path)
+    png_path = abs_src.rsplit('.', 1)[0] + '.png'
 
     if ext in ('.wmf', '.emf'):
         # Prova LibreOffice
+        # os.path.dirname può restituire stringa vuota per path relativi → usa abspath
+        out_dir = os.path.dirname(os.path.abspath(src_path))
         try:
             result = subprocess.run(
                 ['libreoffice', '--headless', '--convert-to', 'png',
-                 '--outdir', os.path.dirname(src_path), src_path],
+                 '--outdir', out_dir, src_path],
                 capture_output=True, timeout=30
             )
             if result.returncode == 0 and os.path.exists(png_path):
@@ -43,7 +46,7 @@ def _convert_to_png(src_path: str) -> str:
                 return png_path
         except (subprocess.TimeoutExpired, FileNotFoundError):
             pass
-        # Prova Inkscape
+        # Prova Inkscape (png_path è già assoluto grazie all'abspath sopra)
         try:
             result = subprocess.run(
                 ['inkscape', '--export-type=png', f'--export-filename={png_path}', src_path],
@@ -182,8 +185,10 @@ def extract_slides(pptx_path: str, image_output_dir: str) -> list:
                     img_path = os.path.join(image_output_dir, img_filename)
                     with open(img_path, 'wb') as f:
                         f.write(image.blob)
-                    # Converti formati non supportati da LaTeX
-                    if ext.lower() in UNSUPPORTED_FORMATS:
+                    # Converti formati non supportati da LaTeX.
+                    # image.ext restituisce l'estensione SENZA punto (es. "gif"),
+                    # mentre UNSUPPORTED_FORMATS usa punti (es. ".gif").
+                    if ('.' + ext.lower()) in UNSUPPORTED_FORMATS:
                         img_path = _convert_to_png(img_path)
                         img_filename = os.path.basename(img_path)
                     objects.append(SlideObject(

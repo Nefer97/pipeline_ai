@@ -22,7 +22,7 @@ def leggi_contatori():
     """Legge i contatori dal file txt"""
     contatori = {"lezioni": 0, "registrazioni": 0}
     if os.path.exists(CONTATORI_FILE):
-        with open(CONTATORI_FILE, "r") as f:
+        with open(CONTATORI_FILE, "r", encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line.startswith("lezioni="):
@@ -40,7 +40,7 @@ def leggi_contatori():
 
 def salva_contatori(contatori):
     """Salva i contatori nel file txt"""
-    with open(CONTATORI_FILE, "w") as f:
+    with open(CONTATORI_FILE, "w", encoding="utf-8") as f:
         f.write(f"lezioni={contatori['lezioni']}\n")
         f.write(f"registrazioni={contatori['registrazioni']}\n")
 

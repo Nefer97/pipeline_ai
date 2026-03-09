@@ -724,7 +724,9 @@ const details = {
     color: "#00e5ff",
     items: [
       "Drag & drop su 5 zone: Audio, Video, Slide, Doc, Teams URL (incolla manifest URL)",
-      "Pannello configurazione: Claude on/off, OCR, context, Whisper model, subject (7 profili), output dir, start-from",
+      "Titolo corso obbligatorio — pulsante Start rimane disattivo senza titolo",
+      "Cartella output generata automaticamente come slug del titolo (es. 'Digital Control 2' → ./digital_control_2)",
+      "Pannello configurazione: Claude on/off, OCR, context, Whisper model, subject (7 profili), start-from",
       "Bottone AVVIA → FormData POST a server.py con files[] + teams_url[]",
       "Polling GET /job/{id} ogni 3s → live status con dot animato, fase, percentuale",
       "Download automatico ZIP quando status = done",
@@ -742,15 +744,17 @@ const details = {
       "GET /job/{id}: status (queued/running/done/error) + progress, current_step, detail da progress.json",
       "GET /download/{id}: serve ZIP come FileResponse",
       "DELETE /job/{id}: pulisce uploads/ e outputs/ dal disco (chiamato automaticamente 5s dopo download)",
-      "Job store in memoria — ogni job ha UUID, stdout, stderr, zip_path"
+      "Job store persiste su disco (outputs/jobs.json) — sopravvive ai riavvii del server",
+      "Job 'running' al riavvio vengono marcati 'error' automaticamente"
     ]
   },
   pipeline: {
     title: "pipeline.py — Orchestratore",
-    file: "pipeline.py · ~1900 righe",
+    file: "pipeline.py · ~1980 righe",
     color: "#f59e0b",
     items: [
-      "Riceve argomenti CLI da server.py (subprocess): --title, --subject, --no-context, --skip-ai, --skip-ocr, --whisper-model, --start-from",
+      "Riceve argomenti CLI da server.py (subprocess): --title (obbligatorio), --subject, --no-context, --skip-ai, --skip-ocr, --whisper-model, --start-from",
+      "Titolo lezione passato esplicitamente — non derivato dal nome cartella",
       "Scansiona la cartella lezione per tipo file (audio/video/slide/pdf/docx/txt/rtf)",
       "Coordina: ffmpeg → Whisper → extractor → pdf_renderer/slide_renderer → preprocessor → Claude/skip-ai → builder",
       "Cache .transcript.txt: salta Whisper se già esiste per quel file",
@@ -825,8 +829,9 @@ const details = {
     file: "pipeline.py · pdfplumber + pymupdf",
     color: "#f59e0b",
     items: [
-      "Estrae testo pagina per pagina da file .pdf",
-      "pdf_renderer.py renderizza ogni pagina come PNG in images/",
+      "Estrae testo pagina per pagina da file .pdf tramite pdfplumber",
+      "OCR fallback con pytesseract per PDF scansionati: si attiva pagina per pagina sulle pagine senza testo (PDF misti o totalmente immagine)",
+      "pdf_renderer.py renderizza ogni pagina come PNG in images/ (naming: {stem}_pag_001.png)",
       "1 sessione = 1 lezione_NN.tex; contenuti grandi troncati da _trunc()",
       "Aggiunge marker [PAG N] per il preprocessor"
     ]
@@ -864,7 +869,10 @@ const details = {
       "align_transcript_to_slides(): abbina timestamp Whisper [MM:SS] alle slide corrispondenti",
       "Compressione: RAW_CLEAN (<80k tok) / DENSE (80-180k) / OUTLINE (>180k)",
       "load_course_context(): legge JSON lezioni precedenti, genera blocco '## CONTESTO CORSO'",
-      "update_course_context(): estrae da LaTeX generato concetti, definizioni, simboli → salva JSON"
+      "update_course_context(): estrae da LaTeX generato concetti, definizioni, simboli, last_verbal_topic → salva JSON",
+      "context_to_prompt(): inietta blocco ## RACCORDO CON LEZIONE PRECEDENTE con l'ultimo argomento verbale",
+      "Regola 18 nel system prompt: la lezione termina dove termina la spiegazione orale (non anticipare slide future)",
+      "Regola 19 nel system prompt: raccordo fluido di 1-2 righe dall'ultimo argomento trattato"
     ]
   },
   context: {
@@ -874,7 +882,8 @@ const details = {
     items: [
       "Creato automaticamente dalla prima lezione",
       "Contiene: titolo corso, subject, lista lezioni con concetti chiave, definizioni, simboli",
-      "Riletto ad ogni lezione successiva per evitare ri-spiegazioni",
+      "Salva last_verbal_topic: l'ultimo \\section spiegato verbalmente dal professore (escluse sezioni conclusive)",
+      "Riletto ad ogni lezione successiva per evitare ri-spiegazioni e per il raccordo inter-lezione",
       "Disattivabile con --no-context",
       "Cancellare il file = azzerare la memoria del corso"
     ]
@@ -900,6 +909,7 @@ const details = {
       "Riceve il NormalizedDocument dal preprocessor (già ottimizzato)",
       "Prompt include: tipo materia + contesto corso + slide allineate alla trascrizione",
       "Genera LaTeX semantico: \\section/\\subsection logici, definizioni, teoremi, esempi",
+      "Prompt include raccordo inter-lezione se corso_context.json ha last_verbal_topic",
       "Prompt caching: sistema (trascrizione+slide) in cache, risparmio token",
       "Modello: claude-sonnet-4-6 · max_tokens: 32000"
     ]
@@ -911,7 +921,8 @@ const details = {
     items: [
       "Crea lezione_NN.tex per ogni lezione con header commento e lista fonti",
       "Genera main.tex con \\include{lezione_01} ... \\include{lezione_NN}",
-      "Preambolo completo: amsmath, amssymb, amsthm, graphicx, hyperref, fancyhdr, listings",
+      "Lingua babel dinamica: WHISPER_LANG → \\selectlanguage{italian/english/french/...}",
+      "Preambolo completo: amsmath, amssymb, amsthm, graphicx, hyperref, fancyhdr, listings, babel",
       "Ambienti: theorem, definition, example, lemma, corollary, remark",
       "Crea ZIP finale con tutto l'output"
     ]
@@ -943,8 +954,9 @@ const details = {
     file: "output/images/*.png",
     color: "#f472b6",
     items: [
-      "Immagini estratte dalle slide .pptx",
-      "Nominate con hash per evitare collisioni",
+      "Slide PPTX: {stem}_slide_001.png — prefisso stem evita collisioni tra PPTX multipli",
+      "Pagine PDF: {stem}_pag_001.png — stesso schema",
+      "Immagini embedded estratte dal PPTX (UUID come nome univoco)",
       "Referenziate con \\includegraphics nei file .tex",
       "Include sia immagini normali sia formule non riconoscibili da pix2tex"
     ]
@@ -957,7 +969,8 @@ const details = {
       "Aggiornato automaticamente dopo ogni lezione generata con Claude",
       "Estratti da LaTeX: titoli section → concetti, \\begin{definition} → definizioni",
       "Simboli estratti da pattern tipo '$x$ = descrizione'",
-      "Usato dalla lezione successiva come contesto storico"
+      "Salva last_verbal_topic: ultimo \\section numerato (escluse Note/Conclusioni/Bibliografia)",
+      "Usato dalla lezione successiva come contesto storico e per il raccordo inter-lezione"
     ]
   },
   download: {

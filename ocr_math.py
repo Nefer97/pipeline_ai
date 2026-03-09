@@ -312,11 +312,16 @@ def _tesseract_ocr(image_path: str) -> Optional[str]:
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
                 img.save(tmp.name)
                 tmp_path = tmp.name
-            r = subprocess.run(
-                ["tesseract", tmp_path, "stdout", "--psm", "7"],
-                capture_output=True, text=True, timeout=30
-            )
-            os.unlink(tmp_path)
+            try:
+                r = subprocess.run(
+                    ["tesseract", tmp_path, "stdout", "--psm", "7"],
+                    capture_output=True, text=True, timeout=30
+                )
+            finally:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
             if r.returncode != 0:
                 return None
             raw = r.stdout.strip()

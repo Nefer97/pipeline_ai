@@ -172,7 +172,13 @@ def transcribe_audio(audio_path: Path, model_name: str = "base",
     # language=None → Whisper auto-rileva la lingua (funziona per italiano, inglese, ecc.)
     # Imposta WHISPER_LANG=it (o altra lingua) come variabile d'ambiente per forzarla
     whisper_lang = os.environ.get("WHISPER_LANG") or None
-    result = model.transcribe(str(audio_path), language=whisper_lang, verbose=False)
+    # fp16 richiede CUDA; su CPU deve essere False altrimenti Whisper crasha
+    try:
+        import torch as _torch
+        _fp16 = _torch.cuda.is_available()
+    except ImportError:
+        _fp16 = False
+    result = model.transcribe(str(audio_path), language=whisper_lang, verbose=False, fp16=_fp16)
 
     if _prog_dir:
         _stop.set()
@@ -1660,14 +1666,21 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         else:
             page_images, latex_skeleton = {}, None
 
-        # PDF scansionato: se pdfplumber → 0 testo, tenta OCR con pytesseract
-        if not pages and page_images:
-            _report_progress(output_dir, 40 + idx * 3, "OCR PDF scansionato", pf.name)
-            pages = _ocr_pages_with_tesseract(images_dir, page_images)
-            if pages and COLLEAGUE_MODULES:
-                # Rigenera lo scheletro LaTeX con il testo OCR
-                from pdf_renderer import _build_pdf_latex_skeleton
-                latex_skeleton = _build_pdf_latex_skeleton(pf, pages, page_images)
+        # PDF scansionato (totalmente o in parte): OCR su pagine senza testo.
+        # Copre sia PDF 100% scansionati (pages vuoto) sia PDF misti (alcune
+        # pagine hanno testo pdfplumber, altre sono immagini → mancanti in pages).
+        if page_images:
+            _pages_with_text = {p["page"] for p in pages}
+            _missing = {n: f for n, f in page_images.items() if n not in _pages_with_text}
+            if _missing:
+                _report_progress(output_dir, 40 + idx * 3, "OCR pagine scansionate", pf.name)
+                _ocr = _ocr_pages_with_tesseract(images_dir, _missing)
+                if _ocr:
+                    pages.extend(_ocr)
+                    pages.sort(key=lambda p: p["page"])
+                    if COLLEAGUE_MODULES:
+                        from pdf_renderer import _build_pdf_latex_skeleton
+                        latex_skeleton = _build_pdf_latex_skeleton(pf, pages, page_images)
 
         if not pages:
             print(f"    [WARN] {pf.name}: nessun testo disponibile — saltato")

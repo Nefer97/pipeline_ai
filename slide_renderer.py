@@ -4,7 +4,10 @@ slide_renderer.py — Renderizza slide PPTX come immagini PNG
 
 Produce un PNG per ogni slide del file .pptx.
 Le immagini vengono salvate in images_dir con naming:
-    slide_001.png, slide_002.png, ...
+    {stem}_slide_001.png, {stem}_slide_002.png, ...
+
+Il prefisso {stem} (nome del file PPTX senza estensione) evita collisioni
+quando una lezione contiene più file .pptx.
 
 Queste immagini hanno DUE usi distinti:
   1. Nel LaTeX finale — ogni \subsection include la slide come \begin{figure}
@@ -22,7 +25,7 @@ Uso:
         pptx_path  = Path("lezione_01.pptx"),
         images_dir = Path("output/images"),
     )
-    # slide_images = {1: "images/slide_001.png", 2: "images/slide_002.png", ...}
+    # slide_images = {1: "lezione_slide_001.png", 2: "lezione_slide_002.png", ...}
 """
 
 import os
@@ -65,7 +68,7 @@ def render_slide_images(pptx_path: Path, images_dir: Path) -> dict:
     Renderizza ogni slide come PNG.
 
     Ritorna dizionario:
-        {slide_number: "images/slide_001.png", ...}
+        {slide_number: "{stem}_slide_001.png", ...}
     I path sono relativi a images_dir (pronti per \includegraphics).
 
     Se il rendering fallisce su una slide, quella slide viene saltata
@@ -101,6 +104,7 @@ def _render_with_pptx_pillow(pptx_path: Path, images_dir: Path) -> dict:
     import io
 
     prs    = Presentation(str(pptx_path))
+    stem   = Path(pptx_path).stem
     result = {}
 
     # Dimensioni slide in pixel (96 DPI standard)
@@ -113,7 +117,7 @@ def _render_with_pptx_pillow(pptx_path: Path, images_dir: Path) -> dict:
         return int(emu / EMU_PER_INCH * DPI)
 
     for slide_idx, slide in enumerate(prs.slides, start=1):
-        img_filename = f"slide_{slide_idx:03d}.png"
+        img_filename = f"{stem}_slide_{slide_idx:03d}.png"
         img_path     = images_dir / img_filename
 
         # Usa cache se il file esiste già
@@ -208,7 +212,7 @@ def _render_with_pptx_pillow(pptx_path: Path, images_dir: Path) -> dict:
 
             canvas.save(str(img_path), "PNG", optimize=True)
             result[slide_idx] = img_filename
-            print(f"    ✓ slide_{slide_idx:03d}.png  ({slide_w_px}×{slide_h_px}px)")
+            print(f"    ✓ {img_filename}  ({slide_w_px}×{slide_h_px}px)")
 
         except Exception as e:
             print(f"    [WARN] slide {slide_idx} non renderizzata: {e}")
@@ -230,7 +234,8 @@ def _render_with_pymupdf(pptx_path: Path, images_dir: Path) -> dict:
     import fitz  # pymupdf
 
     result   = {}
-    pdf_path = images_dir / (pptx_path.stem + "_slides.pdf")
+    stem     = Path(pptx_path).stem
+    pdf_path = images_dir / (stem + "_slides.pdf")
 
     # Converti PPTX → PDF
     if not pdf_path.exists():
@@ -252,7 +257,7 @@ def _render_with_pymupdf(pptx_path: Path, images_dir: Path) -> dict:
     doc = fitz.open(str(pdf_path))
     try:
         for page_idx, page in enumerate(doc, start=1):
-            img_filename = f"slide_{page_idx:03d}.png"
+            img_filename = f"{stem}_slide_{page_idx:03d}.png"
             img_path     = images_dir / img_filename
             if img_path.exists():
                 result[page_idx] = img_filename
@@ -261,7 +266,7 @@ def _render_with_pymupdf(pptx_path: Path, images_dir: Path) -> dict:
             pix = page.get_pixmap(matrix=mat)
             pix.save(str(img_path))
             result[page_idx] = img_filename
-            print(f"    ✓ slide_{page_idx:03d}.png")
+            print(f"    ✓ {img_filename}")
     finally:
         doc.close()
     return result
@@ -284,10 +289,11 @@ def _render_placeholder(pptx_path: Path, images_dir: Path) -> dict:
     except ImportError:
         slides = [None]  # pptx non disponibile: genera 1 placeholder
 
+    stem   = Path(pptx_path).stem
     result = {}
 
     for slide_idx, slide in enumerate(slides, start=1):
-        img_filename = f"slide_{slide_idx:03d}.png"
+        img_filename = f"{stem}_slide_{slide_idx:03d}.png"
         img_path     = images_dir / img_filename
         if img_path.exists():
             result[slide_idx] = img_filename

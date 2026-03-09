@@ -39,9 +39,41 @@ OUTPUT_DIR = Path("outputs")
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
 
-# ── Job store in memoria (per semplicità) ──
-# In produzione: usa Redis o un DB
+# ── Job store — persiste su disco tra riavvii ──
 jobs: dict[str, dict] = {}
+JOBS_FILE = OUTPUT_DIR / "jobs.json"
+
+
+def _save_jobs() -> None:
+    """Serializza jobs su disco (senza stdout/stderr per tenere il file piccolo)."""
+    import json
+    try:
+        slim = {jid: {k: v for k, v in j.items() if k not in ("stdout", "stderr")}
+                for jid, j in jobs.items()}
+        JOBS_FILE.write_text(json.dumps(slim, indent=2, default=str), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _load_jobs() -> None:
+    """Carica jobs da disco all'avvio. I job 'running' diventano 'error' (pipeline killed)."""
+    import json
+    if not JOBS_FILE.exists():
+        return
+    try:
+        data = json.loads(JOBS_FILE.read_text(encoding="utf-8"))
+        for jid, j in data.items():
+            if j.get("status") == "running":
+                j["status"] = "error"
+                j["stderr"] = "Server riavviato durante l'esecuzione"
+            j.setdefault("stdout", "")
+            j.setdefault("stderr", "")
+            jobs[jid] = j
+    except Exception:
+        pass
+
+
+_load_jobs()
 
 
 def _clean_teams_url(url: str) -> str:
@@ -61,6 +93,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
     if job_id not in jobs:
         return  # job eliminato prima che il thread partisse
     jobs[job_id]["status"] = "running"
+    _save_jobs()
 
     # ── Continua un corso precedente: copia state.json e corso_context.json ──
     if continue_from:
@@ -157,14 +190,17 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             jobs[job_id]["zip_path"] = str(zip_path)
         else:
             jobs[job_id]["status"] = "error"
+        _save_jobs()
 
     except subprocess.TimeoutExpired:
         jobs[job_id]["status"] = "error"
         jobs[job_id]["stderr"] = "Timeout: pipeline impiegato più di 1 ora"
+        _save_jobs()
         shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
     except Exception as e:
         jobs[job_id]["status"] = "error"
         jobs[job_id]["stderr"] = str(e)
+        _save_jobs()
         shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
 
 
@@ -241,6 +277,8 @@ async def run_pipeline(
         "returncode":    None,
         "zip_path":      None,
     }
+
+    _save_jobs()
 
     # Lancia in background (non blocca la risposta HTTP)
     background_tasks.add_task(
@@ -371,4 +409,5 @@ async def delete_job(job_id: str, full: bool = False):
             zip_p.unlink()
         shutil.rmtree(OUTPUT_DIR / job_id, ignore_errors=True)
     del jobs[job_id]
+    _save_jobs()
     return JSONResponse({"deleted": job_id, "output_kept": not full})

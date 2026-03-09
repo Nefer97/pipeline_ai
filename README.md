@@ -26,13 +26,27 @@ source venv/bin/activate
 ```bash
 pip install openai-whisper pdfplumber python-pptx python-docx \
             Pillow numpy lxml fastapi uvicorn python-multipart \
-            aiofiles pymupdf
+            aiofiles pymupdf anthropic
 ```
 
 > **pymupdf** è necessario per renderizzare le pagine PDF e le slide PPTX come immagini PNG.
-> Se l'installazione fallisce: `pip install --user pymupdf`
+> **anthropic** è necessario per chiamare Claude. Senza API key la pipeline funziona ugualmente con `--skip-ai`.
 
-### 4. pix2tex — OCR formule (opzionale, ambiente separato)
+### 4. pytesseract — OCR PDF scansionati (opzionale)
+
+pytesseract permette di estrarre testo da PDF che non contengono testo selezionabile (PDF immagine, scansioni).
+
+```bash
+# Installazione librerie di sistema
+sudo apt install tesseract-ocr tesseract-ocr-ita tesseract-ocr-eng
+
+# Installazione pacchetto Python
+pip install pytesseract
+```
+
+La lingua usata per l'OCR segue automaticamente `WHISPER_LANG` (se impostata). Se non installato, i PDF scansionati vengono saltati senza errori — la pipeline continua normalmente con le altre fonti.
+
+### 5. pix2tex — OCR formule (opzionale, ambiente separato)
 
 pix2tex converte immagini di formule matematiche in LaTeX. Ha dipendenze pesanti (PyTorch ~2GB) che possono confliggere con il venv principale, quindi va installato in un venv separato.
 
@@ -66,7 +80,7 @@ python -c "from ocr_math import get_available_backends; print(get_available_back
 > Se non è installato, le immagini-formula vengono saltate senza errori — la pipeline continua normalmente.
 > Le formule scritte con l'editor equazioni di PowerPoint (OMML) vengono sempre convertite correttamente tramite `omml2latex.py`, indipendentemente da pix2tex.
 
-### 5. API key Claude (opzionale)
+### 6. API key Claude
 
 ```bash
 export ANTHROPIC_API_KEY='sk-ant-...'
@@ -76,7 +90,7 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 
 Senza API key la pipeline funziona ugualmente con `--skip-ai`.
 
-### 6. Verifica installazione
+### 7. Verifica installazione
 
 ```bash
 source venv/bin/activate
@@ -84,10 +98,14 @@ python -c "import fitz; print('pymupdf OK:', fitz.__version__)"
 python -c "import pdfplumber; print('pdfplumber OK')"
 python -c "import whisper; print('whisper OK')"
 python -c "import fastapi, uvicorn; print('server OK')"
+python -c "import anthropic; print('anthropic OK')"
 python pipeline.py --help
 
 # Verifica pix2tex (se installato nel venv separato)
 python -c "from ocr_math import get_available_backends; print(get_available_backends())"
+
+# Verifica pytesseract (se installato)
+python -c "import pytesseract; print('pytesseract OK')"
 ```
 
 Output atteso se tutto è installato:
@@ -116,7 +134,8 @@ fonti grezze
         ├── ocr_math.py       → pix2tex: OCR formula immagine → LaTeX
         ├── slide_renderer.py → renderizza ogni slide PPTX come PNG
         │
-        ├── pdfplumber        → estrae testo da PDF (con chunking auto)
+        ├── pdfplumber        → estrae testo da PDF
+        ├── pytesseract       → OCR fallback per PDF scansionati (0 testo da pdfplumber)
         ├── pdf_renderer.py   → renderizza ogni pagina PDF come PNG
         │
         ├── preprocessor.py   → normalizza, pulisce, comprime prima di Claude
@@ -127,7 +146,7 @@ fonti grezze
         │       ├── detect_subject()             → rileva tipo materia
         │       ├── align_transcript_to_slides() → allineamento temporale
         │       ├── update_course_context()      → aggiorna memoria corso
-        │       └── corso_context.json           → concetti, definizioni, simboli
+        │       └── corso_context.json           → concetti, definizioni, simboli, ultimo argomento
         │
         ├── Claude API        → genera LaTeX semantico (opzionale)
         │
@@ -153,6 +172,7 @@ fonti grezze
 | `pipeline.py` | Orchestratore principale — coordina tutti i moduli |
 | `server.py` | Backend FastAPI — espone la pipeline via HTTP, gestisce download Teams |
 | `index.htm` | Frontend web — drag & drop, opzioni, polling stato, download |
+| `assets/css/index.css` | Stili del frontend (estratti da index.htm) |
 | `schema.htm` | Diagramma architettura interattivo — clicca su ogni blocco per i dettagli |
 | `preprocessor.py` | Normalizza e comprime il testo; rileva la materia; allinea trascrizione e slide; gestisce il contesto corso |
 | `extractor.py` | Parsing approfondito dei file `.pptx` |
@@ -175,7 +195,7 @@ La pipeline assegna automaticamente un ruolo semantico a ogni file:
 | **SCHELETRO** | `.pptx` sempre; `.pdf` e `.docx` se c'è audio | Struttura ufficiale della lezione |
 | **CARNE** | `.mp3` `.wav` `.mp4` ecc. | Spiegazione orale del professore |
 | **SUPPORTO** | `.pdf` e `.docx` senza audio | Materiale di approfondimento |
-| **CONTORNO** | `.txt` `.md` | Note informali, peso minore |
+| **CONTORNO** | `.txt` `.md` `.rtf` | Note informali, peso minore |
 
 Claude riceve le fonti con questa gerarchia esplicita nel prompt. In assenza di Claude (`--skip-ai`), la struttura viene comunque rispettata per costruire il LaTeX.
 
@@ -193,7 +213,7 @@ python pipeline.py ./lezione_01/ --title "Digital Control"
 python pipeline.py ./lezione_01/ --title "Analisi 1" --subject matematica
 
 # Offline rapido (no Claude, no OCR) — produce comunque LaTeX strutturato con immagini
-python pipeline.py ./lezione_01/ --skip-ai --skip-ocr
+python pipeline.py ./lezione_01/ --skip-ai --skip-ocr --title "Digital Control"
 
 # Solo struttura, senza OCR formule
 python pipeline.py ./lezione_01/ --skip-ocr --title "Digital Control"
@@ -217,7 +237,7 @@ python pipeline.py --batch ./corso/ --skip-ai --skip-ocr
 
 | Flag | Default | Descrizione |
 |------|---------|-------------|
-| `--title` | `"Appunti del Corso"` | Titolo per `main.tex` |
+| `--title` | `"Appunti del Corso"` | Titolo per `main.tex` e per la `\chapter{}` della lezione |
 | `--output` | `./output` | Cartella di output |
 | `--subject` | auto-detect | Tipo materia: `ingegneria` `matematica` `fisica` `medicina` `economia` `giurisprudenza` `generico` |
 | `--no-context` | off | Non usare/aggiornare `corso_context.json` |
@@ -262,9 +282,11 @@ Il frontend permette di:
 - Trascinare file audio, video, slide, documenti
 - Incollare URL manifest di Microsoft Teams (scaricati automaticamente via ffmpeg)
 - Scegliere la materia tra 7 profili disciplinari (o auto-detect)
-- Impostare titolo, Claude on/off, OCR, contesto corso, modello Whisper, output dir
+- Impostare **titolo** (obbligatorio), Claude on/off, OCR, contesto corso, modello Whisper
 - Avviare la pipeline e monitorare lo stato in tempo reale con percentuale
 - Scaricare lo `.zip` con il risultato quando pronto (cleanup automatico dopo download)
+
+> Il campo **Titolo corso / lezione** è obbligatorio — il pulsante Start rimane disattivo senza un titolo. La cartella di output viene generata automaticamente come slug del titolo (es. `"Digital Control 2"` → `./digital_control_2`).
 
 La pagina **Schema** (`http://localhost:8000/schema.htm`) mostra un diagramma
 interattivo dell'architettura del sistema — cliccando su ogni blocco si vedono
@@ -313,8 +335,8 @@ Dopo aver fatto login con lo stesso account su entrambi i dispositivi, il server
 | Teams URL | URL manifest (incollato in UI) | server.py → ffmpeg → mp3 mono → Whisper |
 | Slide | `.pptx` | extractor → testo + OMML + immagini; slide_renderer → PNG per slide |
 | Word | `.docx` | python-docx → testo plain |
-| PDF | `.pdf` | pdfplumber → testo; pdf_renderer → PNG per pagina |
-| Testo | `.txt` `.md` `.rtf` | lettura diretta (RTF con strip automatico) |
+| PDF | `.pdf` | pdfplumber → testo; pytesseract fallback se 0 testo (PDF scansionato); pdf_renderer → PNG per pagina |
+| Testo | `.txt` `.md` `.rtf` | lettura diretta (RTF con strip automatico dei tag) |
 
 Ogni sessione di upload genera esattamente **un** `lezione_NN.tex`, indipendentemente dalla dimensione del PDF. I contenuti grandi vengono gestiti dal budget token (`_trunc()`) prima dell'invio a Claude.
 
@@ -342,7 +364,13 @@ Se la trascrizione Whisper ha i timestamp `[MM:SS]` e le slide hanno i marker `-
 
 **4. Contesto corso — `corso_context.json`**
 
-Dopo ogni lezione generata, il preprocessor estrae automaticamente dal LaTeX prodotto i concetti chiave (titoli di section/subsection), le definizioni (`\begin{definition}`), e i simboli introdotti. Questi vengono salvati in `output/corso_context.json`. Dalla lezione successiva in poi, il prompt include una sezione `## CONTESTO DEL CORSO` con la lista delle lezioni precedenti e l'istruzione esplicita "Concetti già introdotti — NON ri-spiegare da zero". Si disabilita con `--no-context`.
+Dopo ogni lezione generata, il preprocessor estrae automaticamente dal LaTeX prodotto i concetti chiave (titoli di section/subsection), le definizioni (`\begin{definition}`), i simboli introdotti, e **l'ultimo argomento trattato verbalmente dal professore** (`last_verbal_topic` — ultima `\section` non conclusiva del LaTeX). Questi dati vengono salvati in `output/corso_context.json`.
+
+Dalla lezione successiva in poi, il prompt include:
+- Una sezione `## CONTESTO DEL CORSO` con la lista delle lezioni precedenti ("Concetti già introdotti — NON ri-spiegare da zero")
+- Un blocco `## RACCORDO CON LEZIONE PRECEDENTE` che indica esattamente dove il professore si è fermato nell'ultima lezione, con istruzione a iniziare da quel punto
+
+Si disabilita con `--no-context`.
 
 **Compressione automatica** in base ai token stimati:
 
@@ -354,6 +382,33 @@ Dopo ogni lezione generata, il preprocessor estrae automaticamente dal LaTeX pro
 
 ---
 
+## Continuità inter-lezione
+
+La pipeline mantiene automaticamente la continuità tra lezioni consecutive dello stesso corso.
+
+**Come funziona:**
+1. Al termine di ogni lezione, `update_course_context()` estrae dal LaTeX generato l'ultimo argomento spiegato verbalmente dal professore (ultima `\section` numerata, escluse sezioni di chiusura come Note, Conclusioni, Bibliografia).
+2. Questo valore (`last_verbal_topic`) viene salvato in `corso_context.json`.
+3. Alla lezione successiva, `context_to_prompt()` inietta nel prompt un blocco strutturato:
+
+```
+## RACCORDO CON LEZIONE PRECEDENTE
+Nella Lezione N il professore si è fermato verbalmente su:
+  "ultimo argomento..."
+REGOLE DI RACCORDO:
+• Questa lezione DEVE iniziare esattamente da dove il professore si era fermato
+• LIMITE CRITICO: fermati dove si ferma la trascrizione audio — NON anticipare argomenti non spiegati verbalmente
+• Non inventare contenuto non presente nella trascrizione
+```
+
+4. Il sistema prompt include inoltre due regole esplicite:
+   - **Regola 18 — LIMITE ORALE**: la lezione termina dove termina la spiegazione verbale. Argomenti nelle slide non ancora spiegati non vengono inclusi.
+   - **Regola 19 — RACCORDO INTER-LEZIONE**: se il contesto corso indica l'ultimo argomento trattato, inizia con un raccordo fluido di 1-2 righe.
+
+Per usare la continuità dal frontend, usa il campo **Continua da job** per collegare la nuova sessione alla precedente.
+
+---
+
 ## Struttura output
 
 ```
@@ -362,7 +417,8 @@ output/
 ├── lezione_01.tex             # capitolo 1
 ├── lezione_02.tex             # capitolo 2
 ├── ...
-├── corso_context.json         # memoria del corso (concetti, definizioni, simboli)
+├── corso_context.json         # memoria del corso (concetti, definizioni, simboli, ultimo argomento)
+├── state.json                 # stato pipeline (numero prossima lezione)
 └── images/
     ├── slide_001.png          # screenshot slide 1 del PPTX
     ├── slide_002.png          # screenshot slide 2 del PPTX
@@ -377,6 +433,7 @@ output/
 - `graphicx`, `float` — immagini
 - `hyperref` — link navigabili nel PDF
 - `fancyhdr` — intestazioni pagina
+- `babel` con lingua dinamica (basata su `WHISPER_LANG`)
 - Ambienti: `theorem`, `definition`, `example`, `lemma`, `corollary`, `remark`
 - `listings` — blocchi codice
 
@@ -393,8 +450,13 @@ Il modello `base` su CPU impiega circa 1 minuto ogni 10 minuti di audio. Per tes
 **PDF grandi:**
 Un PDF da 275 pagine viene processato come un'unica lezione. Il testo viene troncato in base al budget token (`_trunc()`) per rispettare i limiti del contesto Claude. Le immagini PNG delle pagine vengono generate e salvate in `images/` con naming `nomefile_pag_001.png`.
 
-**WHISPER_LANG:**
-Per default Whisper auto-rileva la lingua. Per forzarla: `export WHISPER_LANG=it` (o qualsiasi codice BCP-47).
+**PDF scansionati:**
+Se pdfplumber estrae 0 testo da un PDF (PDF immagine o scansione), la pipeline tenta automaticamente l'OCR tramite pytesseract sui PNG già renderizzati. La lingua OCR segue `WHISPER_LANG`; se non impostata usa `ita+eng`. Richiede `pip install pytesseract` + `sudo apt install tesseract-ocr`.
+
+**WHISPER_LANG e lingua del documento:**
+Per default Whisper auto-rileva la lingua. Per forzarla: `export WHISPER_LANG=it` (o qualsiasi codice BCP-47). La variabile influenza anche:
+- La lingua dell'OCR pytesseract (es. `it` → `ita`)
+- La lingua principale del documento LaTeX: `main.tex` genera `\selectlanguage{italian}` (o english/french/german/spanish/portuguese secondo il codice)
 
 **Cache immagini:**
 Se i PNG esistono già in `images/`, non vengono rirenderizzati. Per forzare il rirenderizzamento cancella i file PNG dalla cartella.
@@ -407,9 +469,6 @@ Le formule nei file `.pptx` vengono gestite in due modi distinti: quelle create 
 
 **Moduli opzionali:**
 Se `extractor.py`, `slide_renderer.py`, `pdf_renderer.py` e gli altri moduli collega non sono presenti, la pipeline usa un fallback base che funziona comunque. La qualità dell'output (immagini slide, formule OMML) è però significativamente migliore con i moduli completi.
-
-**Cartella lezione — nome:**
-Il nome della cartella della lezione viene usato come titolo. Usa nomi leggibili tipo `lezione_01_limiti` invece di hash o nomi generici.
 
 **Debug prompt e upload:**
 Ogni job scrive nella cartella `output/{job_id}/{output_name}/debug/`:
@@ -433,9 +492,10 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | Problema | Causa | Soluzione |
 |----------|-------|-----------|
 | `ModuleNotFoundError: fitz` | pymupdf non installato nel venv attivo | `pip install pymupdf` con il venv attivo |
+| `ModuleNotFoundError: anthropic` | anthropic SDK non installato | `pip install anthropic` con il venv attivo |
 | `images/` vuota | pymupdf non trovato al momento dell'esecuzione | Verifica `python -c "import fitz"` nel venv attivo |
 | Più di un `lezione_NN.tex` generato | Modalità batch attiva (`--batch`) | In modalità normale ogni sessione produce sempre un unico file |
-| Titolo lezione incomprensibile | Nome cartella hash o generico | Rinomina la cartella con un nome descrittivo |
+| PDF scansionato senza testo | pdfplumber estrae 0 testo | Installa pytesseract: `pip install pytesseract && sudo apt install tesseract-ocr tesseract-ocr-ita` |
 | `ffprobe: command not found` | ffprobe non installato | `sudo apt install ffmpeg` (include ffprobe) |
 | Claude non risponde | API key mancante o errata | `echo $ANTHROPIC_API_KEY` per verificare |
 | Frontend non raggiungibile da remoto | Server non in ascolto su `0.0.0.0` | Avvia con `--host 0.0.0.0`; da remoto usa l'IP del server (o Tailscale IP) |
@@ -444,3 +504,4 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | `NNPACK: Unsupported hardware` in stderr | CPU senza istruzioni NNPACK | Warning innocuo — pix2tex funziona ugualmente su CPU normale |
 | pix2tex lento (30-60s per formula) | Modello ML su CPU, nessuna GPU | Normale su CPU; la cache `.ocr_cache.json` evita di riprocessare le stesse immagini |
 | Prima esecuzione pix2tex scarica pesi | Download automatico ~116MB | Attendi il download; successive esecuzioni usano la cache |
+| Raccordo inter-lezione non attivo | Lezione precedente senza contesto | Assicurati di usare il campo "Continua da job" o che `corso_context.json` esista nell'output |
