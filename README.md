@@ -9,8 +9,15 @@ Sistema per trasformare fonti miste di una lezione universitaria (audio, video, 
 ### 1. Dipendenze di sistema
 
 ```bash
+# Opzione A — minimale (pdflatex base, ~200 MB)
+sudo apt install ffmpeg texlive-latex-base texlive-latex-recommended \
+                 texlive-latex-extra texlive-lang-italian texlive-fonts-recommended
+
+# Opzione B — completa, include tutti i pacchetti LaTeX (~2 GB)
 sudo apt install ffmpeg texlive-full
 ```
+
+> L'opzione A è sufficiente per compilare l'output di Appunti AI. Usa `texlive-full` solo se hai già poco spazio su disco occupato o hai bisogno di pacchetti LaTeX extra.
 
 ### 2. Clona il progetto e crea il venv
 
@@ -158,8 +165,8 @@ fonti grezze
            ├── lezione_01.tex
            ├── lezione_02.tex
            └── images/
-                ├── slide_001.png          ← screenshot slide PPTX
-                ├── nomepdf_pag_001.png    ← screenshot pagina PDF
+                ├── {stem}_slide_001.png   ← screenshot slide PPTX (prefisso = nome file .pptx)
+                ├── {stem}_pag_001.png     ← screenshot pagina PDF (prefisso = nome file .pdf)
                 └── ...
 ```
 
@@ -176,11 +183,11 @@ fonti grezze
 | `schema.htm` | Diagramma architettura interattivo — clicca su ogni blocco per i dettagli |
 | `preprocessor.py` | Normalizza e comprime il testo; rileva la materia; allinea trascrizione e slide; gestisce il contesto corso |
 | `extractor.py` | Parsing approfondito dei file `.pptx` |
-| `slide_renderer.py` | Renderizza ogni slide PPTX come PNG (pymupdf) |
-| `pdf_renderer.py` | Renderizza ogni pagina PDF come PNG (pymupdf) |
+| `slide_renderer.py` | Renderizza ogni slide PPTX come PNG (python-pptx + Pillow; pymupdf come fallback) |
+| `pdf_renderer.py` | Renderizza ogni pagina PDF come PNG (pymupdf / fitz) |
 | `omml2latex.py` | Conversione formule OMML (PowerPoint) → LaTeX |
 | `formula_detector.py` | Riconosce immagini che contengono formule matematiche |
-| `ocr_math.py` | OCR su immagini-formula tramite pix2tex |
+| `ocr_math.py` | OCR su immagini-formula: pix2tex (principale), latex-ocr, tesseract, euristico (fallback) |
 | `builder.py` | Costruisce il file `.tex` finale dalla struttura estratta |
 | `TeamsHack.py` | Scarica video da Microsoft Teams tramite ffmpeg (anche standalone) |
 
@@ -420,10 +427,10 @@ output/
 ├── corso_context.json         # memoria del corso (concetti, definizioni, simboli, ultimo argomento)
 ├── state.json                 # stato pipeline (numero prossima lezione)
 └── images/
-    ├── slide_001.png          # screenshot slide 1 del PPTX
-    ├── slide_002.png          # screenshot slide 2 del PPTX
-    ├── nomepdf_pag_001.png    # screenshot pagina 1 del PDF
-    ├── nomepdf_pag_002.png    # screenshot pagina 2 del PDF
+    ├── lezione_slide_001.png  # screenshot slide 1 ({stem}_slide_NNN.png)
+    ├── lezione_slide_002.png  # screenshot slide 2
+    ├── dispense_pag_001.png   # screenshot pagina 1 PDF ({stem}_pag_NNN.png)
+    ├── dispense_pag_002.png   # screenshot pagina 2 PDF
     ├── slide001_abc123.png    # immagine embedded estratta dal PPTX
     └── formula_def456.png     # immagine formula estratta (→ pix2tex)
 ```
@@ -450,8 +457,8 @@ Il modello `base` su CPU impiega circa 1 minuto ogni 10 minuti di audio. Per tes
 **PDF grandi:**
 Un PDF da 275 pagine viene processato come un'unica lezione. Il testo viene troncato in base al budget token (`_trunc()`) per rispettare i limiti del contesto Claude. Le immagini PNG delle pagine vengono generate e salvate in `images/` con naming `nomefile_pag_001.png`.
 
-**PDF scansionati:**
-Se pdfplumber estrae 0 testo da un PDF (PDF immagine o scansione), la pipeline tenta automaticamente l'OCR tramite pytesseract sui PNG già renderizzati. La lingua OCR segue `WHISPER_LANG`; se non impostata usa `ita+eng`. Richiede `pip install pytesseract` + `sudo apt install tesseract-ocr`.
+**PDF scansionati e PDF misti:**
+La pipeline tenta automaticamente l'OCR tramite pytesseract su ogni pagina che pdfplumber non riesce a leggere. Questo copre sia PDF 100% scansionati (nessuna pagina ha testo) sia PDF misti (alcune pagine hanno testo digitale, altre sono immagini scansionate). L'OCR viene eseguito sui PNG già renderizzati da pdf_renderer. La lingua OCR segue `WHISPER_LANG`; se non impostata usa `ita+eng`. Richiede `pip install pytesseract` + `sudo apt install tesseract-ocr`.
 
 **WHISPER_LANG e lingua del documento:**
 Per default Whisper auto-rileva la lingua. Per forzarla: `export WHISPER_LANG=it` (o qualsiasi codice BCP-47). La variabile influenza anche:
@@ -499,9 +506,10 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | `ffprobe: command not found` | ffprobe non installato | `sudo apt install ffmpeg` (include ffprobe) |
 | Claude non risponde | API key mancante o errata | `echo $ANTHROPIC_API_KEY` per verificare |
 | Frontend non raggiungibile da remoto | Server non in ascolto su `0.0.0.0` | Avvia con `--host 0.0.0.0`; da remoto usa l'IP del server (o Tailscale IP) |
-| `pdflatex` fallisce | Pacchetti LaTeX mancanti | `sudo apt install texlive-full` |
+| `pdflatex` fallisce | pdflatex non installato o pacchetti mancanti | `sudo apt install texlive-latex-base texlive-latex-recommended texlive-latex-extra texlive-lang-italian texlive-fonts-recommended` (oppure `texlive-full` per installazione completa) |
 | pix2tex non trovato (`['heuristic']` only) | Venv non nei path cercati | Usa `~/pix2tex_venv` oppure `~/Scrivania/venv` (italiano) o `~/venv` |
 | `NNPACK: Unsupported hardware` in stderr | CPU senza istruzioni NNPACK | Warning innocuo — pix2tex funziona ugualmente su CPU normale |
 | pix2tex lento (30-60s per formula) | Modello ML su CPU, nessuna GPU | Normale su CPU; la cache `.ocr_cache.json` evita di riprocessare le stesse immagini |
 | Prima esecuzione pix2tex scarica pesi | Download automatico ~116MB | Attendi il download; successive esecuzioni usano la cache |
 | Raccordo inter-lezione non attivo | Lezione precedente senza contesto | Assicurati di usare il campo "Continua da job" o che `corso_context.json` esista nell'output |
+| `RuntimeError: "slow_conv2d_cpu" not implemented for 'Half'` o `fp16 is not supported on CPU` | Whisper prova fp16 su CPU senza CUDA | Aggiorna il codice — il fix è già incluso (imposta `fp16=False` automaticamente su CPU) |

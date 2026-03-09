@@ -105,6 +105,7 @@ class SlideData:
     slide_number: int
     title: str
     objects: list = field(default_factory=list)  # lista di SlideObject ordinati per Y
+    notes: str = ""                              # note del presentatore (testo dalla Notes pane)
 
 
 def _emu_to_pt(emu: int) -> float:
@@ -213,10 +214,24 @@ def extract_slides(pptx_path: str, image_output_dir: str) -> list:
         # Ordina per posizione verticale (Y crescente)
         objects.sort(key=lambda o: o.top)
 
+        # Note del presentatore (Notes pane)
+        notes = ""
+        try:
+            if slide.has_notes_slide:
+                notes_tf = slide.notes_slide.notes_text_frame
+                if notes_tf:
+                    # Filtra il placeholder "Click to edit Master text styles" e simili
+                    raw = notes_tf.text.strip()
+                    if raw and not raw.lower().startswith("click to edit"):
+                        notes = raw
+        except Exception:
+            pass
+
         slides_data.append(SlideData(
             slide_number=slide_idx,
             title=title,
-            objects=objects
+            objects=objects,
+            notes=notes,
         ))
 
     return slides_data

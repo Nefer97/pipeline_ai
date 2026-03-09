@@ -78,6 +78,7 @@
         <div class="file-list" id="files-teams" style="--cc:#ef4444"></div>
         <div id="teams-url-area" style="display:none;margin-top:8px;">
           <input type="text" id="teams-url-input" placeholder="Incolla URL Teams…" style="width:100%;background:color-mix(in srgb,#ef4444 8%,#11151c);border:1px solid color-mix(in srgb,#ef4444 25%,transparent);border-radius:8px;padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:.64rem;color:#e2e8f0;outline:none;">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:#ef4444;opacity:.55;margin-top:5px;">↵ Invio per aggiungere · Esc per chiudere</div>
         </div>
       </div>
     </div>
@@ -106,6 +107,7 @@
                 <input type="checkbox" id="opt-claude" checked><label for="opt-claude"></label>
               </div>
             </div>
+            <div id="healthBadges" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;padding-left:2px;"></div>
 
             <div class="toggle-row">
               <div class="toggle-info">
@@ -126,6 +128,7 @@
                 <input type="checkbox" id="opt-context" checked><label for="opt-context"></label>
               </div>
             </div>
+
           </div>
 
           <!-- Colonna destra -->
@@ -144,6 +147,7 @@
                 </select>
                 <span class="whisper-speed">vel: <span id="whisperSpeedLabel">1×</span></span>
               </div>
+              <div id="whisperEstimate" style="display:none;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);opacity:.75;margin-top:3px;"></div>
             </div>
 
             <div class="config-field" style="gap:6px">
@@ -151,13 +155,16 @@
               <input type="text" id="opt-output" readonly placeholder="generato dal titolo…" style="border-left-color:var(--c3);opacity:.7;cursor:default">
             </div>
 
-            <div class="config-field" style="gap:6px" id="startfrom-field">
-              <label>Start-from (0 = auto da state.json)</label>
+            <div style="margin:2px 0 -2px;">
+              <button type="button" id="advancedToggle" onclick="toggleAdvanced()" style="background:none;border:none;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--muted);padding:0;opacity:.6;">▸ opzioni avanzate</button>
+            </div>
+            <div class="config-field" style="gap:6px;display:none;" id="startfrom-field">
+              <label>Start-from <span style="opacity:.6">(0 = auto da state.json)</span></label>
               <input type="number" id="opt-startfrom" value="0" min="0" style="border-left-color:var(--c2)">
             </div>
 
             <div class="config-field" style="gap:6px">
-              <label>Continua corso da Job ID precedente</label>
+              <label>Lezione precedente <span style="opacity:.6;font-size:.85em">(Job ID — per continuare il corso)</span></label>
               <input type="text" id="opt-continue" placeholder="es. 8ccdc0a7 — lascia vuoto per nuovo corso" style="border-left-color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.72rem;">
               <span id="continue-hint" style="display:none;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--c4);opacity:.7;">state.json copiato automaticamente — start-from ignorato</span>
             </div>
@@ -195,7 +202,8 @@
     </div>
 
     <div class="run-section">
-      <button class="run-btn" id="runBtn">▶ AVVIA PIPELINE</button>
+      <button class="run-btn" id="runBtn" title="Carica almeno un file e inserisci un titolo">▶ AVVIA PIPELINE</button>
+      <div id="run-hint" style="display:none;font-family:'JetBrains Mono',monospace;font-size:.63rem;color:var(--muted);text-align:center;margin-top:6px;opacity:.7;"></div>
     </div>
     <div class="live-status" id="liveStatus">
       <div class="live-header">
@@ -208,11 +216,59 @@
         <div class="global-progress-bar" id="globalProgressBar"></div>
       </div>
     </div>
-    <div id="jobIdBadge" style="display:none;background:color-mix(in srgb,var(--c4) 8%,var(--surface2));border:1px solid color-mix(in srgb,var(--c4) 30%,transparent);border-radius:10px;padding:10px 16px;margin:8px 0 4px;font-family:'JetBrains Mono',monospace;font-size:.72rem;display:none;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span style="color:var(--muted2)">Job ID lezione completata:</span>
+    <!-- Log pipeline in tempo reale -->
+    <div id="logPanel" style="display:none;margin:8px 0;background:color-mix(in srgb,var(--c1) 5%,var(--surface2));border:1px solid color-mix(in srgb,var(--c1) 20%,transparent);border-radius:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;cursor:pointer;user-select:none;" onclick="toggleLogPanel()">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--c1);font-weight:700;">// log pipeline</span>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <span id="logLineCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+          <span id="logToggleArrow" style="color:var(--c1);font-size:.85rem;">▼</span>
+        </div>
+      </div>
+      <div id="logPanelBody" style="display:none;padding:0 14px 14px;">
+        <pre id="logOutput" style="margin:0;padding:10px;background:#0a0e14;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:#7dd3fc;overflow-x:auto;max-height:320px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;"></pre>
+      </div>
+    </div>
+
+    <div id="jobIdBadge" style="display:none;background:color-mix(in srgb,var(--c4) 8%,var(--surface2));border:1px solid color-mix(in srgb,var(--c4) 30%,transparent);border-radius:10px;padding:10px 16px;margin:8px 0 4px;font-family:'JetBrains Mono',monospace;font-size:.72rem;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span style="color:var(--muted2)">Lezione completata:</span>
       <span id="jobIdText" style="color:var(--c4);font-weight:700;letter-spacing:.06em;"></span>
+      <a id="downloadLink" href="#" style="background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 40%,transparent);border-radius:6px;color:#10b981;font-family:'JetBrains Mono',monospace;font-size:.65rem;padding:4px 10px;text-decoration:none;">⬇ Scarica ZIP</a>
       <button onclick="copyJobId()" style="background:color-mix(in srgb,var(--c4) 15%,transparent);border:1px solid color-mix(in srgb,var(--c4) 40%,transparent);border-radius:6px;color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.65rem;padding:4px 10px;cursor:pointer;">📋 Usa per lezione successiva</button>
     </div>
+    <!-- LaTeX Preview Panel -->
+    <div id="latexPreviewPanel" style="display:none;margin:8px 0;background:color-mix(in srgb,var(--c3) 6%,var(--surface2));border:1px solid color-mix(in srgb,var(--c3) 25%,transparent);border-radius:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;cursor:pointer;user-select:none;" onclick="toggleLatexPreview()">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--c3);font-weight:700;">// main.tex — anteprima LaTeX</span>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <span id="hasPdfBadge" style="display:none;font-size:.62rem;background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 40%,transparent);color:#10b981;border-radius:4px;padding:2px 8px;font-family:'JetBrains Mono',monospace;">✓ PDF compilato</span>
+          <span id="noPdfBadge" style="display:none;cursor:pointer;font-size:.62rem;background:color-mix(in srgb,#ef4444 12%,transparent);border:1px solid color-mix(in srgb,#ef4444 35%,transparent);color:#ef4444;border-radius:4px;padding:2px 8px;font-family:'JetBrains Mono',monospace;" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
+          <span id="previewToggleArrow" style="color:var(--c3);font-size:.9rem;">▼</span>
+        </div>
+      </div>
+      <div id="latexPreviewBody" style="display:none;padding:0 16px 16px;">
+        <pre id="latexPreviewCode" style="margin:0;padding:12px;background:var(--bg);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.62rem;color:#e2e8f0;overflow-x:auto;max-height:420px;overflow-y:auto;white-space:pre;"></pre>
+      </div>
+      <!-- Errori pdflatex (solo se PDF non compilato) -->
+      <div id="pdfErrorsBody" style="display:none;padding:0 16px 14px;">
+        <pre id="pdfErrorsCode" style="margin:0;padding:12px;background:color-mix(in srgb,#ef4444 8%,var(--bg));border:1px solid color-mix(in srgb,#ef4444 25%,transparent);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:#fca5a5;overflow-x:auto;max-height:260px;overflow-y:auto;white-space:pre-wrap;"></pre>
+      </div>
+    </div>
+
+    <!-- History panel — lezioni precedenti -->
+    <div id="historyPanel" style="display:none;margin:8px 0;background:color-mix(in srgb,var(--c2) 5%,var(--surface2));border:1px solid color-mix(in srgb,var(--c2) 18%,transparent);border-radius:10px;overflow:hidden;">
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;cursor:pointer;user-select:none;" onclick="toggleHistory()">
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--c2);font-weight:700;">// lezioni precedenti</span>
+        <div style="display:flex;gap:10px;align-items:center;">
+          <span id="historyCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+          <span id="historyArrow" style="color:var(--c2);font-size:.85rem;">▼</span>
+        </div>
+      </div>
+      <div id="historyBody" style="display:none;padding:0 14px 12px;">
+        <div id="historyList" style="display:flex;flex-direction:column;gap:5px;"></div>
+      </div>
+    </div>
+
     <div class="arrow-down"><div class="chevron"></div></div>
     <div class="section-label">// 03 · preprocessing</div>
     <div class="steps">
@@ -340,6 +396,122 @@
 // URL base del server — funziona sia in locale (127.0.0.1) che da remoto (Tailscale, LAN)
 const API = window.location.origin;
 
+// ── HEALTH CHECK ──────────────────────────────────────────────────────────────
+async function _checkHealth(){
+  try{
+    const h=await(await fetch(`${API}/health`)).json();
+    const container=document.getElementById('healthBadges');
+    if(!container)return;
+    const sysOk=(ok,label)=>`<span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,${ok?'#10b981':'#ef4444'} 12%,transparent);border:1px solid color-mix(in srgb,${ok?'#10b981':'#ef4444'} 35%,transparent);color:${ok?'#10b981':'#ef4444'};">${label}</span>`;
+    let html='';
+    if(h.api_key){
+      html+=`<span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#10b981 12%,transparent);border:1px solid color-mix(in srgb,#10b981 35%,transparent);color:#10b981;">✓ API key</span>`;
+      html+=`<button onclick="_removeApiKey()" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#ef4444 10%,transparent);border:1px solid color-mix(in srgb,#ef4444 25%,transparent);color:#ef4444;cursor:pointer;">× rimuovi</button>`;
+    } else {
+      html+=`<span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:#f59e0b;">⚠ API key mancante</span>`;
+      html+=`<input id="apiKeyInput" type="password" placeholder="sk-ant-…" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,#f59e0b 8%,#11151c);border:1px solid color-mix(in srgb,#f59e0b 30%,transparent);color:#e2e8f0;outline:none;width:200px;">`;
+      html+=`<button onclick="_saveApiKey()" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,#f59e0b 15%,transparent);border:1px solid color-mix(in srgb,#f59e0b 40%,transparent);color:#f59e0b;cursor:pointer;">Salva</button>`;
+    }
+    html+=sysOk(h.ffmpeg,   h.ffmpeg   ?'✓ ffmpeg'  :'✗ ffmpeg mancante');
+    html+=sysOk(h.pdflatex, h.pdflatex ?'✓ pdflatex':'✗ pdflatex mancante');
+    container.innerHTML=html;
+    // Tasto Salva anche con Invio nel campo input
+    document.getElementById('apiKeyInput')?.addEventListener('keydown',e=>{if(e.key==='Enter')_saveApiKey();});
+    // Gestione toggle Claude
+    const tog=document.getElementById('opt-claude');
+    tog.disabled=!h.api_key;
+    if(!h.api_key){tog.checked=false;updateConfigStatus(false);}
+    else{tog.disabled=false;}
+  }catch(_){}
+}
+
+async function _saveApiKey(){
+  const key=(document.getElementById('apiKeyInput')?.value||'').trim();
+  if(!key)return;
+  await fetch(`${API}/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:key})});
+  _checkHealth();
+  showToast('✓ API key salvata','Claude è ora disponibile','#10b981');
+}
+
+async function _removeApiKey(){
+  await fetch(`${API}/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({api_key:''})});
+  _checkHealth();
+  showToast('API key rimossa','Claude disattivato','#f59e0b');
+}
+
+// ── HISTORY ───────────────────────────────────────────────────────────────────
+function _timeAgo(iso){
+  if(!iso)return'';
+  const diff=(Date.now()-new Date(iso).getTime())/1000;
+  if(diff<60)return'ora fa';
+  if(diff<3600)return`${Math.round(diff/60)} min fa`;
+  if(diff<86400)return`${Math.round(diff/3600)} ore fa`;
+  return`${Math.round(diff/86400)} gg fa`;
+}
+
+function toggleHistory(){
+  const body=document.getElementById('historyBody');
+  const arrow=document.getElementById('historyArrow');
+  const open=body.style.display==='none';
+  body.style.display=open?'block':'none';
+  arrow.textContent=open?'▲':'▼';
+}
+
+function useJobId(id){
+  document.getElementById('opt-continue').value=id;
+  document.getElementById('opt-continue').dispatchEvent(new Event('input'));
+  document.getElementById('opt-continue').scrollIntoView({behavior:'smooth',block:'center'});
+  showToast('Job ID selezionato',`${id} — carica i file della prossima lezione`,'#f59e0b');
+}
+
+async function _loadHistory(){
+  try{
+    const data=await(await fetch(`${API}/jobs`)).json();
+    const list=Object.entries(data)
+      .map(([id,j])=>({...j,id}))
+      .filter(j=>j.status==='done'||j.status==='error')
+      .sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+    const panel=document.getElementById('historyPanel');
+    const listEl=document.getElementById('historyList');
+    const countEl=document.getElementById('historyCount');
+    if(!list.length){panel.style.display='none';return;}
+    panel.style.display='block';
+    countEl.textContent=`${list.length} lezioni`;
+    listEl.innerHTML=list.slice(0,12).map(j=>{
+      const done=j.status==='done';
+      const dotColor=done?'#10b981':'#ef4444';
+      const files=(j.files||[]).slice(0,2).join(', ')+(j.files?.length>2?` +${j.files.length-2}`:'');
+      return`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:color-mix(in srgb,${dotColor} 5%,transparent);border:1px solid color-mix(in srgb,${dotColor} 12%,transparent);">
+        <span style="width:6px;height:6px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:#e2e8f0;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${j.title||''}">${j.title||'—'}</span>
+        ${files?`<span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${files}">${files}</span>`:''}
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;">${_timeAgo(j.created_at)}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;">${j.id}</span>
+        ${done&&j.has_zip?`<a href="${API}/download/${j.id}" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 35%,transparent);color:#10b981;text-decoration:none;flex-shrink:0;">⬇ ZIP</a>`:''}
+        ${done?`<button onclick="useJobId('${j.id}')" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,var(--c4) 15%,transparent);border:1px solid color-mix(in srgb,var(--c4) 35%,transparent);color:var(--c4);cursor:pointer;">▶ Continua</button>`:''}
+      </div>`;
+    }).join('');
+  }catch(_){}
+}
+
+// ── STIMA TEMPO WHISPER ───────────────────────────────────────────────────────
+const _whisperSpeed={tiny:4,base:1,small:0.5,medium:0.25,large:0.1};
+// Stima durata audio: ~1 MB/min per MP3 lezione tipica (128 kbps mono)
+function updateWhisperEstimate(){
+  const model=document.getElementById('opt-whisper').value;
+  const audioBytes=[...fileState.audio,...fileState.video].reduce((s,f)=>s+(f.size||0),0);
+  const el=document.getElementById('whisperEstimate');
+  if(!el||!audioBytes){if(el)el.style.display='none';return;}
+  const audioDurMin=audioBytes/(1024*1024);            // MB ≈ min
+  const transcribeMin=audioDurMin/_whisperSpeed[model];
+  let est;
+  if(transcribeMin<1)est='< 1 min';
+  else if(transcribeMin<60)est=`~${Math.round(transcribeMin)} min`;
+  else est=`~${(transcribeMin/60).toFixed(1)} ore`;
+  el.textContent=`⏱ stima trascrizione Whisper: ${est}`;
+  el.style.display='block';
+}
+
 function copyJobId(){
   const id=document.getElementById('jobIdText').textContent;
   navigator.clipboard.writeText(id).catch(()=>{});
@@ -368,6 +540,71 @@ function setUIRunning(isRunning){
     runBtn.disabled = false;
     runBtn.classList.remove('running');
   }
+}
+// ── LOG PANEL ──
+let _logEs = null;   // EventSource corrente
+let _logLines = 0;
+
+function toggleLogPanel(){
+  const body=document.getElementById('logPanelBody');
+  const arrow=document.getElementById('logToggleArrow');
+  const open=body.style.display==='none';
+  body.style.display=open?'block':'none';
+  arrow.textContent=open?'▲':'▼';
+  if(open){
+    // auto-scroll al fondo quando si apre
+    const pre=document.getElementById('logOutput');
+    pre.scrollTop=pre.scrollHeight;
+  }
+}
+
+function _startLogStream(jobId){
+  // Reset
+  const pre=document.getElementById('logOutput');
+  pre.textContent='';
+  _logLines=0;
+  document.getElementById('logLineCount').textContent='';
+  document.getElementById('logPanel').style.display='block';
+  // Apri pannello automaticamente
+  document.getElementById('logPanelBody').style.display='block';
+  document.getElementById('logToggleArrow').textContent='▲';
+
+  if(_logEs){ _logEs.close(); _logEs=null; }
+
+  _logEs=new EventSource(`${API}/job/${jobId}/stream`);
+  _logEs.onmessage=e=>{
+    if(e.data==='[FINE]'){ _logEs.close(); _logEs=null; return; }
+    const pre=document.getElementById('logOutput');
+    const atBottom=pre.scrollHeight-pre.scrollTop-pre.clientHeight<40;
+    pre.textContent+=e.data+'\n';
+    _logLines++;
+    document.getElementById('logLineCount').textContent=`${_logLines} righe`;
+    if(atBottom) pre.scrollTop=pre.scrollHeight;  // auto-scroll solo se già in fondo
+  };
+  _logEs.onerror=()=>{ if(_logEs){ _logEs.close(); _logEs=null; } };
+}
+
+function toggleAdvanced(){
+  const field=document.getElementById('startfrom-field');
+  const btn=document.getElementById('advancedToggle');
+  const open=field.style.display==='none';
+  field.style.display=open?'flex':'none';
+  btn.textContent=open?'▾ opzioni avanzate':'▸ opzioni avanzate';
+  btn.style.opacity=open?'1':'.6';
+}
+function toggleLatexPreview(){
+  const body=document.getElementById('latexPreviewBody');
+  const arrow=document.getElementById('previewToggleArrow');
+  const open=body.style.display==='none';
+  body.style.display=open?'block':'none';
+  arrow.textContent=open?'▲':'▼';
+}
+function togglePdfErrors(){
+  const body=document.getElementById('pdfErrorsBody');
+  const badge=document.getElementById('noPdfBadge');
+  const open=body.style.display==='none';
+  body.style.display=open?'block':'none';
+  badge.textContent=open?'✗ PDF non compilato ▴':'✗ PDF non compilato ▾';
 }
 function updateGlobalProgress(p){
   const bar=document.getElementById('globalProgressBar');
@@ -414,16 +651,30 @@ function updateRunButton(){
   const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);
   const hasTitle=document.getElementById('titleInput').value.trim().length>0;
   const btn=document.getElementById('runBtn');
+  const hint=document.getElementById('run-hint');
   const titleInput=document.getElementById('titleInput');
   if(total>0 && hasTitle){
     btn.classList.add('active');
     btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
+    btn.title='';
     titleInput.style.borderLeftColor='';
+    if(hint)hint.style.display='none';
   } else {
     btn.classList.remove('active');
     btn.textContent='▶ AVVIA PIPELINE';
-    if(total>0 && !hasTitle) titleInput.style.borderLeftColor='var(--c5)';
-    else titleInput.style.borderLeftColor='';
+    if(total>0 && !hasTitle){
+      titleInput.style.borderLeftColor='var(--c5)';
+      if(hint){hint.textContent='↑ inserisci un titolo per continuare';hint.style.display='block';}
+      btn.title='Inserisci un titolo per abilitare';
+    } else if(hasTitle && total===0){
+      titleInput.style.borderLeftColor='';
+      if(hint){hint.textContent='carica almeno un file per continuare';hint.style.display='block';}
+      btn.title='Carica almeno un file per abilitare';
+    } else {
+      titleInput.style.borderLeftColor='';
+      if(hint)hint.style.display='none';
+      btn.title='Carica almeno un file e inserisci un titolo';
+    }
   }
 }
 
@@ -456,6 +707,7 @@ function addFiles(type,newFiles){
     showToast(`${newFiles.length} file aggiunto`,Array.from(newFiles).map(f=>f.name).join(', ').slice(0,60),colors[type]);
     sounds.addFile.play().catch(e=>console.log("Suono aggiunta file bloccato:", e));
   }
+  if(type==='audio'||type==='video') updateWhisperEstimate();
 }
 
 // FILE INPUT & DRAG-DROP
@@ -490,8 +742,10 @@ teamsUrlInput.addEventListener('keydown',e=>{
 // REMOVE FILE
 document.addEventListener('click',e=>{
   if(e.target.classList.contains('file-item-remove')){
-    fileState[e.target.dataset.type].splice(parseInt(e.target.dataset.idx),1);
-    renderFiles(e.target.dataset.type);
+    const t=e.target.dataset.type;
+    fileState[t].splice(parseInt(e.target.dataset.idx),1);
+    renderFiles(t);
+    if(t==='audio'||t==='video') updateWhisperEstimate();
   }
 });
 
@@ -557,12 +811,17 @@ function setTag(id,active,text,color){
 ['opt-claude','opt-ocr','opt-context'].forEach(id=>
   document.getElementById(id).addEventListener('change',()=>updateConfigStatus(true))
 );
-document.getElementById('opt-whisper').addEventListener('change',()=>{updateWhisperSpeed();updateConfigStatus(false);});
+document.getElementById('opt-whisper').addEventListener('change',()=>{updateWhisperSpeed();updateConfigStatus(false);updateWhisperEstimate();});
 document.getElementById('opt-startfrom').addEventListener('input',()=>updateConfigStatus(false));
 document.getElementById('opt-continue').addEventListener('input',()=>{
   const val=document.getElementById('opt-continue').value.trim();
   const has=val.length>0;
-  document.getElementById('startfrom-field').style.display=has?'none':'flex';
+  // Se continue ha un valore, start-from si nasconde sempre (e resetta il toggle avanzate)
+  if(has){
+    document.getElementById('startfrom-field').style.display='none';
+    const advBtn=document.getElementById('advancedToggle');
+    if(advBtn){advBtn.textContent='▸ opzioni avanzate';advBtn.style.opacity='.6';}
+  }
   document.getElementById('continue-hint').style.display=has?'block':'none';
   const tagStart=document.getElementById('tag-start');
   const tagCont=document.getElementById('tag-continue');
@@ -572,11 +831,18 @@ document.getElementById('opt-continue').addEventListener('input',()=>{
 });
 updateConfigStatus(false);
 
+// Init al caricamento
+_checkHealth();
+_loadHistory();
+
 // RUN PIPELINE
 const runBtn = document.getElementById('runBtn');
 runBtn.addEventListener('click',async()=>{
   updateLiveStatus('Avvio pipeline…','Preparazione upload…','#f59e0b',true);
   document.getElementById('jobIdBadge').style.display='none';
+  document.getElementById('latexPreviewPanel').style.display='none';
+  document.getElementById('logPanel').style.display='none';
+  if(_logEs){_logEs.close();_logEs=null;}
   const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);
   if(!total)return;
   if(!document.getElementById('titleInput').value.trim()){
@@ -617,9 +883,12 @@ runBtn.addEventListener('click',async()=>{
     const r=await fetch(`${API}/run-pipeline`,{method:'POST',body:fd});
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const j=await r.json();
-    showToast('Pipeline avviata!',`job ${j.job_id} — polling ogni 3s`,'#10b981');
+    if(j.warnings&&j.warnings.length)
+      showToast('⚠ File ignorati',j.warnings.join('\n'),'#f59e0b');
+    showToast('Pipeline avviata!',`job ${j.job_id}`,'#10b981');
     btn.textContent='⏳ In esecuzione…';
     setUIRunning(true);
+    _startLogStream(j.job_id);
 
     // Fake progress: scorre lentamente fino a 88%, poi rallenta drasticamente
     // Viene sovrascritta dai valori reali del backend quando arrivano
@@ -669,21 +938,47 @@ runBtn.addEventListener('click',async()=>{
           document.getElementById('jobIdText').textContent=j.job_id;
           const badge=document.getElementById('jobIdBadge');
           badge.style.display='flex';
-          const a=document.createElement('a');
           const title=document.getElementById('titleInput').value.trim()||'appunti';
-          a.href=`${API}/download/${j.job_id}`;
-          a.download=`${title.replace(/\s+/g,'_')}.zip`;a.click();
-          // Cleanup uploads e zip dopo 5s — l'output (tex + immagini) rimane in outputs/
+          const dlLink=document.getElementById('downloadLink');
+          dlLink.href=`${API}/download/${j.job_id}`;
+          dlLink.download=`${title.replace(/\s+/g,'_')}.zip`;
+          // Tenta auto-download (può essere bloccato da popup blocker)
+          const a=document.createElement('a');
+          a.href=dlLink.href;a.download=dlLink.download;a.click();
+          // Fetch LaTeX preview
+          fetch(`${API}/preview/${j.job_id}`)
+            .then(r=>r.ok?r.json():null)
+            .then(data=>{
+              if(!data)return;
+              document.getElementById('latexPreviewCode').textContent=data.content||'';
+              document.getElementById('latexPreviewPanel').style.display='block';
+              if(data.has_pdf){
+                document.getElementById('hasPdfBadge').style.display='inline';
+              } else {
+                document.getElementById('noPdfBadge').style.display='inline';
+                const errs=j.pdf_errors||[];
+                if(errs.length){
+                  document.getElementById('pdfErrorsCode').textContent=errs.join('\n\n');
+                  document.getElementById('pdfErrorsBody').style.display='block';
+                }
+              }
+            })
+            .catch(()=>{});
+          // Cleanup uploads dopo 5s — l'output (tex + immagini) rimane in outputs/
           setTimeout(()=>fetch(`${API}/job/${j.job_id}`,{method:'DELETE'}).catch(()=>{}),5000);
+          // Aggiorna history
+          setTimeout(_loadHistory, 500);
         }
         if(s.status==='error'){
           clearInterval(fakeInterval);
           clearInterval(poll);
           setUIRunning(false);
-          updateLiveStatus('Errore pipeline',s.stderr?.slice(0,120)||'errore sconosciuto','#ef4444',false);
+          if(_logEs){_logEs.close();_logEs=null;}
+          updateLiveStatus('Errore pipeline',s.stderr?.slice(-200)||'errore sconosciuto','#ef4444',false);
           Object.keys(fileState).forEach(type=>document.getElementById(`card-${type}`)?.classList.remove('uploading'));
           btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
-          showToast('Errore',s.stderr?.slice(0,120)||'errore sconosciuto','#ef4444');
+          showToast('Errore',s.stderr?.slice(-200)||'errore sconosciuto','#ef4444');
+          setTimeout(_loadHistory, 500);
         }
       }catch(_){}
     },3000);

@@ -235,6 +235,7 @@ def process_pptx_full(pptx_path: Path, images_dir: Path, skip_ocr: bool = False)
 
     # Testo plain per Claude
     lines = []
+    n_notes = 0
     for slide in slides:
         lines.append(f"\n--- SLIDE {slide.slide_number}: {slide.title} ---")
         for obj in slide.objects:
@@ -244,6 +245,13 @@ def process_pptx_full(pptx_path: Path, images_dir: Path, skip_ocr: bool = False)
                 f = getattr(obj, "latex_result", "")
                 if f:
                     lines.append(f"[FORMULA: {f}]")
+        # Note del presentatore: fonte preziosa spesso ignorata
+        if slide.notes:
+            lines.append(f"[NOTE PRESENTER: {slide.notes}]")
+            n_notes += 1
+
+    if n_notes:
+        print(f"    ✓ {n_notes} slide con note del presentatore estratte")
     return slides, "\n".join(lines)
 
 # ─────────────────────────────────────────────
@@ -587,6 +595,33 @@ _MAX_SUPPORTO_CHARS  = 80_000   # PDF/DOCX di supporto: informazione supplementa
 _MAX_CONTORNO_CHARS  = 40_000   # note informali: meno priorità
 
 
+MAX_IMG_PX = 1920  # lato lungo massimo per le immagini PNG nello ZIP
+
+
+def _resize_images_dir(images_dir: Path, max_px: int = MAX_IMG_PX) -> None:
+    """Ridimensiona in-place tutti i PNG in images_dir se un lato supera max_px."""
+    try:
+        from PIL import Image
+    except ImportError:
+        return  # Pillow non disponibile — skip silenzioso
+    resized = 0
+    for png in images_dir.rglob("*.png"):
+        try:
+            with Image.open(png) as img:
+                w, h = img.size
+                if max(w, h) <= max_px:
+                    continue
+                scale = max_px / max(w, h)
+                new_size = (int(w * scale), int(h * scale))
+                img_resized = img.resize(new_size, Image.LANCZOS)
+                img_resized.save(png, "PNG", optimize=True)
+                resized += 1
+        except Exception:
+            pass
+    if resized:
+        print(f"    ✓ {resized} immagini ridimensionate a max {max_px}px")
+
+
 def generate_with_claude(lesson_number: int, title: str,
                           sources: dict,
                           subject_hint: str = None,
@@ -887,28 +922,51 @@ REGOLE OBBLIGATORIE:
         _report_progress(_progress_output_dir, 70,
                          "Claude — Generazione LaTeX",
                          f"Lezione {lesson_number}: {title}")
-    t0 = time.time()
-    try:
-        with urllib.request.urlopen(req) as resp:
-            data  = json.loads(resp.read())
-            latex = data["content"][0]["text"]
-            print(f"  ✓ Claude: {time.time()-t0:.1f}s, {len(latex):,} chars")
 
-            if PREPROCESSOR and course_context_path:
-                update_course_context(
-                    context_path  = course_context_path,
-                    lesson_number = lesson_number,
-                    lesson_title  = title,
-                    latex_content = latex,
-                )
-            return latex
+    # Retry con backoff esponenziale: 3 tentativi su errori transitori
+    _RETRY_CODES  = {429, 529}   # rate limit / overloaded
+    _MAX_ATTEMPTS = 3
+    _BACKOFF_BASE = 20           # secondi: 20s, 40s
 
-    except urllib.error.HTTPError as e:
-        print(f"  [ERRORE] Claude HTTP {e.code}: {e.read().decode()[:300]}")
-        return None
-    except Exception as e:
-        print(f"  [ERRORE] Claude: {e}")
-        return None
+    for attempt in range(1, _MAX_ATTEMPTS + 1):
+        t0 = time.time()
+        try:
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                data  = json.loads(resp.read())
+                latex = data["content"][0]["text"]
+                print(f"  ✓ Claude: {time.time()-t0:.1f}s, {len(latex):,} chars")
+
+                if PREPROCESSOR and course_context_path:
+                    update_course_context(
+                        context_path  = course_context_path,
+                        lesson_number = lesson_number,
+                        lesson_title  = title,
+                        latex_content = latex,
+                    )
+                return latex
+
+        except urllib.error.HTTPError as e:
+            body = e.read().decode(errors="replace")[:300]
+            if e.code in _RETRY_CODES and attempt < _MAX_ATTEMPTS:
+                wait = _BACKOFF_BASE * attempt
+                print(f"  [retry {attempt}/{_MAX_ATTEMPTS}] Claude HTTP {e.code} — riprovo tra {wait}s")
+                time.sleep(wait)
+                continue
+            print(f"  [ERRORE] Claude HTTP {e.code}: {body}")
+            return None
+        except (TimeoutError, OSError) as e:
+            if attempt < _MAX_ATTEMPTS:
+                wait = _BACKOFF_BASE * attempt
+                print(f"  [retry {attempt}/{_MAX_ATTEMPTS}] Claude timeout/rete ({e}) — riprovo tra {wait}s")
+                time.sleep(wait)
+                continue
+            print(f"  [ERRORE] Claude: {e}")
+            return None
+        except Exception as e:
+            print(f"  [ERRORE] Claude: {e}")
+            return None
+
+    return None
 
 
 # ─────────────────────────────────────────────
@@ -1771,6 +1829,12 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         pass  # debug non deve mai bloccare la pipeline
 
     # ─────────────────────────────────────────────
+    # STEP 6.5: RESIZE PNG — limita le immagini a MAX_IMG_PX lato lungo
+    # Riduce dimensioni ZIP senza perdita visiva apprezzabile nel PDF finale
+    # ─────────────────────────────────────────────
+    _resize_images_dir(images_dir)
+
+    # ─────────────────────────────────────────────
     # STEP 7: GENERAZIONE LaTeX
     # ─────────────────────────────────────────────
     # Il titolo viene passato dall'esterno (frontend/CLI).
@@ -1857,6 +1921,8 @@ def main():
         help="Tipo di materia (default: auto-detect)")
     parser.add_argument("--no-context", action="store_true",
         help="Non usare/aggiornare corso_context.json")
+    parser.add_argument("--continue-on-error", action="store_true",
+        help="In batch: salta lezioni che falliscono invece di interrompere tutto")
     args = parser.parse_args()
 
     source_path  = Path(args.source)
@@ -1927,6 +1993,8 @@ def main():
         save_state(output_dir, state)
         print(f"  [state] salvato → prossima lezione: {state['next_lesson']}")
 
+    batch_errors: list[dict] = []
+
     if args.batch:
         subdirs = sorted(d for d in source_path.iterdir() if d.is_dir())
         if not subdirs:
@@ -1939,17 +2007,25 @@ def main():
                 print(f"  [SKIP] {subdir.name} già processata (presente in state.json)")
                 continue
             lesson_num = state["next_lesson"]
-            result = process_lesson(
-                subdir, lesson_num, output_dir,
-                skip_ai             = args.skip_ai,
-                skip_ocr            = args.skip_ocr,
-                whisper_model       = args.whisper_model,
-                subject_hint        = args.subject,
-                course_context_path = course_context_path,
-                # In batch ogni sottocartella ha nome semantico → fallback al nome cartella
-                title               = None,
-            )
-            collect(result, subdir.name)
+            try:
+                result = process_lesson(
+                    subdir, lesson_num, output_dir,
+                    skip_ai             = args.skip_ai,
+                    skip_ocr            = args.skip_ocr,
+                    whisper_model       = args.whisper_model,
+                    subject_hint        = args.subject,
+                    course_context_path = course_context_path,
+                    # In batch ogni sottocartella ha nome semantico → fallback al nome cartella
+                    title               = None,
+                )
+                collect(result, subdir.name)
+            except Exception as exc:
+                if args.continue_on_error:
+                    err_info = {"subdir": subdir.name, "error": str(exc)}
+                    batch_errors.append(err_info)
+                    print(f"\n  [SKIP-ERROR] {subdir.name}: {exc}")
+                    continue
+                raise
     else:
         result = process_lesson(
             source_path, next_lesson, output_dir,
@@ -1978,9 +2054,19 @@ def main():
             output_dir,
             lang = os.environ.get("WHISPER_LANG") or state.get("subject_lang") or "it",
         )
+        # Salva errori batch se --continue-on-error era attivo
+        if batch_errors:
+            import json as _json
+            err_file = output_dir / "errors.json"
+            err_file.write_text(
+                _json.dumps(batch_errors, indent=2, ensure_ascii=False),
+                encoding="utf-8"
+            )
+            print(f"\n  [ATTENZIONE] {len(batch_errors)} lezioni saltate → errors.json")
         _report_progress(output_dir, 100, "Completato", "")
         print(f"\n{'═'*58}")
-        print(f"  COMPLETATO — {len(lesson_files)} lezioni")
+        print(f"  COMPLETATO — {len(lesson_files)} lezioni"
+              + (f" ({len(batch_errors)} errori)" if batch_errors else ""))
         print(f"\n  Compila il PDF:")
         print(f"    cd {output_dir.resolve()}")
         print(f"    pdflatex main.tex && pdflatex main.tex")

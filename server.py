@@ -6,16 +6,20 @@ Avvia con:
     uvicorn server:app --reload --host 0.0.0.0 --port 8000
 """
 
+import asyncio
+import datetime
 import os
 import shutil
 import subprocess
+import threading
+import time
 import uuid
 import zipfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi import FastAPI, Request, UploadFile, File, Form, BackgroundTasks, HTTPException
+from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -42,10 +46,12 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 # ── Job store — persiste su disco tra riavvii ──
 jobs: dict[str, dict] = {}
 JOBS_FILE = OUTPUT_DIR / "jobs.json"
+_jobs_lock = threading.Lock()   # protezione accessi concorrenti da BackgroundTasks
 
 
 def _save_jobs() -> None:
-    """Serializza jobs su disco (senza stdout/stderr per tenere il file piccolo)."""
+    """Serializza jobs su disco (senza stdout/stderr per tenere il file piccolo).
+    Deve essere chiamata DENTRO un blocco `with _jobs_lock`."""
     import json
     try:
         slim = {jid: {k: v for k, v in j.items() if k not in ("stdout", "stderr")}
@@ -75,6 +81,136 @@ def _load_jobs() -> None:
 
 _load_jobs()
 
+# ── Settings persistenti (API key, ecc.) ──────────────────────────────────────
+import json as _json_mod
+
+SETTINGS_FILE = Path(__file__).parent / "settings.json"
+
+
+def _load_settings() -> None:
+    """Carica settings.json all'avvio — imposta ANTHROPIC_API_KEY se salvata."""
+    if not SETTINGS_FILE.exists():
+        return
+    try:
+        s = _json_mod.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        if key := s.get("api_key", "").strip():
+            os.environ.setdefault("ANTHROPIC_API_KEY", key)
+    except Exception:
+        pass
+
+
+def _save_settings(api_key: str) -> None:
+    try:
+        SETTINGS_FILE.write_text(
+            _json_mod.dumps({"api_key": api_key}, indent=2), encoding="utf-8"
+        )
+    except Exception:
+        pass
+
+
+_load_settings()
+
+
+@app.post("/settings")
+async def save_settings_endpoint(request: Request):
+    """Salva/rimuove la API key di Claude. Persiste su settings.json."""
+    try:
+        body = await request.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Body JSON non valido")
+    key = body.get("api_key", "").strip()
+    if key:
+        os.environ["ANTHROPIC_API_KEY"] = key
+    else:
+        os.environ.pop("ANTHROPIC_API_KEY", None)
+    _save_settings(key)
+    return JSONResponse({"ok": True, "api_key": bool(key)})
+
+
+# ── Cleanup automatico output vecchi ──────────────────────────────────────────
+OUTPUT_TTL_DAYS = 7  # cancella output + ZIP più vecchi di N giorni
+
+
+def _cleanup_old_outputs(max_age_days: int = OUTPUT_TTL_DAYS) -> int:
+    """Cancella cartelle output e ZIP più vecchi di max_age_days.
+    Ritorna il numero di job rimossi."""
+    cutoff = time.time() - max_age_days * 86400
+    removed = 0
+    with _jobs_lock:
+        expired = [jid for jid, j in list(jobs.items())
+                   if j.get("status") in ("done", "error")]
+    for jid in expired:
+        out_dir = OUTPUT_DIR / jid
+        try:
+            if out_dir.exists() and out_dir.stat().st_mtime < cutoff:
+                shutil.rmtree(out_dir, ignore_errors=True)
+                zip_p = OUTPUT_DIR / f"{jid}.zip"
+                if zip_p.exists():
+                    zip_p.unlink(missing_ok=True)
+                shutil.rmtree(UPLOAD_DIR / jid, ignore_errors=True)
+                with _jobs_lock:
+                    jobs.pop(jid, None)
+                    _save_jobs()
+                removed += 1
+        except Exception:
+            pass
+    return removed
+
+
+@app.on_event("startup")
+async def _on_startup():
+    n = await asyncio.to_thread(_cleanup_old_outputs)
+    if n:
+        print(f"[cleanup] {n} output vecchi rimossi all'avvio (TTL={OUTPUT_TTL_DAYS}d)")
+
+    async def _periodic_cleanup():
+        while True:
+            await asyncio.sleep(86400)  # ogni 24 ore
+            n = await asyncio.to_thread(_cleanup_old_outputs)
+            if n:
+                print(f"[cleanup] {n} output vecchi rimossi (pulizia periodica)")
+
+    asyncio.create_task(_periodic_cleanup())
+
+
+# ── Validazione file upload ────────────────────────────────────────────────────
+MAX_FILE_SIZE = 3 * 1024 * 1024 * 1024  # 3 GB — limite per singolo file
+
+_SUPPORTED_EXTENSIONS = {
+    ".mp3", ".mp4", ".wav", ".m4a", ".ogg", ".webm", ".mkv", ".mov",
+    ".pptx", ".pdf", ".docx", ".ppt", ".doc",
+}
+
+# (magic_prefix, set di estensioni compatibili)
+_MAGIC_SIGNATURES: list[tuple[bytes, set[str]]] = [
+    (b"%PDF",        {".pdf"}),
+    (b"PK\x03\x04",  {".pptx", ".docx", ".ppt", ".doc"}),
+    (b"ID3",          {".mp3"}),
+    (b"\xff\xfb",     {".mp3"}),
+    (b"\xff\xf3",     {".mp3"}),
+    (b"\xff\xf2",     {".mp3"}),
+    (b"RIFF",         {".wav"}),
+    (b"OggS",         {".ogg", ".webm"}),
+    (b"\x1aE\xdf\xa3", {".webm", ".mkv"}),
+]
+
+
+def _check_file_header(filename: str, header: bytes) -> str | None:
+    """Ritorna stringa di warning se i magic bytes non corrispondono all'estensione, None se ok."""
+    ext = Path(filename).suffix.lower()
+    for magic, exts in _MAGIC_SIGNATURES:
+        if header[:len(magic)] == magic:
+            if ext not in exts:
+                return f"{filename}: magic bytes suggeriscono {exts}, estensione dichiarata {ext!r}"
+            return None  # match corretto → ok
+    # MP4/M4A: 'ftyp' a offset 4
+    if len(header) >= 8 and header[4:8] == b"ftyp":
+        if ext not in {".mp4", ".m4a", ".m4v", ".mov"}:
+            return f"{filename}: magic bytes suggeriscono video MP4, estensione dichiarata {ext!r}"
+        return None
+    # Magic non riconosciuto — non blocchiamo (formato legittimo non in lista)
+    return None
+
 
 def _clean_teams_url(url: str) -> str:
     """Rimuove &altTranscode=1 e parametri successivi (come TeamsHack.py)."""
@@ -88,24 +224,28 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                        whisper_model: str, subject: Optional[str],
                        no_context: bool, start_from: Optional[int],
                        teams_urls: list[str] | None = None,
-                       continue_from: str = ""):
+                       continue_from: str = "",
+                       continue_on_error: bool = False):
     """Eseguito in background thread da BackgroundTasks."""
-    if job_id not in jobs:
-        return  # job eliminato prima che il thread partisse
-    jobs[job_id]["status"] = "running"
-    _save_jobs()
+    with _jobs_lock:
+        if job_id not in jobs:
+            return  # job eliminato prima che il thread partisse
+        jobs[job_id]["status"] = "running"
+        _save_jobs()
 
     # ── Continua un corso precedente: copia state.json e corso_context.json ──
     if continue_from:
         # Prima cerca in memoria (job ancora presente), poi su disco (server riavviato)
-        if continue_from in jobs:
-            prev_out = Path(jobs[continue_from]["output_dir"])
+        with _jobs_lock:
+            prev_out_str = jobs[continue_from]["output_dir"] if continue_from in jobs else None
+        if prev_out_str:
+            prev_out = Path(prev_out_str)
         else:
             # Fallback su disco: cerca ricorsivamente in outputs/{prev_job_id}/
             candidates = list((OUTPUT_DIR / continue_from).rglob("state.json"))
             prev_out = candidates[0].parent if candidates else None
 
-        if prev_out:
+        if prev_out:  # type: ignore[truthy-bool]
             for fname in ("state.json", "corso_context.json"):
                 src = prev_out / fname
                 if src.exists():
@@ -119,7 +259,9 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
     # anche se la pipeline fallisce o se uploads/ viene pulita in seguito.
     debug_uploads_dir = output_dir / "debug" / "uploads"
     debug_uploads_dir.mkdir(parents=True, exist_ok=True)
-    for f_name in jobs.get(job_id, {}).get("files", []):
+    with _jobs_lock:
+        _job_files = jobs.get(job_id, {}).get("files", [])
+    for f_name in _job_files:
         src = lesson_dir / f_name
         if src.exists():
             shutil.copy2(src, debug_uploads_dir / f_name)
@@ -144,7 +286,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                 print(f"[TeamsHack] Errore download: {e}")
 
     cmd = [
-        "python3", "pipeline.py",
+        "python3", "-u", "pipeline.py",  # -u: stdout unbuffered → righe visibili in real-time
         str(lesson_dir),
         "--title", title,
         "--output", str(output_dir),
@@ -162,20 +304,66 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
         cmd.append("--no-context")
     if subject:
         cmd.extend(["--subject", subject])
+    if continue_on_error:
+        cmd.append("--continue-on-error")
+
+    log_path = output_dir / "pipeline.log"
+    log_path.write_text("", encoding="utf-8")  # crea subito — SSE può iniziare a leggere
 
     try:
-        result = subprocess.run(
+        process = subprocess.Popen(
             cmd,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,   # merge stderr in stdout — un unico stream ordinato
             text=True,
-            timeout=3600,  # max 1 ora
-            cwd=Path(__file__).parent,  # cwd = cartella del progetto
+            cwd=Path(__file__).parent,
         )
-        jobs[job_id]["stdout"]     = result.stdout
-        jobs[job_id]["stderr"]     = result.stderr
-        jobs[job_id]["returncode"] = result.returncode
 
-        if result.returncode == 0:
+        # Timer: killa il processo dopo 1 ora
+        _timed_out = threading.Event()
+        def _kill():
+            _timed_out.set()
+            process.kill()
+        _timer = threading.Timer(3600, _kill)
+        _timer.start()
+
+        stdout_lines: list[str] = []
+        try:
+            with open(log_path, "a", encoding="utf-8") as _lf:
+                for line in process.stdout:
+                    stdout_lines.append(line)
+                    _lf.write(line)
+                    _lf.flush()
+            process.wait()
+        finally:
+            _timer.cancel()
+
+        if _timed_out.is_set():
+            raise subprocess.TimeoutExpired(cmd, 3600)
+
+        stdout_text = "".join(stdout_lines)
+        returncode  = process.returncode
+
+        with _jobs_lock:
+            jobs[job_id]["stdout"]     = stdout_text
+            jobs[job_id]["stderr"]     = "" if returncode == 0 else stdout_text[-3000:]
+            jobs[job_id]["returncode"] = returncode
+
+        if returncode == 0:
+            # Tenta compilazione PDF con pdflatex (se disponibile)
+            if shutil.which("pdflatex"):
+                main_tex = output_dir / "main.tex"
+                if main_tex.exists():
+                    for _ in range(2):
+                        try:
+                            subprocess.run(
+                                ["pdflatex", "-interaction=nonstopmode", "main.tex"],
+                                cwd=output_dir,
+                                timeout=120,
+                                capture_output=True,
+                            )
+                        except Exception:
+                            break
             # Crea ZIP dell'output per il download
             zip_path = OUTPUT_DIR / f"{job_id}.zip"
             with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -186,21 +374,54 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                             zf.write(f, Path(output_dir.name) / f.relative_to(output_dir))
                         except (FileNotFoundError, OSError):
                             pass  # file rimosso tra rglob e write
-            jobs[job_id]["status"]   = "done"
-            jobs[job_id]["zip_path"] = str(zip_path)
+            has_pdf = (output_dir / "main.pdf").exists()
+
+            # Estrai errori LaTeX da main.log
+            pdf_errors: list[str] = []
+            log_file = output_dir / "main.log"
+            if log_file.exists():
+                try:
+                    lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                    for i, ln in enumerate(lines):
+                        if ln.startswith("!"):
+                            # Includi la riga di errore + le 2 righe di contesto
+                            block = "\n".join(lines[i:i+3]).strip()
+                            pdf_errors.append(block)
+                        if len(pdf_errors) >= 10:
+                            break
+                except Exception:
+                    pass
+
+            with _jobs_lock:
+                jobs[job_id]["status"]     = "done"
+                jobs[job_id]["zip_path"]   = str(zip_path)
+                jobs[job_id]["has_pdf"]    = has_pdf
+                jobs[job_id]["pdf_errors"] = pdf_errors
+                _save_jobs()
         else:
-            jobs[job_id]["status"] = "error"
-        _save_jobs()
+            with _jobs_lock:
+                jobs[job_id]["status"] = "error"
+                _save_jobs()
 
     except subprocess.TimeoutExpired:
-        jobs[job_id]["status"] = "error"
-        jobs[job_id]["stderr"] = "Timeout: pipeline impiegato più di 1 ora"
-        _save_jobs()
+        try:
+            log_path.open("a", encoding="utf-8").write("\n[TIMEOUT — pipeline fermata dopo 1 ora]\n")
+        except Exception:
+            pass
+        with _jobs_lock:
+            jobs[job_id]["status"] = "error"
+            jobs[job_id]["stderr"] = "Timeout: pipeline impiegato più di 1 ora"
+            _save_jobs()
         shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
     except Exception as e:
-        jobs[job_id]["status"] = "error"
-        jobs[job_id]["stderr"] = str(e)
-        _save_jobs()
+        try:
+            log_path.open("a", encoding="utf-8").write(f"\n[ERRORE SERVER: {e}]\n")
+        except Exception:
+            pass
+        with _jobs_lock:
+            jobs[job_id]["status"] = "error"
+            jobs[job_id]["stderr"] = str(e)
+            _save_jobs()
         shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
 
 
@@ -211,6 +432,7 @@ async def run_pipeline(
     skip_ai: str = Form("false"),
     skip_ocr: str = Form("false"),
     no_context: str = Form("false"),
+    continue_on_error: str = Form("false"),
     whisper_model: str = Form("base"),
     output: str = Form("./output"),
     start_from: str = Form("0"),
@@ -224,9 +446,10 @@ async def run_pipeline(
     Il client fa polling su GET /job/{job_id} per sapere lo stato.
     """
     # Normalizza bool (FormData manda stringhe)
-    _skip_ai    = skip_ai.lower()    in ("true", "1", "yes")
-    _skip_ocr   = skip_ocr.lower()   in ("true", "1", "yes")
-    _no_context = no_context.lower()  in ("true", "1", "yes")
+    _skip_ai            = skip_ai.lower()           in ("true", "1", "yes")
+    _skip_ocr           = skip_ocr.lower()          in ("true", "1", "yes")
+    _no_context         = no_context.lower()         in ("true", "1", "yes")
+    _continue_on_error  = continue_on_error.lower()  in ("true", "1", "yes")
     # 0 o stringa non numerica → auto (usa state.json nella cartella output)
     _start_from = int(start_from) if start_from.isdigit() and int(start_from) > 0 else None
     _VALID_SUBJECTS = {"ingegneria","matematica","fisica","medicina","economia","giurisprudenza","generico"}
@@ -243,17 +466,42 @@ async def run_pipeline(
     lesson_dir.mkdir(parents=True, exist_ok=True)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Salva file caricati — Path(f.filename).name rimuove eventuali componenti
-    # di directory (es. "../../etc/passwd") prevenendo path traversal
+    # Valida e salva file caricati
+    # Path(f.filename).name rimuove componenti di directory (path traversal prevention)
     saved = []
+    validation_errors: list[str] = []
     for f in files:
         safe_name = Path(f.filename).name   # strip directory component
         if not safe_name:
             continue
+        ext = Path(safe_name).suffix.lower()
+        if ext not in _SUPPORTED_EXTENSIONS:
+            validation_errors.append(f"{safe_name}: estensione non supportata ({ext or 'nessuna'})")
+            continue
+        # Controlla dimensione (se il client ha inviato Content-Length per il file)
+        if hasattr(f, "size") and f.size is not None and f.size > MAX_FILE_SIZE:
+            validation_errors.append(
+                f"{safe_name}: file troppo grande ({f.size / 1e9:.1f} GB, max {MAX_FILE_SIZE // 1e9:.0f} GB)"
+            )
+            continue
+        # Leggi header (16 byte) per magic check, poi riavvolgi
+        header = await f.read(16)
+        if not header:
+            validation_errors.append(f"{safe_name}: file vuoto")
+            continue
+        warn = _check_file_header(safe_name, header)
+        if warn:
+            print(f"[upload warning] {warn}")
+        await f.seek(0)
         dest = lesson_dir / safe_name
         with open(dest, "wb") as out:
             shutil.copyfileobj(f.file, out)
         saved.append(safe_name)
+
+    # Se tutti i file sono stati rifiutati E non ci sono URL Teams → blocca subito
+    if validation_errors and not saved and not teams_url:
+        shutil.rmtree(lesson_dir, ignore_errors=True)
+        raise HTTPException(status_code=400, detail="; ".join(validation_errors))
 
     _continue_from = continue_from.strip()
 
@@ -261,21 +509,24 @@ async def run_pipeline(
     jobs[job_id] = {
         "status":        "queued",
         "title":         title,
+        "created_at":    datetime.datetime.now().isoformat(timespec="seconds"),
         "files":         saved,
         "subject":       _subject,
         "whisper_model": whisper_model,
         "no_context":    _no_context,
         "start_from":    _start_from,
-        "skip_ai":       _skip_ai,
-        "skip_ocr":      _skip_ocr,
-        "output_name":   output_name,
-        "output_dir":    str(output_dir),   # per leggere progress.json
-        "teams_urls":    teams_url,
-        "continue_from": _continue_from,
-        "stdout":        "",
-        "stderr":        "",
-        "returncode":    None,
-        "zip_path":      None,
+        "skip_ai":            _skip_ai,
+        "skip_ocr":           _skip_ocr,
+        "continue_on_error":  _continue_on_error,
+        "output_name":        output_name,
+        "output_dir":         str(output_dir),   # per leggere progress.json
+        "teams_urls":         teams_url,
+        "continue_from":      _continue_from,
+        "stdout":             "",
+        "stderr":             "",
+        "returncode":         None,
+        "zip_path":           None,
+        "has_pdf":            False,
     }
 
     _save_jobs()
@@ -286,15 +537,18 @@ async def run_pipeline(
         job_id, lesson_dir, output_dir,
         title, _skip_ai, _skip_ocr, whisper_model,
         _subject, _no_context, _start_from, teams_url or [],
-        _continue_from
+        _continue_from, _continue_on_error
     )
 
-    return JSONResponse({
+    resp: dict = {
         "job_id":  job_id,
         "status":  "queued",
         "files":   saved,
         "message": f"Pipeline avviata. Fai polling su /job/{job_id}"
-    })
+    }
+    if validation_errors:
+        resp["warnings"] = validation_errors  # file ignorati per estensione non supportata
+    return JSONResponse(resp)
 
 
 @app.get("/job/{job_id}")
@@ -339,33 +593,119 @@ async def get_job(job_id: str):
         "skip_ai":       job.get("skip_ai"),
         "skip_ocr":      job.get("skip_ocr"),
         "output_name":   job.get("output_name"),
-        "stdout":        job["stdout"],
-        "stderr":        job["stderr"],
-        "returncode":    job["returncode"],
-        "download":      f"/download/{job_id}" if job["status"] == "done" else None,
+        "stdout":             job["stdout"],
+        "stderr":             job["stderr"],
+        "returncode":         job["returncode"],
+        "has_pdf":            job.get("has_pdf", False),
+        "pdf_errors":         job.get("pdf_errors", []),
+        "download":           f"/download/{job_id}" if job["status"] == "done" else None,
+        "preview":            f"/preview/{job_id}"  if job["status"] == "done" else None,
     }
     return JSONResponse(response)
 
 
 @app.get("/download/{job_id}")
 async def download_output(job_id: str):
-    """Scarica lo ZIP con main.tex + lezione_NN.tex + images/."""
-    if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Job non trovato")
+    """Scarica lo ZIP con main.tex + lezione_NN.tex + images/.
+    Funziona anche se il job è stato rimosso dalla memoria (job eliminato ma ZIP su disco)."""
+    job   = jobs.get(job_id)
+    title = job["title"] if job else job_id
 
-    job = jobs[job_id]
-    if job["status"] != "done":
+    if job and job["status"] != "done":
         raise HTTPException(status_code=400, detail=f"Job non completato (stato: {job['status']})")
 
-    zip_path = Path(job["zip_path"])
+    # Prova prima il path salvato nel job, poi il path convenzionale su disco
+    zip_path = Path(job["zip_path"]) if job and job.get("zip_path") else OUTPUT_DIR / f"{job_id}.zip"
     if not zip_path.exists():
         raise HTTPException(status_code=404, detail="ZIP non trovato")
 
-    title_safe = "".join(c for c in job["title"] if c.isalnum() or c in "_- ").strip().replace(" ", "_")
+    title_safe = "".join(c for c in title if c.isalnum() or c in "_- ").strip().replace(" ", "_")
     return FileResponse(
         path=zip_path,
         media_type="application/zip",
         filename=f"appunti_{title_safe}.zip"
+    )
+
+
+@app.get("/preview/{job_id}")
+async def preview_latex(job_id: str):
+    """Restituisce il contenuto di main.tex per la preview nel browser.
+    Funziona anche dopo che il job è stato rimosso dalla memoria."""
+    job = jobs.get(job_id)
+
+    if job and job["status"] != "done":
+        raise HTTPException(status_code=400, detail=f"Job non completato (stato: {job['status']})")
+
+    # Ricostruisci il path se il job non è più in memoria
+    if job:
+        output_dir = Path(job["output_dir"])
+        title      = job["title"]
+        has_pdf    = job.get("has_pdf", False)
+    else:
+        # Cerca main.tex in OUTPUT_DIR/job_id/**/
+        candidates = list((OUTPUT_DIR / job_id).rglob("main.tex")) if (OUTPUT_DIR / job_id).exists() else []
+        if not candidates:
+            raise HTTPException(status_code=404, detail="Job non trovato e nessun output su disco")
+        output_dir = candidates[0].parent
+        title      = job_id
+        has_pdf    = (output_dir / "main.pdf").exists()
+
+    main_tex = output_dir / "main.tex"
+    if not main_tex.exists():
+        raise HTTPException(status_code=404, detail="main.tex non trovato")
+    return JSONResponse({
+        "job_id":  job_id,
+        "title":   title,
+        "has_pdf": has_pdf,
+        "content": main_tex.read_text(encoding="utf-8"),
+    })
+
+
+@app.get("/job/{job_id}/stream")
+async def stream_job_log(job_id: str, request: Request):
+    """
+    Server-Sent Events: streamma pipeline.log in tempo reale.
+    Il client apre un EventSource su questo endpoint per vedere il log live.
+    """
+    if job_id not in jobs:
+        raise HTTPException(status_code=404, detail="Job non trovato")
+
+    log_path = Path(jobs[job_id]["output_dir"]) / "pipeline.log"
+
+    async def generate():
+        offset = 0
+        # Invia header keep-alive subito
+        yield ": keep-alive\n\n"
+        while True:
+            if await request.is_disconnected():
+                break
+
+            # Leggi nuovo contenuto dal log
+            if log_path.exists():
+                try:
+                    content = log_path.read_text(encoding="utf-8", errors="replace")
+                except OSError:
+                    content = ""
+                if len(content) > offset:
+                    chunk = content[offset:]
+                    offset = len(content)
+                    for line in chunk.splitlines():
+                        line = line.rstrip()
+                        if line:
+                            yield f"data: {line}\n\n"
+
+            # Controlla se il job è finito
+            status = jobs.get(job_id, {}).get("status", "error")
+            if status in ("done", "error") and (not log_path.exists() or offset >= log_path.stat().st_size):
+                yield "data: [FINE]\n\n"
+                break
+
+            await asyncio.sleep(0.5)
+
+    return StreamingResponse(
+        generate(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 
@@ -382,13 +722,32 @@ async def serve_schema():
     return FileResponse(str(index_path), media_type="text/html")
 
 
+@app.get("/health")
+async def health():
+    """Stato del sistema: API key, strumenti di sistema disponibili."""
+    return JSONResponse({
+        "api_key":  bool(os.environ.get("ANTHROPIC_API_KEY")),
+        "ffmpeg":   bool(shutil.which("ffmpeg")),
+        "pdflatex": bool(shutil.which("pdflatex")),
+        "whisper":  True,  # se il server è avviato, whisper è installato nel venv
+    })
+
+
 @app.get("/jobs")
 async def list_jobs():
-    """Lista tutti i job (utile per debug)."""
-    return JSONResponse({
-        jid: {"status": j["status"], "title": j["title"], "files": j["files"]}
-        for jid, j in list(jobs.items())  # snapshot per evitare RuntimeError su dict cambiato
-    })
+    """Lista tutti i job con metadati completi (per history nel frontend)."""
+    result = {}
+    for jid, j in list(jobs.items()):
+        zip_p = OUTPUT_DIR / f"{jid}.zip"
+        result[jid] = {
+            "status":     j["status"],
+            "title":      j["title"],
+            "files":      j.get("files", []),
+            "created_at": j.get("created_at", ""),
+            "has_pdf":    j.get("has_pdf", False),
+            "has_zip":    zip_p.exists(),
+        }
+    return JSONResponse(result)
 
 
 @app.delete("/job/{job_id}")
@@ -398,8 +757,11 @@ async def delete_job(job_id: str, full: bool = False):
     - Default (full=false): rimuove solo uploads/ (file originali), mantiene output/ e zip.
     - full=true: rimuove tutto inclusa la cartella output con tex e immagini.
     """
-    if job_id not in jobs:
-        raise HTTPException(status_code=404, detail="Job non trovato")
+    with _jobs_lock:
+        if job_id not in jobs:
+            raise HTTPException(status_code=404, detail="Job non trovato")
+        del jobs[job_id]
+        _save_jobs()
     # Rimuovi sempre: file caricati dall'utente (non servono più dopo la pipeline)
     shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
     # Rimuovi zip e output solo se richiesto esplicitamente
@@ -408,6 +770,4 @@ async def delete_job(job_id: str, full: bool = False):
         if zip_p.exists():
             zip_p.unlink()
         shutil.rmtree(OUTPUT_DIR / job_id, ignore_errors=True)
-    del jobs[job_id]
-    _save_jobs()
     return JSONResponse({"deleted": job_id, "output_kept": not full})
