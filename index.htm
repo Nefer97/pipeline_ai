@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Appunti AI — Pipeline</title>
 <link rel="stylesheet" href="assets/css/index.css">
+<script>
+// Applica tema prima del paint per evitare flash
+(function(){
+  var t=localStorage.getItem('theme')||
+    (window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  if(t==='light') document.documentElement.setAttribute('data-theme','light');
+})();
+</script>
 </head>
 <body>
 <nav class="navbar">
@@ -13,6 +21,7 @@
     <a class="nav-link active" href=""><span class="nd"></span>Pipeline</a>
     <a class="nav-link" href="schema.htm"><span class="nd"></span>Schema</a>
   </div>
+  <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambia tema"></button>
 </nav>
 <div class="container">
   <header>
@@ -449,6 +458,12 @@ function _timeAgo(iso){
   return`${Math.round(diff/86400)} gg fa`;
 }
 
+function toggleTheme(){
+  const html=document.documentElement;
+  const isLight=html.getAttribute('data-theme')==='light';
+  html.setAttribute('data-theme',isLight?'dark':'light');
+  localStorage.setItem('theme',isLight?'dark':'light');
+}
 function toggleHistory(){
   const body=document.getElementById('historyBody');
   const arrow=document.getElementById('historyArrow');
