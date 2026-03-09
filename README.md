@@ -292,6 +292,12 @@ Il frontend permette di:
 - Impostare **titolo** (obbligatorio), Claude on/off, OCR, contesto corso, modello Whisper
 - Avviare la pipeline e monitorare lo stato in tempo reale con percentuale
 - Scaricare lo `.zip` con il risultato quando pronto (cleanup automatico dopo download)
+- Consultare le **lezioni precedenti** (history panel) con accesso diretto a ZIP e continuazione
+- Vedere lo **stato dei tool di sistema** (API key, ffmpeg, pdflatex) tramite badge in tempo reale
+- Impostare la **API key Claude** direttamente dall'interfaccia (persiste su `settings.json`)
+- Configurare la **retention degli output** (TTL giorni) nelle opzioni avanzate
+- Visualizzare gli **errori pdflatex** in un pannello collassabile quando la compilazione fallisce
+- Cambiare tra **tema chiaro e scuro** con il pulsante in navbar (preferenza salvata in localStorage)
 
 > Il campo **Titolo corso / lezione** è obbligatorio — il pulsante Start rimane disattivo senza un titolo. La cartella di output viene generata automaticamente come slug del titolo (es. `"Digital Control 2"` → `./digital_control_2`).
 
@@ -306,10 +312,13 @@ i dettagli del modulo corrispondente.
 | `/` | GET | Serve `index.htm` (pipeline frontend) |
 | `/schema.htm` | GET | Serve `schema.htm` (diagramma architettura interattivo) |
 | `/run-pipeline` | POST | Avvia pipeline, ritorna `job_id` immediatamente. Parametri: `title`, `files[]`, `teams_url[]`, `skip_ai`, `skip_ocr`, `no_context`, `whisper_model`, `output`, `start_from`, `subject`, `continue_from` |
-| `/job/{job_id}` | GET | Stato del job: `queued / running / done / error` + progress, step, detail |
+| `/job/{job_id}` | GET | Stato del job: `queued / running / done / error` + progress, step, detail, pdf_errors |
 | `/download/{job_id}` | GET | Scarica lo `.zip` con i file `.tex` + `images/` |
 | `/job/{job_id}` | DELETE | Elimina uploads temporanei. Aggiungere `?full=true` per eliminare anche zip e output definitivi |
-| `/jobs` | GET | Lista tutti i job (debug) |
+| `/jobs` | GET | Lista tutti i job con `created_at`, `has_pdf`, `has_zip` |
+| `/health` | GET | Stato dei tool di sistema: `api_key`, `ffmpeg`, `pdflatex`, `whisper` |
+| `/settings` | GET | Configurazione corrente: `api_key` (bool), `ttl_days` |
+| `/settings` | POST | Salva `api_key` e/o `ttl_days` (1–365 giorni) — persiste su `settings.json` |
 | `/docs` | GET | Documentazione interattiva FastAPI |
 
 ### Accesso remoto
@@ -340,7 +349,7 @@ Dopo aver fatto login con lo stesso account su entrambi i dispositivi, il server
 | Audio | `.mp3` `.wav` `.m4a` `.ogg` `.flac` | Whisper → testo con timestamp [MM:SS] |
 | Video | `.mp4` `.mkv` `.avi` `.mov` `.webm` | ffmpeg → mp3 → Whisper |
 | Teams URL | URL manifest (incollato in UI) | server.py → ffmpeg → mp3 mono → Whisper |
-| Slide | `.pptx` | extractor → testo + OMML + immagini; slide_renderer → PNG per slide |
+| Slide | `.pptx` | extractor → testo + OMML + immagini + **tabelle**; slide_renderer → PNG per slide |
 | Word | `.docx` | python-docx → testo plain |
 | PDF | `.pdf` | pdfplumber → testo; pytesseract fallback se 0 testo (PDF scansionato); pdf_renderer → PNG per pagina |
 | Testo | `.txt` `.md` `.rtf` | lettura diretta (RTF con strip automatico dei tag) |
@@ -378,6 +387,8 @@ Dalla lezione successiva in poi, il prompt include:
 - Un blocco `## RACCORDO CON LEZIONE PRECEDENTE` che indica esattamente dove il professore si è fermato nell'ultima lezione, con istruzione a iniziare da quel punto
 
 Si disabilita con `--no-context`.
+
+**Pruning automatico su corsi lunghi:** le lezioni oltre le ultime 10 vengono compresse (si conservano solo numero, titolo e ultimo argomento, rimuovendo key_concepts/definitions/symbols). I simboli globali sono limitati a 50 voci. Questo evita che `corso_context.json` cresca illimitatamente su corsi da 30+ lezioni.
 
 **Compressione automatica** in base ai token stimati:
 
@@ -472,7 +483,13 @@ Se i PNG esistono già in `images/`, non vengono rirenderizzati. Per forzare il 
 Il frontend accetta URL di videomanifest Teams (es. `.m3u8` o URL stream). Incollati nella zona Teams dell'UI, vengono inviati a `server.py` che li scarica via `ffmpeg -i <url> -vn ... .mp3` prima di avviare la pipeline. Non è necessario scaricare manualmente il video. `TeamsHack.py` rimane disponibile anche come script standalone da terminale con modalità video+mp3 e contatori automatici.
 
 **pix2tex e formule:**
-Le formule nei file `.pptx` vengono gestite in due modi distinti: quelle create con l'editor equazioni di PowerPoint (OMML) vengono convertite direttamente dall'XML tramite `omml2latex.py` — zero OCR, qualità alta. Le formule inserite come immagini (screenshot, foto di lavagna, PNG incollati) vengono rilevate da `formula_detector.py` in base ad aspect ratio, sfondo chiaro e bassa saturazione, e poi passate a pix2tex. Usa `--skip-ocr` per saltare questo step e velocizzare l'esecuzione. I risultati sono salvati in cache `.ocr_cache.json` accanto all'immagine.
+Le formule nei file `.pptx` vengono gestite in due modi distinti: quelle create con l'editor equazioni di PowerPoint (OMML) vengono convertite direttamente dall'XML tramite `omml2latex.py` — zero OCR, qualità alta. Le formule inserite come immagini (screenshot, foto di lavagna, PNG incollati) vengono rilevate da `formula_detector.py` in base ad aspect ratio (≥ 0.5, incluse matrici verticali), sfondo chiaro e bassa saturazione, e poi passate a pix2tex. Usa `--skip-ocr` per saltare questo step e velocizzare l'esecuzione. I risultati sono salvati in cache `.ocr_cache.json` accanto all'immagine.
+
+**Tabelle PPTX:**
+Le tabelle nelle slide PowerPoint vengono estratte automaticamente da `extractor.py` e convertite in `\begin{tabular}` LaTeX con escape dei caratteri speciali nelle celle. La prima riga è trattata come intestazione (doppio `\hline`). Il LaTeX della tabella viene inviato a Claude nel prompt — Claude può così migliorarne la formattazione in base al contesto della lezione.
+
+**Validazione LaTeX pre-compilazione:**
+Prima dei due pass `pdflatex` che generano il PDF finale, il server esegue un pass in modalità `--draftmode` (nessun PDF prodotto, solo analisi degli errori). Questo aggiorna `main.log` prima della compilazione reale: gli errori vengono rilevati e surfacati nell'UI anche se i pass successivi producono un PDF parziale.
 
 **Moduli opzionali:**
 Se `extractor.py`, `slide_renderer.py`, `pdf_renderer.py` e gli altri moduli collega non sono presenti, la pipeline usa un fallback base che funziona comunque. La qualità dell'output (immagini slide, formule OMML) è però significativamente migliore con i moduli completi.
@@ -513,3 +530,7 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | Prima esecuzione pix2tex scarica pesi | Download automatico ~116MB | Attendi il download; successive esecuzioni usano la cache |
 | Raccordo inter-lezione non attivo | Lezione precedente senza contesto | Assicurati di usare il campo "Continua da job" o che `corso_context.json` esista nell'output |
 | `RuntimeError: "slow_conv2d_cpu" not implemented for 'Half'` o `fp16 is not supported on CPU` | Whisper prova fp16 su CPU senza CUDA | Aggiorna il codice — il fix è già incluso (imposta `fp16=False` automaticamente su CPU) |
+| PDF non compilato — badge rosso in UI | Errori LaTeX nel sorgente generato | Clicca sul badge "✗ PDF non compilato" per vedere gli errori estratti da `main.log`; scarica lo ZIP per il log completo |
+| Tabelle nelle slide non compaiono nel LaTeX | python-pptx non trova `shape.table` | Verifica che la tabella sia un oggetto tabella nativo PPTX (non uno screenshot); le tabelle embedded come immagini non sono estraibili |
+| `corso_context.json` molto grande su corsi lunghi | Accumulo dati lezione per lezione | Il pruning automatico mantiene solo le ultime 10 lezioni complete; le più vecchie conservano solo titolo e ultimo argomento |
+| TTL output non cambia dopo modifica in UI | Il campo è nelle opzioni avanzate | Espandi "▾ opzioni avanzate" e modifica il campo "Retention output" — il salvataggio è automatico con feedback "✓ salvato" |
