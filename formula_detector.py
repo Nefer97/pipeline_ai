@@ -31,10 +31,12 @@ def is_formula_image(image_path: str) -> bool:
         if w < 20 or h < 10:
             return False
 
-        # --- Criterio 1: aspect ratio orizzontale ---
-        # Le formule tendono ad essere più larghe che alte
+        # --- Criterio 1: aspect ratio ---
+        # Le formule inline sono orizzontali (aspect > 1.2), ma matrici e sistemi
+        # possono essere quasi quadrate o verticali. Accettiamo aspect ≥ 0.5 per
+        # includere formule verticali come matrici NxN.
         aspect = w / h if h > 0 else 0
-        if aspect < 1.2:
+        if aspect < 0.5:
             return False
 
         # --- Criterio 2: non troppo grande (non è un grafico full-slide) ---

@@ -278,9 +278,15 @@ def _build_pdf_latex_skeleton(pdf_path: Path, pages_data: list[dict],
         list(page_text_map.keys()) + list(page_images.keys())
     ))
 
-    # Pattern per righe-footer da rimuovere (email, URL soli, pagine numerate sole)
+    # Pattern per righe-footer da rimuovere (email, URL soli, pagine numerate sole).
+    # La fraction pattern è separata e richiede numeri ≤ 4 cifre per evitare di
+    # rimuovere contenuto matematico come "1/2" in formule.
     _footer_line = re.compile(
-        r'^\s*([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}|https?://\S+|\d+\s*/\s*\d+)\s*$'
+        r'^\s*(?:'
+        r'[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}'  # email
+        r'|https?://\S+'                                         # URL
+        r'|\d{1,4}\s*/\s*\d{1,4}'                               # pagina "3 / 47"
+        r')\s*$'
     )
 
     def _clean_page_text(t: str) -> str:

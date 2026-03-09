@@ -553,7 +553,7 @@ def update_course_context(
     )
     all_sections = [
         m.group(1).strip()
-        for m in re.finditer(r'\\(?:sub)*section\{([^}]+)\}', latex_content)
+        for m in re.finditer(r'\\(?:sub)*section\*?\{([^}]+)\}', latex_content)
         if not _skip_titles.match(m.group(1).strip())
     ]
     last_verbal_topic = all_sections[-1] if all_sections else ""

@@ -1687,8 +1687,14 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         lines = [l for l in text.splitlines() if l.strip()]
         ts_count = sum(1 for l in lines if _ts_pat.match(l.strip()))
 
-        # Segnale 1: timestamp
-        has_timestamps  = len(lines) > 0 and ts_count / len(lines) >= 0.10
+        # Segnale 1: timestamp — threshold adattivo: file piccoli richiedono
+        # densità più alta per evitare falsi positivi su note con poche righe
+        if len(lines) == 0:
+            has_timestamps = False
+        elif len(lines) <= 10:
+            has_timestamps = ts_count / len(lines) >= 0.30  # ≥3 ts su 10 righe
+        else:
+            has_timestamps = ts_count / len(lines) >= 0.10
         # Segnale 2: nome file suggerisce trascrizione
         has_kw_name     = bool(_name_kw.search(tf.stem))
         # Segnale 3: struttura presente + nessun audio reale

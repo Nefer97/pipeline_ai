@@ -149,19 +149,21 @@ def _load_cache(image_path: str) -> Optional[str]:
         return None
     try:
         data = json.loads(cp.read_text(encoding="utf-8"))
-        # Verifica che l'immagine non sia cambiata
+        # Verifica immagine invariata e versione cache compatibile
         cur_md5 = _md5_file(image_path)
-        if data.get("md5") == cur_md5:
+        if data.get("md5") == cur_md5 and data.get("v", 1) >= _CACHE_VERSION:
             return data.get("latex")  # può essere None (fallback cached)
     except Exception:
         pass
     return None
 
 
+_CACHE_VERSION = 2  # incrementa quando l'algoritmo OCR cambia significativamente
+
 def _save_cache(image_path: str, latex: Optional[str]):
     cp = _cache_path(image_path)
     try:
-        data = {"md5": _md5_file(image_path), "latex": latex}
+        data = {"md5": _md5_file(image_path), "latex": latex, "v": _CACHE_VERSION}
         cp.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
     except Exception:
         pass

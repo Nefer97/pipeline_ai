@@ -61,24 +61,31 @@ def _format_text_block(text: str) -> str:
     """Formatta un blocco di testo in LaTeX."""
     lines = text.strip().split('\n')
     result = []
+    in_itemize = False  # flag esplicito — evita doppio \begin{itemize} dopo riga vuota
     for line in lines:
         line = line.strip()
         if not line:
-            result.append('')
+            if in_itemize:
+                result.append(r'\end{itemize}')
+                result.append('')
+                in_itemize = False
+            else:
+                result.append('')
             continue
         # Bullet point
         if line.startswith(('•', '-', '*', '–')):
-            if not result or result[-1] != r'\begin{itemize}':
+            if not in_itemize:
                 result.append(r'\begin{itemize}')
+                in_itemize = True
             result.append(r'  \item ' + _escape_latex(line.lstrip('•-*– ').strip()))
         else:
-            # Chiudi itemize se era aperto
-            if result and result[-1].startswith(r'  \item'):
+            if in_itemize:
                 result.append(r'\end{itemize}')
                 result.append('')
+                in_itemize = False
             result.append(_escape_latex(line))
     # Chiudi itemize finale se aperto
-    if result and result[-1].startswith(r'  \item'):
+    if in_itemize:
         result.append(r'\end{itemize}')
     return '\n'.join(result)
 

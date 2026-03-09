@@ -345,13 +345,16 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
         returncode  = process.returncode
 
         with _jobs_lock:
-            jobs[job_id]["stdout"]     = stdout_text
-            jobs[job_id]["stderr"]     = "" if returncode == 0 else stdout_text[-3000:]
-            jobs[job_id]["returncode"] = returncode
+            jobs[job_id]["stdout"]      = stdout_text
+            # stderr: preview 3000 char + testo completo per debug
+            jobs[job_id]["stderr"]      = "" if returncode == 0 else stdout_text[-3000:]
+            jobs[job_id]["stderr_full"] = "" if returncode == 0 else stdout_text
+            jobs[job_id]["returncode"]  = returncode
 
         if returncode == 0:
             # Tenta compilazione PDF con pdflatex (se disponibile)
-            if shutil.which("pdflatex"):
+            _pdflatex_available = bool(shutil.which("pdflatex"))
+            if _pdflatex_available:
                 main_tex = output_dir / "main.tex"
                 if main_tex.exists():
                     for _ in range(2):
@@ -378,19 +381,25 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
 
             # Estrai errori LaTeX da main.log
             pdf_errors: list[str] = []
-            log_file = output_dir / "main.log"
-            if log_file.exists():
-                try:
-                    lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
-                    for i, ln in enumerate(lines):
-                        if ln.startswith("!"):
-                            # Includi la riga di errore + le 2 righe di contesto
-                            block = "\n".join(lines[i:i+3]).strip()
-                            pdf_errors.append(block)
-                        if len(pdf_errors) >= 10:
-                            break
-                except Exception:
-                    pass
+            if not _pdflatex_available:
+                pdf_errors = ["pdflatex non installato — PDF non può essere generato.\n"
+                              "Installa: sudo apt install texlive-latex-base texlive-latex-recommended "
+                              "texlive-latex-extra texlive-lang-italian texlive-fonts-recommended"]
+            elif not has_pdf:
+                log_file = output_dir / "main.log"
+                if log_file.exists():
+                    try:
+                        lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                        for i, ln in enumerate(lines):
+                            if ln.startswith("!"):
+                                block = "\n".join(lines[i:i+3]).strip()
+                                pdf_errors.append(block)
+                            if len(pdf_errors) >= 10:
+                                break
+                    except Exception:
+                        pass
+                if not pdf_errors:
+                    pdf_errors = ["pdflatex ha fallito senza errori espliciti — controlla main.log nell'archivio ZIP"]
 
             with _jobs_lock:
                 jobs[job_id]["status"]     = "done"

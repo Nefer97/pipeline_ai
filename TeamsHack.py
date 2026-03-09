@@ -46,10 +46,12 @@ def salva_contatori(contatori):
 
 
 def clean_url(url):
-    """Rimuove &altTranscode=1 e tutto quello che segue"""
-    match = re.search(r'&altTranscode=1', url)
-    if match:
-        return url[:match.start()]
+    """Rimuove solo il parametro altTranscode=1, preservando gli altri parametri."""
+    # Rimuove &altTranscode=1 (o ?altTranscode=1) senza tagliare i parametri successivi
+    url = re.sub(r'[&?]altTranscode=1(?=&|$)', '', url)
+    # Ripulisce eventuali && residui o ? rimasto senza valore
+    url = re.sub(r'&&+', '&', url)
+    url = re.sub(r'\?&', '?', url)
     return url
 
 

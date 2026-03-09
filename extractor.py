@@ -220,9 +220,21 @@ def extract_slides(pptx_path: str, image_output_dir: str) -> list:
             if slide.has_notes_slide:
                 notes_tf = slide.notes_slide.notes_text_frame
                 if notes_tf:
-                    # Filtra il placeholder "Click to edit Master text styles" e simili
+                    # Filtra placeholder PowerPoint in varie lingue e simboli decorativi
                     raw = notes_tf.text.strip()
-                    if raw and not raw.lower().startswith("click to edit"):
+                    _placeholder_prefixes = (
+                        "click to edit", "fare clic per modificare",
+                        "haga clic para editar", "zum bearbeiten klicken",
+                        "cliquez pour modifier",
+                    )
+                    _stripped = raw.replace("*","").replace("—","").replace("-","").replace(".","").strip()
+                    _is_placeholder = (
+                        not raw
+                        or raw.lower().startswith(_placeholder_prefixes)
+                        or _stripped == ""
+                        or len(raw) < 3
+                    )
+                    if not _is_placeholder:
                         notes = raw
         except Exception:
             pass
