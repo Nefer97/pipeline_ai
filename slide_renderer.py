@@ -161,11 +161,15 @@ def _render_with_pptx_pillow(pptx_path: Path, images_dir: Path) -> dict:
                         try:
                             img_bytes = shape.image.blob
                             embedded  = Image.open(io.BytesIO(img_bytes)).convert("RGBA")
-                            embedded  = embedded.resize(
-                                (max(1, width), max(1, height)),
-                                Image.LANCZOS
-                            )
-                            canvas.paste(embedded, (left, top), embedded)
+                            # Preserva aspect ratio: scala dentro il bounding box
+                            if width > 0 and height > 0:
+                                embedded.thumbnail((width, height), Image.LANCZOS)
+                                # Centra nell'area della shape
+                                paste_x = left + (width  - embedded.width)  // 2
+                                paste_y = top  + (height - embedded.height) // 2
+                            else:
+                                paste_x, paste_y = left, top
+                            canvas.paste(embedded, (paste_x, paste_y), embedded)
                         except Exception:
                             # Box grigio placeholder per immagine non renderizzabile
                             draw.rectangle(
@@ -176,36 +180,73 @@ def _render_with_pptx_pillow(pptx_path: Path, images_dir: Path) -> dict:
 
                     # Testo
                     if shape.has_text_frame:
-                        # Box di sfondo leggero per il testo
-                        if width > 0 and height > 0:
-                            draw.rectangle(
-                                [left, top, left+width, top+height],
-                                fill=None, outline=None
-                            )
-                        # Scrivi il testo
-                        try:
-                            font = ImageFont.load_default()
-                        except Exception:
-                            font = None
-
                         y_offset = top + 4
                         for para in shape.text_frame.paragraphs:
                             line = "".join(r.text for r in para.runs).strip()
                             if not line:
                                 y_offset += 8
                                 continue
-                            # Tronca se troppo lungo per la box
-                            max_chars = max(10, width // 7) if width > 0 else 60
-                            if len(line) > max_chars:
-                                line = line[:max_chars] + "…"
-                            if font:
-                                draw.text((left + 4, y_offset), line,
-                                          fill="black", font=font)
-                            else:
-                                draw.text((left + 4, y_offset), line, fill="black")
-                            y_offset += 14
-                            if y_offset > top + height:
-                                break
+
+                            # Dimensione font: leggi dai run pptx, scala a DPI
+                            pt_size = 12
+                            try:
+                                for run in para.runs:
+                                    if run.font.size:
+                                        pt_size = int(run.font.size.pt)
+                                        break
+                                if para.runs and para.runs[0].font.size is None:
+                                    # Prova dal placeholder / theme
+                                    if shape.text_frame.paragraphs[0].runs:
+                                        pass  # usa il default
+                            except Exception:
+                                pass
+                            font_px = max(8, int(pt_size * DPI / 72))
+
+                            # Colore testo: leggi dal primo run con colore esplicito
+                            text_color = "black"
+                            try:
+                                for run in para.runs:
+                                    if run.font.color and run.font.color.type is not None:
+                                        rgb = run.font.color.rgb
+                                        text_color = (rgb[0], rgb[1], rgb[2])
+                                        break
+                            except Exception:
+                                pass
+
+                            # Carica font scalato
+                            try:
+                                font = ImageFont.load_default(size=font_px)
+                            except TypeError:
+                                # Pillow < 10 non supporta size=
+                                font = ImageFont.load_default()
+
+                            # Word-wrap: spezza la riga per stare nella box
+                            box_w = width - 8 if width > 8 else slide_w_px - 8
+                            words  = line.split()
+                            wrapped_lines = []
+                            current = ""
+                            for word in words:
+                                test = (current + " " + word).strip()
+                                try:
+                                    tw = draw.textlength(test, font=font)
+                                except AttributeError:
+                                    tw = len(test) * font_px * 0.6  # stima
+                                if tw <= box_w or not current:
+                                    current = test
+                                else:
+                                    wrapped_lines.append(current)
+                                    current = word
+                            if current:
+                                wrapped_lines.append(current)
+
+                            line_h = font_px + 3
+                            for wl in wrapped_lines:
+                                if height > 0 and y_offset > top + height - line_h:
+                                    break
+                                draw.text((left + 4, y_offset), wl,
+                                          fill=text_color, font=font)
+                                y_offset += line_h
+                            y_offset += 2  # piccola spaziatura tra paragrafi
 
                 except Exception:
                     pass  # Singola shape fallita → continua con le altre

@@ -181,23 +181,26 @@ def _detect_title(lines: list[str], idx: int) -> bool:
     if not line:
         return False
 
-    # Troppo lunga per essere un titolo
-    if len(line) > 80:
-        return False
-
-    # Tutta maiuscola (esclusi numeri e punteggiatura)
+    # Tutta maiuscola (esclusi numeri e punteggiatura): accetta fino a 150 char
     alpha = [c for c in line if c.isalpha()]
     if alpha and all(c.isupper() for c in alpha):
-        return True
+        return len(line) <= 150
+
+    # Troppo lunga per le euristiche basate su posizione → non è un titolo
+    if len(line) > 100:
+        return False
 
     # Seguita da riga vuota (paragrafo separato)
     if idx + 1 < len(lines) and not lines[idx + 1].strip():
-        # Ma deve avere almeno 3 parole per non essere un bullet
+        # Deve avere almeno 3 parole per non essere un bullet point
         if len(line.split()) >= 3:
             return True
 
-    # Inizia con numero di sezione tipo "1.", "2.1", "A."
-    if re.match(r'^(\d+\.)+\s+\w', line) or re.match(r'^[A-Z]\.\s+\w', line):
+    # Inizia con numero/lettera di sezione:
+    #   "1.", "2.1", "A."  (forma classica con punto)
+    #   "1)", "A)"          (forma con parentesi chiusa)
+    #   "1.2)"              (misto)
+    if re.match(r'^(?:[A-Z]|(?:\d+\.)*\d+)[.)]\s+\w', line):
         return True
 
     return False
