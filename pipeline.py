@@ -245,6 +245,9 @@ def process_pptx_full(pptx_path: Path, images_dir: Path, skip_ocr: bool = False)
                 f = getattr(obj, "latex_result", "")
                 if f:
                     lines.append(f"[FORMULA: {f}]")
+            elif obj.obj_type == "table" and obj.content.strip():
+                # Invia la tabella LaTeX a Claude — la capisce e la riusa/migliora
+                lines.append(f"[TABELLA:\n{obj.content}\n]")
         # Note del presentatore: fonte preziosa spesso ignorata
         if slide.notes:
             lines.append(f"[NOTE PRESENTER: {slide.notes}]")

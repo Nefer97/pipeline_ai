@@ -571,6 +571,22 @@ def update_course_context(
     ctx["lessons"].sort(key=lambda l: l.get("number", 0))
     ctx["global_symbols"].update(extracted["symbols"])
 
+    # ── Pruning: evita crescita illimitata su corsi lunghi ──────────────────
+    # Lezioni vecchie (oltre le ultime 10): teniamo solo number/title/last_verbal_topic
+    # Le ultime 10 rimangono complete per il contesto diretto.
+    _FULL_LESSONS_KEEP = 10
+    if len(ctx["lessons"]) > _FULL_LESSONS_KEEP:
+        for les in ctx["lessons"][:-_FULL_LESSONS_KEEP]:
+            les.pop("key_concepts", None)
+            les.pop("definitions",  None)
+            les.pop("symbols",      None)
+    # global_symbols: tieni solo gli ultimi 50 simboli (dizionario preserva inserimento)
+    _MAX_SYMBOLS = 50
+    if len(ctx["global_symbols"]) > _MAX_SYMBOLS:
+        ctx["global_symbols"] = dict(
+            list(ctx["global_symbols"].items())[-_MAX_SYMBOLS:]
+        )
+
     p = Path(context_path)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(ctx, ensure_ascii=False, indent=2), encoding="utf-8")

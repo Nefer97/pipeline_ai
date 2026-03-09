@@ -143,6 +143,51 @@ def _extract_text(shape) -> str:
     return ''
 
 
+def _extract_table_latex(table) -> str:
+    """
+    Converte una tabella python-pptx in LaTeX \\begin{tabular}.
+    Ritorna stringa LaTeX o '' se la tabella è vuota/non leggibile.
+    """
+    try:
+        rows_data = []
+        for row in table.rows:
+            cells = []
+            for cell in row.cells:
+                text = cell.text_frame.text.strip().replace("\n", " ") if cell.text_frame else ""
+                # Escape caratteri speciali LaTeX nel contenuto della cella
+                for old, new in [("&", "\\&"), ("%", "\\%"), ("$", "\\$"),
+                                  ("#", "\\#"), ("_", "\\_"), ("{", "\\{"), ("}", "\\}")]:
+                    text = text.replace(old, new)
+                cells.append(text)
+            rows_data.append(cells)
+
+        if not rows_data:
+            return ""
+
+        n_cols = max(len(r) for r in rows_data)
+        if n_cols == 0:
+            return ""
+
+        col_spec = "|" + "l|" * n_cols
+
+        lines = [
+            "\\begin{center}",
+            f"\\begin{{tabular}}{{{col_spec}}}",
+            "\\hline",
+        ]
+        for i, row in enumerate(rows_data):
+            # Padding celle mancanti
+            padded = row + [""] * (n_cols - len(row))
+            lines.append(" & ".join(padded) + " \\\\")
+            # Riga separatrice dopo intestazione (prima riga) e alla fine
+            if i == 0 or i == len(rows_data) - 1:
+                lines.append("\\hline")
+        lines += ["\\end{tabular}", "\\end{center}"]
+        return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 def extract_slides(pptx_path: str, image_output_dir: str) -> list:
     """
     Estrae tutti gli oggetti da ogni slide.
@@ -201,6 +246,21 @@ def extract_slides(pptx_path: str, image_output_dir: str) -> list:
                 except Exception as e:
                     print(f"  [WARN] Immagine non estratta slide {slide_idx}: {e}")
                 continue
+
+            # --- Tabella ---
+            try:
+                from pptx.enum.shapes import PP_PLACEHOLDER
+                if shape.has_table:
+                    table_latex = _extract_table_latex(shape.table)
+                    if table_latex:
+                        objects.append(SlideObject(
+                            obj_type='table',
+                            content=table_latex,
+                            top=top, left=left, width=width, height=height
+                        ))
+                    continue
+            except Exception:
+                pass
 
             # --- Testo ---
             text = _extract_text(shape)

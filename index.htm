@@ -167,6 +167,14 @@
             <div style="margin:2px 0 -2px;">
               <button type="button" id="advancedToggle" onclick="toggleAdvanced()" style="background:none;border:none;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--muted);padding:0;opacity:.6;">▸ opzioni avanzate</button>
             </div>
+            <div class="config-field" style="gap:6px;display:none;" id="ttl-field">
+              <label>Retention output <span style="opacity:.6">(giorni prima della cancellazione automatica)</span></label>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="number" id="opt-ttl" min="1" max="365" value="7" style="border-left-color:var(--c3);width:90px;" oninput="saveTtl()">
+                <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);">giorni</span>
+                <span id="ttlSaved" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--c3);display:none;">✓ salvato</span>
+              </div>
+            </div>
             <div class="config-field" style="gap:6px;display:none;" id="startfrom-field">
               <label>Start-from <span style="opacity:.6">(0 = auto da state.json)</span></label>
               <input type="number" id="opt-startfrom" value="0" min="0" style="border-left-color:var(--c2)">
@@ -424,6 +432,11 @@ async function _checkHealth(){
     html+=sysOk(h.ffmpeg,   h.ffmpeg   ?'✓ ffmpeg'  :'✗ ffmpeg mancante');
     html+=sysOk(h.pdflatex, h.pdflatex ?'✓ pdflatex':'✗ pdflatex mancante');
     container.innerHTML=html;
+    // Carica TTL corrente
+    fetch(`${API}/settings`).then(r=>r.json()).then(s=>{
+      const el=document.getElementById('opt-ttl');
+      if(el&&s.ttl_days)el.value=s.ttl_days;
+    }).catch(()=>{});
     // Tasto Salva anche con Invio nel campo input
     document.getElementById('apiKeyInput')?.addEventListener('keydown',e=>{if(e.key==='Enter')_saveApiKey();});
     // Gestione toggle Claude
@@ -600,12 +613,25 @@ function _startLogStream(jobId){
 }
 
 function toggleAdvanced(){
-  const field=document.getElementById('startfrom-field');
+  const fields=['startfrom-field','ttl-field'];
   const btn=document.getElementById('advancedToggle');
-  const open=field.style.display==='none';
-  field.style.display=open?'flex':'none';
+  const open=document.getElementById('startfrom-field').style.display==='none';
+  fields.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=open?'flex':'none';});
   btn.textContent=open?'▾ opzioni avanzate':'▸ opzioni avanzate';
   btn.style.opacity=open?'1':'.6';
+}
+let _ttlTimer=null;
+function saveTtl(){
+  clearTimeout(_ttlTimer);
+  _ttlTimer=setTimeout(()=>{
+    const v=parseInt(document.getElementById('opt-ttl').value);
+    if(!v||v<1||v>365)return;
+    fetch(`${API}/settings`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ttl_days:v})})
+      .then(r=>r.json()).then(()=>{
+        const el=document.getElementById('ttlSaved');
+        if(el){el.style.display='inline';setTimeout(()=>el.style.display='none',2000);}
+      }).catch(()=>{});
+  },800);
 }
 function toggleLatexPreview(){
   const body=document.getElementById('latexPreviewBody');

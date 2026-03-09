@@ -147,6 +147,12 @@ def build_latex(slides: list, output_path: str, title: str = "Note del Corso", i
                         lines.append(r'\end{equation}')
                 lines.append('')
 
+            elif obj.obj_type == 'table':
+                # Tabella già in formato LaTeX prodotto da _extract_table_latex
+                if obj.content and obj.content.strip():
+                    lines.append(obj.content)
+                    lines.append('')
+
             elif obj.obj_type == 'image':
                 latex_formula = getattr(obj, 'latex_result', None)
                 img_filename = obj.content or ''

@@ -87,22 +87,27 @@ import json as _json_mod
 SETTINGS_FILE = Path(__file__).parent / "settings.json"
 
 
+_SETTINGS: dict = {}  # settings in memoria, caricati all'avvio
+
+
 def _load_settings() -> None:
-    """Carica settings.json all'avvio — imposta ANTHROPIC_API_KEY se salvata."""
+    """Carica settings.json all'avvio — imposta variabili d'ambiente e _SETTINGS."""
+    global _SETTINGS
     if not SETTINGS_FILE.exists():
         return
     try:
         s = _json_mod.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
+        _SETTINGS = s
         if key := s.get("api_key", "").strip():
             os.environ.setdefault("ANTHROPIC_API_KEY", key)
     except Exception:
         pass
 
 
-def _save_settings(api_key: str) -> None:
+def _save_settings(data: dict) -> None:
     try:
         SETTINGS_FILE.write_text(
-            _json_mod.dumps({"api_key": api_key}, indent=2), encoding="utf-8"
+            _json_mod.dumps(data, indent=2), encoding="utf-8"
         )
     except Exception:
         pass
@@ -113,22 +118,48 @@ _load_settings()
 
 @app.post("/settings")
 async def save_settings_endpoint(request: Request):
-    """Salva/rimuove la API key di Claude. Persiste su settings.json."""
+    """Salva API key e/o configurazione (ttl_days). Persiste su settings.json."""
+    global OUTPUT_TTL_DAYS
     try:
         body = await request.json()
     except Exception:
         raise HTTPException(status_code=400, detail="Body JSON non valido")
+
+    # API key
     key = body.get("api_key", "").strip()
-    if key:
-        os.environ["ANTHROPIC_API_KEY"] = key
-    else:
-        os.environ.pop("ANTHROPIC_API_KEY", None)
-    _save_settings(key)
-    return JSONResponse({"ok": True, "api_key": bool(key)})
+    if "api_key" in body:
+        if key:
+            os.environ["ANTHROPIC_API_KEY"] = key
+        else:
+            os.environ.pop("ANTHROPIC_API_KEY", None)
+        _SETTINGS["api_key"] = key
+
+    # TTL giorni (1–365)
+    if "ttl_days" in body:
+        try:
+            ttl = int(body["ttl_days"])
+            if 1 <= ttl <= 365:
+                OUTPUT_TTL_DAYS = ttl
+                _SETTINGS["ttl_days"] = ttl
+        except (ValueError, TypeError):
+            pass
+
+    _save_settings(_SETTINGS)
+    return JSONResponse({"ok": True, "api_key": bool(key or _SETTINGS.get("api_key")),
+                         "ttl_days": OUTPUT_TTL_DAYS})
+
+
+@app.get("/settings")
+async def get_settings_endpoint():
+    """Restituisce la configurazione corrente (senza esporre la key vera)."""
+    return JSONResponse({
+        "api_key": bool(_SETTINGS.get("api_key", "").strip()),
+        "ttl_days": OUTPUT_TTL_DAYS,
+    })
 
 
 # ── Cleanup automatico output vecchi ──────────────────────────────────────────
-OUTPUT_TTL_DAYS = 7  # cancella output + ZIP più vecchi di N giorni
+OUTPUT_TTL_DAYS = int(_SETTINGS.get("ttl_days", 7))  # configurabile da /settings
 
 
 def _cleanup_old_outputs(max_age_days: int = OUTPUT_TTL_DAYS) -> int:
@@ -357,6 +388,20 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             if _pdflatex_available:
                 main_tex = output_dir / "main.tex"
                 if main_tex.exists():
+                    # Passo 0: draftmode — rileva errori senza generare PDF (veloce)
+                    # Se ci sono errori fatali, i 2 pass successivi possono comunque
+                    # produrre un PDF parziale con nonstopmode.
+                    try:
+                        subprocess.run(
+                            ["pdflatex", "-interaction=nonstopmode",
+                             "-draftmode", "main.tex"],
+                            cwd=output_dir,
+                            timeout=60,
+                            capture_output=True,
+                        )
+                    except Exception:
+                        pass
+                    # Passi 1-2: compilazione reale (doppia per TOC/riferimenti)
                     for _ in range(2):
                         try:
                             subprocess.run(
