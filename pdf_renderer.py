@@ -246,7 +246,6 @@ def _detect_sections(text: str) -> list[dict]:
 
 def _escape_latex_basic(text: str) -> str:
     """Escape caratteri speciali LaTeX — versione standalone, single-pass."""
-    import re as _re
     _MAP = {
         "\\": "\\textbackslash{}",
         "&":  "\\&",
@@ -258,7 +257,7 @@ def _escape_latex_basic(text: str) -> str:
         "~":  "\\textasciitilde{}",
         "^":  "\\textasciicircum{}",
     }
-    return _re.compile(r'[\\&%$#{}~^]').sub(lambda m: _MAP[m.group()], text)
+    return re.compile(r'[\\&%$#{}~^]').sub(lambda m: _MAP[m.group()], text)
 
 
 def _build_pdf_latex_skeleton(pdf_path: Path, pages_data: list[dict],

@@ -30,7 +30,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .nav-link:hover{color:var(--text);background:color-mix(in srgb,var(--c1) 8%,transparent);}
 .nav-link.active{color:var(--c1);background:color-mix(in srgb,var(--c1) 10%,transparent);}
 .nav-link .nd{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.7;}
-.container{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:80px 24px 80px;}
+/* .container{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:80px 24px 80px;} */
+.container{position:relative;z-index:1;margin:0 auto;padding:80px 24px 80px;}
 header{text-align:center;margin-bottom:56px;}
 header h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:800;letter-spacing:-.03em;background:linear-gradient(135deg,var(--c1),var(--c2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
 header p{margin-top:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.8rem;letter-spacing:.12em;}
