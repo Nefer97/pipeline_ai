@@ -1503,6 +1503,232 @@ def generate_main_tex(title: str, lesson_files: list, output_dir: Path,
 
 
 # ─────────────────────────────────────────────
+# HELPER: raccoglitori per i 6 tipi di sorgente
+# ─────────────────────────────────────────────
+
+import re as _re_pl
+
+_TS_PAT  = _re_pl.compile(r'^\[\d{2}:\d{2}\]')
+_NAME_KW = _re_pl.compile(
+    r'(transcript|trascrizione|lezione|audio|registr|carne)',
+    _re_pl.IGNORECASE
+)
+
+
+def _strip_rtf(raw: str) -> str:
+    """Rimuove markup RTF e restituisce testo pulito."""
+    if not raw.lstrip().startswith('{\\rtf'):
+        return raw
+    try:
+        from striprtf.striprtf import rtf_to_text
+        return rtf_to_text(raw)
+    except ImportError:
+        pass
+    t = _re_pl.sub(r'\\\n', '\n', raw)
+    t = _re_pl.sub(r'\\par\b', '\n', t)
+    t = _re_pl.sub(r'\\line\b', '\n', t)
+    t = _re_pl.sub(r'\\\\\s?', '', t)
+    t = _re_pl.sub(r'\\[a-z]+\-?\d*\s?', '', t)
+    t = _re_pl.sub(r'\{[^{}]{0,200}\}', '', t)
+    t = _re_pl.sub(r'[{}]', '', t)
+    t = _re_pl.sub(r"\\\'([0-9a-f]{2})",
+                   lambda m: bytes.fromhex(m.group(1)).decode('cp1252', errors='replace'), t)
+    t = _re_pl.sub(r'\n{3,}', '\n\n', t)
+    return t.strip()
+
+
+def _collect_audio(sources: dict, source_names: list, audio_files: list,
+                   output_dir: Path, whisper_model: str) -> None:
+    """STEP 1: Trascrive file audio → CARNE."""
+    for idx, af in enumerate(audio_files):
+        print(f"\n  [Audio → CARNE] {af.name}")
+        prog_base = 10 + idx * 5
+        _report_progress(output_dir, prog_base,
+                         "Whisper — Trascrizione audio",
+                         f"File {idx+1}/{len(audio_files)}: {af.name}")
+        t, dur = transcribe_audio(af, whisper_model,
+                                  _prog_dir=output_dir,
+                                  _prog_base=prog_base, _prog_end=prog_base + 5)
+        if t:
+            sources["carne"].append({"filename": af.name, "text": t, "duration_sec": dur})
+            sources["has_audio"] = True
+            source_names.append(af.name)
+
+
+def _collect_video(sources: dict, source_names: list, video_files: list,
+                   output_dir: Path, tmp_dir: Path, whisper_model: str) -> None:
+    """STEP 2: Estrae audio da video e trascrive → CARNE."""
+    for idx, vf in enumerate(video_files):
+        print(f"\n  [Video → CARNE] {vf.name}")
+        prog_base = 15 + idx * 5
+        _report_progress(output_dir, prog_base,
+                         "Whisper — Trascrizione video",
+                         f"File {idx+1}/{len(video_files)}: {vf.name}")
+        mp3 = extract_audio_from_video(vf, tmp_dir)
+        if mp3:
+            t, dur = transcribe_audio(mp3, whisper_model,
+                                      _prog_dir=output_dir,
+                                      _prog_base=prog_base, _prog_end=prog_base + 5)
+            if t:
+                sources["carne"].append({"filename": vf.name, "text": t, "duration_sec": dur})
+                sources["has_audio"] = True
+                source_names.append(vf.name)
+
+
+def _collect_pptx(sources: dict, source_names: list, slide_files: list,
+                  images_dir: Path, lesson_number: int, skip_ocr: bool):
+    """STEP 3: Estrae slide PPTX → SCHELETRO. Ritorna l'oggetto pptx_slides (o None)."""
+    pptx_slides = None
+    for sf in slide_files:
+        print(f"\n  [PPTX → SCHELETRO] {sf.name}")
+        _report_progress(images_dir.parent, 35, "Estrazione slide PPTX", sf.name)
+        if COLLEAGUE_MODULES:
+            slides_obj, plain = process_pptx_full(sf, images_dir, skip_ocr=skip_ocr)
+            pptx_slides = slides_obj
+            if len(slide_files) > 1:
+                pptx_img_dir = images_dir / sf.stem
+                pptx_img_dir.mkdir(exist_ok=True)
+                slide_images_raw = render_slide_images(sf, pptx_img_dir)
+                slide_images = {k: f"{sf.stem}/{v}" for k, v in slide_images_raw.items()}
+            else:
+                slide_images = render_slide_images(sf, images_dir)
+            skeleton_latex = build_fallback_latex(
+                lesson_number = lesson_number,
+                title         = sf.stem.replace("_", " ").replace("-", " ").title(),
+                slides        = slides_obj,
+                transcript    = "",
+                slide_text    = plain,
+                extra_text    = "",
+                slide_images  = slide_images,
+            )
+            sources["scheletro"].append({
+                "filename":    sf.name,
+                "text":        plain,
+                "latex":       skeleton_latex,
+                "slide_count": len(slides_obj),
+                "slide_images": slide_images,
+            })
+        else:
+            plain = process_pptx_fallback(sf)
+            sources["scheletro"].append({
+                "filename":    sf.name,
+                "text":        plain,
+                "latex":       None,
+                "slide_count": plain.count("--- SLIDE"),
+            })
+        source_names.append(sf.name)
+    return pptx_slides
+
+
+def _collect_txt(sources: dict, source_names: list, text_files: list,
+                 has_structure: bool, has_real_audio: bool) -> None:
+    """STEP 4: Classifica file TXT/MD come CARNE (trascrizioni) o CONTORNO (note)."""
+    for tf in text_files:
+        raw  = tf.read_text(encoding="utf-8", errors="ignore")
+        text = _strip_rtf(raw)
+        if not text.strip():
+            continue
+        lines = [l for l in text.splitlines() if l.strip()]
+        ts_count = sum(1 for l in lines if _TS_PAT.match(l.strip()))
+        if len(lines) == 0:
+            has_timestamps = False
+        elif len(lines) <= 10:
+            has_timestamps = ts_count / len(lines) >= 0.30
+        else:
+            has_timestamps = ts_count / len(lines) >= 0.10
+        has_kw_name      = bool(_NAME_KW.search(tf.stem))
+        is_solo_companion = has_structure and not has_real_audio and not sources["has_audio"]
+        is_transcript     = has_timestamps or has_kw_name or is_solo_companion
+        if is_transcript:
+            reason = ("timestamp" if has_timestamps
+                      else "nome file" if has_kw_name
+                      else "unico txt + struttura presente")
+            print(f"\n  [TXT → CARNE] {tf.name}  ({reason})")
+            sources["carne"].append({"filename": tf.name, "text": text, "duration_sec": 0})
+            sources["has_audio"] = True
+        else:
+            print(f"\n  [TXT → CONTORNO] {tf.name}")
+            sources["contorno"].append({"filename": tf.name, "text": text})
+        source_names.append(tf.name)
+
+
+def _collect_pdf(sources: dict, source_names: list, pdf_files: list,
+                 images_dir: Path, output_dir: Path, lesson_number: int,
+                 title: str, skip_ai: bool, skip_ocr: bool,
+                 subject_hint: str, course_context_path: str):
+    """STEP 5: Estrae PDF → SCHELETRO/SUPPORTO, o chunking se >20 pag senza audio.
+    Ritorna list[Path] se chunking (early exit), None altrimenti."""
+    _PDF_CHUNK_THRESHOLD = 20
+    for idx, pf in enumerate(pdf_files):
+        _report_progress(output_dir, 40 + idx * 3, "Estrazione pagine PDF", pf.name)
+        pages = extract_pdf_pages(pf)
+        if COLLEAGUE_MODULES:
+            page_images, latex_skeleton = render_pdf_pages(pf, images_dir, pages or None)
+        else:
+            page_images, latex_skeleton = {}, None
+        if page_images:
+            _pages_with_text = {p["page"] for p in pages}
+            _missing = {n: f for n, f in page_images.items() if n not in _pages_with_text}
+            if _missing:
+                _report_progress(output_dir, 40 + idx * 3, "OCR pagine scansionate", pf.name)
+                _ocr = _ocr_pages_with_tesseract(images_dir, _missing)
+                if _ocr:
+                    pages.extend(_ocr)
+                    pages.sort(key=lambda p: p["page"])
+                    if COLLEAGUE_MODULES:
+                        from pdf_renderer import _build_pdf_latex_skeleton
+                        latex_skeleton = _build_pdf_latex_skeleton(pf, pages, page_images)
+        if not pages:
+            print(f"    [WARN] {pf.name}: nessun testo disponibile — saltato")
+            continue
+        if len(pages) > _PDF_CHUNK_THRESHOLD and not sources["has_audio"]:
+            print(f"\n  [PDF grande] {pf.name} — {len(pages)} pagine, chunking automatico")
+            return process_pdf_chunked(
+                pdf_path            = pf,
+                output_dir          = output_dir,
+                base_lesson_number  = lesson_number,
+                title               = title or pf.stem,
+                skip_ai             = skip_ai,
+                subject_hint        = subject_hint,
+                course_context_path = course_context_path,
+            )
+        text  = "\n".join(f"[PAG {p['page']}]\n{p['text']}" for p in pages)
+        entry = {
+            "filename":    pf.name,
+            "text":        text,
+            "pages":       len(pages),
+            "latex":       latex_skeleton,
+            "page_images": page_images,
+        }
+        if sources["has_audio"]:
+            print(f"\n  [PDF → SCHELETRO] {pf.name}  (c'è audio)")
+            sources["scheletro"].append(entry)
+        else:
+            print(f"\n  [PDF → SUPPORTO] {pf.name}  (nessun audio)")
+            sources["supporto"].append(entry)
+        source_names.append(pf.name)
+    return None
+
+
+def _collect_docx(sources: dict, source_names: list, doc_files: list,
+                  output_dir: Path) -> None:
+    """STEP 6: Estrae DOCX → SCHELETRO se c'è audio, SUPPORTO altrimenti."""
+    for idx, df in enumerate(doc_files):
+        _report_progress(output_dir, 50 + idx * 3, "Estrazione DOCX", df.name)
+        text = extract_docx(df)
+        if not text:
+            continue
+        entry = {"filename": df.name, "text": text, "latex": None, "pages": None}
+        if sources["has_audio"]:
+            print(f"\n  [DOCX → SCHELETRO] {df.name}  (c'è audio)")
+            sources["scheletro"].append(entry)
+        else:
+            print(f"\n  [DOCX → SUPPORTO] {df.name}  (nessun audio)")
+            sources["supporto"].append(entry)
+        source_names.append(df.name)
+
+
+# ─────────────────────────────────────────────
 # CORE: PROCESSA UNA LEZIONE
 # ─────────────────────────────────────────────
 
@@ -1559,262 +1785,29 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     tmp_dir.mkdir(exist_ok=True)
     images_dir.mkdir(exist_ok=True)
 
-    # ─────────────────────────────────────────────
-    # DIZIONARIO FONTI — struttura che passa a Claude
-    # ─────────────────────────────────────────────
     sources = {
-        "scheletro": [],  # struttura della lezione
-        "carne":     [],  # spiegazione orale del professore
-        "supporto":  [],  # materiale di approfondimento
-        "contorno":  [],  # note informali, peso minore
+        "scheletro": [],
+        "carne":     [],
+        "supporto":  [],
+        "contorno":  [],
         "has_audio": False,
     }
     source_names  = []
-    pptx_slides   = None  # oggetti slide del collega (per fallback)
 
-    # ─────────────────────────────────────────────
-    # STEP 1: AUDIO → CARNE (sempre)
-    # ─────────────────────────────────────────────
-    audio_files = by["audio"]
-    for idx, af in enumerate(audio_files):
-        print(f"\n  [Audio → CARNE] {af.name}")
-        prog_base = 10 + idx * 5
-        _report_progress(output_dir, prog_base,
-                         "Whisper — Trascrizione audio",
-                         f"File {idx+1}/{len(audio_files)}: {af.name}")
-        t, dur = transcribe_audio(af, whisper_model,
-                                  _prog_dir=output_dir,
-                                  _prog_base=prog_base, _prog_end=prog_base + 5)
-        if t:
-            sources["carne"].append({"filename": af.name, "text": t, "duration_sec": dur})
-            sources["has_audio"] = True
-            source_names.append(af.name)
+    _collect_audio(sources, source_names, by["audio"], output_dir, whisper_model)
+    _collect_video(sources, source_names, by["video"], output_dir, tmp_dir, whisper_model)
+    pptx_slides = _collect_pptx(sources, source_names, by["slide"], images_dir, lesson_number, skip_ocr)
+    _collect_txt(sources, source_names, by["text"],
+                 has_structure=bool(by["slide"] or by["pdf"] or by["doc"]),
+                 has_real_audio=bool(by["audio"] or by["video"]))
+    early_result = _collect_pdf(sources, source_names, by["pdf"], images_dir, output_dir,
+                                lesson_number, title, skip_ai, skip_ocr,
+                                subject_hint, course_context_path)
+    if early_result is not None:
+        return early_result
+    _collect_docx(sources, source_names, by["doc"], output_dir)
 
-    # ─────────────────────────────────────────────
-    # STEP 2: VIDEO → CARNE (sempre)
-    # ─────────────────────────────────────────────
-    video_files = by["video"]
-    for idx, vf in enumerate(video_files):
-        print(f"\n  [Video → CARNE] {vf.name}")
-        prog_base = 15 + idx * 5
-        _report_progress(output_dir, prog_base,
-                         "Whisper — Trascrizione video",
-                         f"File {idx+1}/{len(video_files)}: {vf.name}")
-        mp3 = extract_audio_from_video(vf, tmp_dir)
-        if mp3:
-            t, dur = transcribe_audio(mp3, whisper_model,
-                                      _prog_dir=output_dir,
-                                      _prog_base=prog_base, _prog_end=prog_base + 5)
-            if t:
-                sources["carne"].append({"filename": vf.name, "text": t, "duration_sec": dur})
-                sources["has_audio"] = True
-                source_names.append(vf.name)
-
-    # ─────────────────────────────────────────────
-    # STEP 3: PPTX → SCHELETRO (sempre)
-    # ─────────────────────────────────────────────
-    for pptx_idx, sf in enumerate(by["slide"]):
-        print(f"\n  [PPTX → SCHELETRO] {sf.name}")
-        _report_progress(output_dir, 35, "Estrazione slide PPTX", sf.name)
-        if COLLEAGUE_MODULES:
-            slides_obj, plain = process_pptx_full(sf, images_dir, skip_ocr=skip_ocr)
-            pptx_slides = slides_obj
-
-            # Con più PPTX: usa una sottocartella per PPTX per evitare collisioni
-            # nei nomi delle immagini (entrambi generano slide_001.png, ...)
-            if len(by["slide"]) > 1:
-                pptx_img_dir = images_dir / sf.stem
-                pptx_img_dir.mkdir(exist_ok=True)
-                slide_images_raw = render_slide_images(sf, pptx_img_dir)
-                # Prefissa con il nome della sottocartella per \includegraphics
-                slide_images = {k: f"{sf.stem}/{v}" for k, v in slide_images_raw.items()}
-            else:
-                slide_images = render_slide_images(sf, images_dir)
-
-            # ← POI costruisci lo scheletro LaTeX con i PNG
-            skeleton_latex = build_fallback_latex(
-                lesson_number = lesson_number,
-                title         = source_dir.name.replace("_"," ").replace("-"," ").title(),
-                slides        = slides_obj,
-                transcript    = "",
-                slide_text    = plain,
-                extra_text    = "",
-                slide_images  = slide_images,
-            )
-            sources["scheletro"].append({
-                "filename":    sf.name,
-                "text":        plain,
-                "latex":       skeleton_latex,
-                "slide_count": len(slides_obj),
-                "slide_images": slide_images,
-            })
-        else:
-            plain = process_pptx_fallback(sf)
-            sources["scheletro"].append({
-                "filename":    sf.name,
-                "text":        plain,
-                "latex":       None,
-                "slide_count": plain.count("--- SLIDE"),
-            })
-        source_names.append(sf.name)
-    # ─────────────────────────────────────────────
-    # STEP 4: TXT/MD — processato PRIMA di PDF/DOCX
-    # perché PDF e DOCX dipendono da has_audio per la gerarchia.
-    #
-    # Rilevamento trascrizione (in cascata, basta uno vero):
-    #   1. Timestamp [MM:SS] in ≥10% delle righe  → trascrizione Whisper/automatica
-    #   2. Nome file contiene parole chiave         → trascrizione manuale dichiarata
-    #   3. Unico .txt + c'è PDF/PPTX + nessun audio → assume trascrizione
-    # ─────────────────────────────────────────────
-    import re as _re
-
-    def _strip_rtf(raw: str) -> str:
-        """Rimuove markup RTF e restituisce testo pulito."""
-        if not raw.lstrip().startswith('{\\rtf'):
-            return raw
-        # Prova striprtf se installato
-        try:
-            from striprtf.striprtf import rtf_to_text
-            return rtf_to_text(raw)
-        except ImportError:
-            pass
-        # Fallback regex: rimuove control words, gruppi e caratteri speciali RTF
-        t = _re.sub(r'\\\n', '\n', raw)               # a capo letterali
-        t = _re.sub(r'\\par\b', '\n', t)              # paragrafi
-        t = _re.sub(r'\\line\b', '\n', t)             # line break
-        t = _re.sub(r'\\\\\s?', '', t)                # backslash escapati
-        t = _re.sub(r'\\[a-z]+\-?\d*\s?', '', t)     # control words
-        t = _re.sub(r'\{[^{}]{0,200}\}', '', t)       # gruppi brevi (fonttbl, colortbl…)
-        t = _re.sub(r'[{}]', '', t)                   # parentesi graffe residue
-        t = _re.sub(r"\\\'([0-9a-f]{2})",             # caratteri hex \' cp1252 (include €, ', " ecc.)
-                    lambda m: bytes.fromhex(m.group(1)).decode('cp1252', errors='replace'),
-                    t)
-        t = _re.sub(r'\n{3,}', '\n\n', t)            # righe vuote multiple
-        return t.strip()
-
-    _ts_pat  = _re.compile(r'^\[\d{2}:\d{2}\]')
-    _name_kw = _re.compile(
-        r'(transcript|trascrizione|lezione|audio|registr|carne)',
-        _re.IGNORECASE
-    )
-    _has_structure   = bool(by["slide"] or by["pdf"] or by["doc"])
-    _has_real_audio  = bool(by["audio"] or by["video"])
-
-    for tf in by["text"]:
-        raw  = tf.read_text(encoding="utf-8", errors="ignore")
-        text = _strip_rtf(raw)
-        if not text.strip():
-            continue
-        lines = [l for l in text.splitlines() if l.strip()]
-        ts_count = sum(1 for l in lines if _ts_pat.match(l.strip()))
-
-        # Segnale 1: timestamp — threshold adattivo: file piccoli richiedono
-        # densità più alta per evitare falsi positivi su note con poche righe
-        if len(lines) == 0:
-            has_timestamps = False
-        elif len(lines) <= 10:
-            has_timestamps = ts_count / len(lines) >= 0.30  # ≥3 ts su 10 righe
-        else:
-            has_timestamps = ts_count / len(lines) >= 0.10
-        # Segnale 2: nome file suggerisce trascrizione
-        has_kw_name     = bool(_name_kw.search(tf.stem))
-        # Segnale 3: struttura presente + nessun audio reale
-        # (vale anche con più txt: se non ci sono audio/video, i txt sono probabilmente
-        #  trascrizioni manuali o esportate, non note informali)
-        is_solo_companion = _has_structure and not _has_real_audio and not sources["has_audio"]
-
-        is_transcript = has_timestamps or has_kw_name or is_solo_companion
-
-        if is_transcript:
-            reason = ("timestamp" if has_timestamps
-                      else "nome file" if has_kw_name
-                      else "unico txt + struttura presente")
-            print(f"\n  [TXT → CARNE] {tf.name}  ({reason})")
-            sources["carne"].append({"filename": tf.name, "text": text, "duration_sec": 0})
-            sources["has_audio"] = True
-        else:
-            print(f"\n  [TXT → CONTORNO] {tf.name}")
-            sources["contorno"].append({"filename": tf.name, "text": text})
-        source_names.append(tf.name)
-
-    # ─────────────────────────────────────────────
-    # STEP 5: PDF — SCHELETRO se c'è audio, SUPPORTO se no
-    # ─────────────────────────────────────────────
-    for idx, pf in enumerate(by["pdf"]):
-        _report_progress(output_dir, 40 + idx * 3, "Estrazione pagine PDF", pf.name)
-        pages = extract_pdf_pages(pf)
-
-        # Rendering — eseguito sempre, anche se pages è vuoto:
-        # serve le PNG per il fallback OCR su PDF scansionati.
-        if COLLEAGUE_MODULES:
-            page_images, latex_skeleton = render_pdf_pages(pf, images_dir, pages or None)
-        else:
-            page_images, latex_skeleton = {}, None
-
-        # PDF scansionato (totalmente o in parte): OCR su pagine senza testo.
-        # Copre sia PDF 100% scansionati (pages vuoto) sia PDF misti (alcune
-        # pagine hanno testo pdfplumber, altre sono immagini → mancanti in pages).
-        if page_images:
-            _pages_with_text = {p["page"] for p in pages}
-            _missing = {n: f for n, f in page_images.items() if n not in _pages_with_text}
-            if _missing:
-                _report_progress(output_dir, 40 + idx * 3, "OCR pagine scansionate", pf.name)
-                _ocr = _ocr_pages_with_tesseract(images_dir, _missing)
-                if _ocr:
-                    pages.extend(_ocr)
-                    pages.sort(key=lambda p: p["page"])
-                    if COLLEAGUE_MODULES:
-                        from pdf_renderer import _build_pdf_latex_skeleton
-                        latex_skeleton = _build_pdf_latex_skeleton(pf, pages, page_images)
-
-        if not pages:
-            print(f"    [WARN] {pf.name}: nessun testo disponibile — saltato")
-            continue
-
-        # Ogni sessione di upload = una lezione: non si chunka mai nel flusso normale.
-        # Il testo lungo viene troncato da _trunc() in generate_with_claude().
-        if len(pages) > 20 and not sources["has_audio"]:
-            print(f"\n  [PDF grande] {pf.name} — {len(pages)} pagine, processato come unica lezione")
-
-        text  = "\n".join(f"[PAG {p['page']}]\n{p['text']}" for p in pages)
-        entry = {
-            "filename":    pf.name,
-            "text":        text,
-            "pages":       len(pages),
-            "latex":       latex_skeleton,
-            "page_images": page_images,
-        }
-
-        if sources["has_audio"]:
-            print(f"\n  [PDF → SCHELETRO] {pf.name}  (c'è audio)")
-            sources["scheletro"].append(entry)
-        else:
-            print(f"\n  [PDF → SUPPORTO] {pf.name}  (nessun audio)")
-            sources["supporto"].append(entry)
-
-        source_names.append(pf.name)
-    # ─────────────────────────────────────────────
-    # STEP 6: DOCX — SCHELETRO se c'è audio, SUPPORTO se no
-    # ─────────────────────────────────────────────
-    for idx, df in enumerate(by["doc"]):
-        _report_progress(output_dir, 50 + idx * 3, "Estrazione DOCX", df.name)
-        text = extract_docx(df)
-        if not text:
-            continue
-        entry = {"filename": df.name, "text": text, "latex": None, "pages": None}
-
-        if sources["has_audio"]:
-            print(f"\n  [DOCX → SCHELETRO] {df.name}  (c'è audio)")
-            sources["scheletro"].append(entry)
-        else:
-            print(f"\n  [DOCX → SUPPORTO] {df.name}  (nessun audio)")
-            sources["supporto"].append(entry)
-
-        source_names.append(df.name)
-
-    # ─────────────────────────────────────────────
-    # LOG GERARCHIA RISOLTA + riepilogo debug
-    # ─────────────────────────────────────────────
+    # ── Gerarchia risolta ──
     print(f"\n  Gerarchia risolta:")
     print(f"    SCHELETRO : {[s['filename'] for s in sources['scheletro']] or '—'}")
     print(f"    CARNE     : {[s['filename'] for s in sources['carne']] or '—'}")
@@ -1853,26 +1846,15 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
             _report_lines.append(f"    • {s['filename']}")
         _dbg_report_path.write_text("\n".join(_report_lines), encoding="utf-8")
     except Exception:
-        pass  # debug non deve mai bloccare la pipeline
+        pass
 
-    # ─────────────────────────────────────────────
-    # STEP 6.5: RESIZE PNG — limita le immagini a MAX_IMG_PX lato lungo
-    # Riduce dimensioni ZIP senza perdita visiva apprezzabile nel PDF finale
-    # ─────────────────────────────────────────────
     _resize_images_dir(images_dir)
 
-    # ─────────────────────────────────────────────
-    # STEP 7: GENERAZIONE LaTeX
-    # ─────────────────────────────────────────────
-    # Il titolo viene passato dall'esterno (frontend/CLI).
-    # Fallback: deriva dal nome cartella (utile solo in --batch dove ogni
-    # sottocartella ha un nome semantico tipo "lezione_01_analisi").
     if not title:
         title = source_dir.name.replace("_", " ").replace("-", " ").title()
     out_tex = output_dir / f"lezione_{lesson_number:02d}.tex"
 
     def _latex_from_skeleton(sources, lesson_number, title, pptx_slides):
-        """Cerca il LaTeX scheletro in scheletro poi in supporto, fallback testo puro."""
         entry = (
             next((s for s in sources["scheletro"] if s.get("latex")), None) or
             next((s for s in sources["supporto"]  if s.get("latex")), None)
@@ -1883,7 +1865,6 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
                 f"\\label{{sec:lezione{lesson_number:02d}}}\n\n"
                 + entry["latex"]
             )
-        # fallback testo puro
         slide_text = "\n".join(s["text"] for s in sources["scheletro"])
         carne_text = "\n".join(s["text"] for s in sources["carne"])
         extra_text = "\n".join(s["text"] for s in sources["supporto"] + sources["contorno"])

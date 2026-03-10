@@ -329,12 +329,12 @@ def _tesseract_ocr(image_path: str) -> Optional[str]:
             raw = best
 
         except ImportError:
-            # Fallback subprocess
+            # Fallback subprocess — il finally garantisce la pulizia in ogni caso
             import tempfile
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
-                img.save(tmp.name)
-                tmp_path = tmp.name
+                tmp_path = tmp.name  # assegnato subito, prima di img.save
             try:
+                img.save(tmp_path)
                 r = subprocess.run(
                     ["tesseract", tmp_path, "stdout", "--psm", "7"],
                     capture_output=True, text=True, timeout=30

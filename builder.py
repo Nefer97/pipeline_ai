@@ -57,24 +57,24 @@ LATEX_HEADER: str = _make_header("italian")
 
 
 def _escape_latex(text: str) -> str:
-    """Escapa caratteri speciali LaTeX nel testo."""
-    replacements = [
-        ('\\', r'\textbackslash{}'),
-        ('&', r'\&'),
-        ('%', r'\%'),
-        ('$', r'\$'),
-        ('#', r'\#'),
-        ('^', r'\^{}'),
-        ('_', r'\_'),
-        ('{', r'\{'),
-        ('}', r'\}'),
-        ('~', r'\textasciitilde{}'),
-        ('<', r'\textless{}'),
-        ('>', r'\textgreater{}'),
-    ]
-    for old, new in replacements:
-        text = text.replace(old, new)
-    return text
+    """Escapa caratteri speciali LaTeX nel testo (single-pass, no cascading)."""
+    import re
+    _ESCAPE_MAP = {
+        '\\': r'\textbackslash{}',
+        '&':  r'\&',
+        '%':  r'\%',
+        '$':  r'\$',
+        '#':  r'\#',
+        '^':  r'\^{}',
+        '_':  r'\_',
+        '{':  r'\{',
+        '}':  r'\}',
+        '~':  r'\textasciitilde{}',
+        '<':  r'\textless{}',
+        '>':  r'\textgreater{}',
+    }
+    _PATTERN = re.compile(r'[\\&%$#^_{}~<>]')
+    return _PATTERN.sub(lambda m: _ESCAPE_MAP[m.group()], text)
 
 
 def _format_text_block(text: str) -> str:

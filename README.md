@@ -367,8 +367,8 @@ i dettagli del modulo corrispondente.
 | `/job/{job_id}` | DELETE | Elimina uploads temporanei. Aggiungere `?full=true` per eliminare anche zip e output definitivi |
 | `/jobs` | GET | Lista tutti i job con `created_at`, `has_pdf`, `has_zip` |
 | `/health` | GET | Stato dei tool di sistema: `api_key`, `ffmpeg`, `pdflatex`, `whisper` |
-| `/settings` | GET | Configurazione corrente: `api_key` (bool), `ttl_days`, `ffmpeg_timeout`, `pipeline_timeout` |
-| `/settings` | POST | Salva `api_key`, `ttl_days` (1–365), `ffmpeg_timeout` (300–86400 s), `pipeline_timeout` (300–86400 s) — persiste su `settings.json` |
+| `/settings` | GET | Configurazione corrente: `api_key` (bool), `ttl_days`, `ffmpeg_timeout`, `pipeline_timeout`, `max_concurrent_jobs` |
+| `/settings` | POST | Salva `api_key`, `ttl_days` (1–365), `ffmpeg_timeout` (300–86400 s), `pipeline_timeout` (300–86400 s), `max_concurrent_jobs` (1–10) — persiste su `settings.json` |
 | `/docs` | GET | Documentazione interattiva FastAPI |
 
 ### Accesso remoto
@@ -404,7 +404,7 @@ Dopo aver fatto login con lo stesso account su entrambi i dispositivi, il server
 | PDF | `.pdf` | pdfplumber → testo; pytesseract fallback se 0 testo (PDF scansionato); pdf_renderer → PNG per pagina |
 | Testo | `.txt` `.md` `.rtf` | lettura diretta (RTF con strip automatico dei tag) |
 
-Ogni sessione di upload genera esattamente **un** `lezione_NN.tex`, indipendentemente dalla dimensione del PDF. I contenuti grandi vengono gestiti dal budget token (`_trunc()`) prima dell'invio a Claude.
+Ogni sessione di upload genera normalmente **un** `lezione_NN.tex`. Eccezione: PDF >20 pagine senza audio vengono suddivisi automaticamente in chunk da 10 pagine — ognuno produce un `lezione_NN.tex` separato (vedi *PDF grandi* nelle Note pratiche).
 
 ---
 
@@ -517,8 +517,8 @@ Il modello `base` su CPU impiega circa 1 minuto ogni 10 minuti di audio. Per tes
 **`--skip-ai` non salta Whisper:**
 `--skip-ai` disattiva solo Claude. Whisper gira sempre perché è trascrizione locale. Il contesto corso (`corso_context.json`) non viene aggiornato se Claude non viene chiamato.
 
-**PDF grandi:**
-Un PDF da 275 pagine viene processato come un'unica lezione. Il testo viene troncato in base al budget token (`_trunc()`) per rispettare i limiti del contesto Claude. Le immagini PNG delle pagine vengono generate e salvate in `images/` con naming `nomefile_pag_001.png`.
+**PDF grandi (chunking automatico):**
+Se non è presente audio, un PDF con più di 20 pagine viene suddiviso automaticamente in chunk da 10 pagine. Ogni chunk diventa un `lezione_NN.tex` separato, elaborato indipendentemente da Claude. Per PDF con audio associato (es. registrazione della lezione) il PDF viene invece usato come scheletro strutturale senza chunking. Le immagini PNG delle pagine vengono salvate in `images/` con naming `nomefile_pag_001.png`.
 
 **PDF scansionati e PDF misti:**
 La pipeline tenta automaticamente l'OCR tramite pytesseract su ogni pagina che pdfplumber non riesce a leggere. Questo copre sia PDF 100% scansionati (nessuna pagina ha testo) sia PDF misti (alcune pagine hanno testo digitale, altre sono immagini scansionate). L'OCR viene eseguito sui PNG già renderizzati da pdf_renderer. La lingua OCR segue `WHISPER_LANG`; se non impostata usa `ita+eng`. Richiede `pip install pytesseract` + `sudo apt install tesseract-ocr`.
@@ -549,6 +549,12 @@ Se `extractor.py`, `slide_renderer.py`, `pdf_renderer.py` e gli altri moduli col
 **Timeout configurabili:**
 I timeout di ffmpeg (download Teams) e della pipeline (Whisper + Claude) sono configurabili via `/settings` POST senza riavviare il server. Default: `ffmpeg_timeout=7200s` (2h), `pipeline_timeout=3600s` (1h). Utile per video molto lunghi o reti lente.
 
+**Concorrenza job:**
+Il server accetta al massimo N job in esecuzione contemporanea (default 2). Ulteriori richieste ricevono HTTP 429 con messaggio esplicativo. Configura con: `POST /settings {"max_concurrent_jobs": N}` (range 1–10). Impostazione consigliata per uso multi-utente: 1–2 job (ogni job usa già Whisper + Claude in parallelo).
+
+**Test suite:**
+Esegui `python -m pytest tests/ -v` per verificare i moduli core (builder, omml2latex, preprocessor, formula_detector). 54 test in ~1 secondo. Richiede il venv attivo. Il file `pytest.ini` disabilita automaticamente il plugin ROS2 (`launch_testing_ros`) se presente sul sistema.
+
 **Prompt caching Anthropic:**
 Il system prompt inviato a Claude (19 regole LaTeX, ~600 token) è identico per ogni lezione e viene marcato con `cache_control: ephemeral`. Dalla seconda lezione in poi Anthropic lo restituisce dalla cache al ~10% del costo normale. Il log mostra `cache=hit (r:625 w:0)` o `cache=miss` per ogni chiamata.
 
@@ -576,7 +582,7 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | `ModuleNotFoundError: fitz` | pymupdf non installato nel venv attivo | `pip install pymupdf` con il venv attivo |
 | `ModuleNotFoundError: anthropic` | anthropic SDK non installato | `pip install anthropic` con il venv attivo |
 | `images/` vuota | pymupdf non trovato al momento dell'esecuzione | Verifica `python -c "import fitz"` nel venv attivo |
-| Più di un `lezione_NN.tex` generato | Modalità batch attiva (`--batch`) | In modalità normale ogni sessione produce sempre un unico file |
+| Più di un `lezione_NN.tex` generato | Modalità batch (`--batch`) o PDF >20 pag senza audio | Comportamento atteso: batch processa ogni sottocartella, i PDF grandi vengono chunckizzati automaticamente |
 | PDF scansionato senza testo | pdfplumber estrae 0 testo | Installa pytesseract: `pip install pytesseract && sudo apt install tesseract-ocr tesseract-ocr-ita` |
 | `ffprobe: command not found` | ffprobe non installato | `sudo apt install ffmpeg` (include ffprobe) |
 | Claude non risponde | API key mancante o errata | `echo $ANTHROPIC_API_KEY` per verificare |
@@ -595,3 +601,5 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | Download Teams fallisce su video >2h | `ffmpeg_timeout` default 7200s | Aumenta il timeout via `/settings` POST: `{"ffmpeg_timeout": 14400}` |
 | Allineamento slide↔audio spostato dopo una pausa | Pause lunghe distorcevano la distribuzione lineare | Fix già applicato: le pause >45s vengono cappate nel calcolo del tempo di discorso |
 | TTL output non cambia dopo modifica in UI | Il campo è nelle opzioni avanzate | Espandi "▾ opzioni avanzate" e modifica il campo "Retention output" — il salvataggio è automatico con feedback "✓ salvato" |
+| HTTP 429 su `/run-pipeline` | Troppi job in esecuzione contemporanea | Attendi il completamento di un job; oppure aumenta `max_concurrent_jobs` via `/settings` |
+| `settings.json` — warning permessi in log | File leggibile da altri utenti | Il server imposta automaticamente `chmod 600` al salvataggio se contiene API key; esegui manualmente `chmod 600 settings.json` se il warning persiste |

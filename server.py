@@ -8,6 +8,8 @@ Avvia con:
 
 import asyncio
 import datetime
+import logging
+import logging.handlers
 import os
 import shutil
 import subprocess
@@ -22,6 +24,32 @@ from fastapi import FastAPI, Request, UploadFile, File, Form, BackgroundTasks, H
 from fastapi.responses import JSONResponse, FileResponse, StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+
+# ── Logging strutturato su file + console ──────────────────────────────────────
+_LOGS_DIR = Path("logs")
+_LOGS_DIR.mkdir(exist_ok=True)
+
+_log_formatter = logging.Formatter(
+    "%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+_file_handler = logging.handlers.RotatingFileHandler(
+    _LOGS_DIR / "server.log",
+    maxBytes=5 * 1024 * 1024,   # 5 MB per file
+    backupCount=3,               # mantieni 3 file → max 15 MB totali
+    encoding="utf-8",
+)
+_file_handler.setFormatter(_log_formatter)
+
+_console_handler = logging.StreamHandler()
+_console_handler.setFormatter(_log_formatter)
+
+log = logging.getLogger("appunti_ai")
+log.setLevel(logging.DEBUG)
+log.addHandler(_file_handler)
+log.addHandler(_console_handler)
+# Silenzia i log verbosi di uvicorn/fastapi che non ci interessano
+logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
 
 app = FastAPI(title="Appunti AI API")
 
@@ -79,8 +107,8 @@ def _save_jobs() -> None:
         slim = {jid: {k: v for k, v in j.items() if k not in ("stdout", "stderr")}
                 for jid, j in jobs.items()}
         JOBS_FILE.write_text(json.dumps(slim, indent=2, default=str), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as e:
+        log.warning("_save_jobs: impossibile scrivere %s — %s", JOBS_FILE, e)
 
 
 def _load_jobs() -> None:
@@ -97,8 +125,9 @@ def _load_jobs() -> None:
             j.setdefault("stdout", "")
             j.setdefault("stderr", "")
             jobs[jid] = j
-    except Exception:
-        pass
+        log.info("Job caricati da disco: %d", len(jobs))
+    except Exception as e:
+        log.error("_load_jobs: impossibile leggere %s — %s", JOBS_FILE, e)
 
 
 _load_jobs()
@@ -122,8 +151,19 @@ def _load_settings() -> None:
         _SETTINGS = s
         if key := s.get("api_key", "").strip():
             os.environ.setdefault("ANTHROPIC_API_KEY", key)
-    except Exception:
-        pass
+        # Warning sicurezza: settings.json leggibile da altri utenti di sistema
+        try:
+            mode = SETTINGS_FILE.stat().st_mode & 0o777
+            if mode & 0o044:  # group-read o world-read
+                log.warning(
+                    "SICUREZZA: %s è leggibile da altri utenti (permessi %o). "
+                    "Esegui: chmod 600 %s",
+                    SETTINGS_FILE, mode, SETTINGS_FILE,
+                )
+        except Exception:
+            pass
+    except Exception as e:
+        log.error("_load_settings: impossibile leggere %s — %s", SETTINGS_FILE, e)
 
 
 def _save_settings(data: dict) -> None:
@@ -131,8 +171,14 @@ def _save_settings(data: dict) -> None:
         SETTINGS_FILE.write_text(
             _json_mod.dumps(data, indent=2), encoding="utf-8"
         )
-    except Exception:
-        pass
+        # Imposta permessi restrittivi (solo proprietario) se contiene API key
+        if data.get("api_key"):
+            try:
+                SETTINGS_FILE.chmod(0o600)
+            except Exception:
+                pass
+    except Exception as e:
+        log.error("_save_settings: impossibile scrivere %s — %s", SETTINGS_FILE, e)
 
 
 _load_settings()
@@ -184,11 +230,21 @@ async def save_settings_endpoint(request: Request):
         except (ValueError, TypeError):
             pass
 
+    # Job concorrenti massimi (1–10, default 2)
+    if "max_concurrent_jobs" in body:
+        try:
+            mj = int(body["max_concurrent_jobs"])
+            if 1 <= mj <= 10:
+                _SETTINGS["max_concurrent_jobs"] = mj
+        except (ValueError, TypeError):
+            pass
+
     _save_settings(_SETTINGS)
     return JSONResponse({"ok": True, "api_key": bool(key or _SETTINGS.get("api_key")),
                          "ttl_days": OUTPUT_TTL_DAYS,
                          "ffmpeg_timeout": int(_SETTINGS.get("ffmpeg_timeout", 7200)),
-                         "pipeline_timeout": int(_SETTINGS.get("pipeline_timeout", 3600))})
+                         "pipeline_timeout": int(_SETTINGS.get("pipeline_timeout", 3600)),
+                         "max_concurrent_jobs": int(_SETTINGS.get("max_concurrent_jobs", 2))})
 
 
 @app.get("/settings")
@@ -199,6 +255,7 @@ async def get_settings_endpoint():
         "ttl_days": OUTPUT_TTL_DAYS,
         "ffmpeg_timeout": int(_SETTINGS.get("ffmpeg_timeout", 7200)),
         "pipeline_timeout": int(_SETTINGS.get("pipeline_timeout", 3600)),
+        "max_concurrent_jobs": int(_SETTINGS.get("max_concurrent_jobs", 2)),
     })
 
 
@@ -307,6 +364,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             return  # job eliminato prima che il thread partisse
         jobs[job_id]["status"] = "running"
         _save_jobs()
+    log.info("Job avviato: %s | title=%r | files=%s", job_id, title, len(jobs.get(job_id, {}).get("files", [])))
 
     # ── Continua un corso precedente: copia state.json e corso_context.json ──
     if continue_from:
@@ -325,9 +383,9 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                 src = prev_out / fname
                 if src.exists():
                     shutil.copy2(src, output_dir / fname)
-                    print(f"[continue] copiato {fname} da {prev_out}")
+                    log.info("[continue] copiato %s da %s", fname, prev_out)
         else:
-            print(f"[continue] job {continue_from} non trovato in memoria né su disco — ignoro")
+            log.warning("[continue] job %s non trovato in memoria né su disco — ignoro", continue_from)
 
     # ── Copia file uploadati nel debug dir — per ispezione e riproducibilità ──
     # Vengono copiati PRIMA che la pipeline parta, così sono disponibili
@@ -349,7 +407,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             if not url:
                 continue
             mp3_out = lesson_dir / f"teams_{i+1:02d}.mp3"
-            print(f"[TeamsHack] Download audio {i+1}/{len(teams_urls)}: {url[:80]}…")
+            log.info("[TeamsHack] Download audio %d/%d: %s…", i+1, len(teams_urls), url[:80])
             for attempt in range(1, 4):  # max 3 tentativi
                 try:
                     r = subprocess.run(
@@ -360,16 +418,17 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                         check=False,
                     )
                     if r.returncode == 0:
+                        log.info("[TeamsHack] Download completato: %s", mp3_out.name)
                         break
-                    print(f"[TeamsHack] Tentativo {attempt}/3 fallito (returncode={r.returncode})")
+                    log.warning("[TeamsHack] Tentativo %d/3 fallito (returncode=%d)", attempt, r.returncode)
                 except subprocess.TimeoutExpired:
-                    print(f"[TeamsHack] Timeout ({_ffmpeg_timeout}s) al tentativo {attempt}/3")
+                    log.warning("[TeamsHack] Timeout (%ds) al tentativo %d/3 — abbandono", _ffmpeg_timeout, attempt)
                     break  # timeout → inutile riprovare
                 except FileNotFoundError:
-                    print("[TeamsHack] ffmpeg non trovato — installa ffmpeg")
+                    log.error("[TeamsHack] ffmpeg non trovato — installa ffmpeg")
                     break
                 except Exception as e:
-                    print(f"[TeamsHack] Errore tentativo {attempt}/3: {e}")
+                    log.warning("[TeamsHack] Errore tentativo %d/3: %s", attempt, e)
 
     cmd = [
         "python3", "-u", "pipeline.py",  # -u: stdout unbuffered → righe visibili in real-time
@@ -513,12 +572,15 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                 jobs[job_id]["has_pdf"]    = has_pdf
                 jobs[job_id]["pdf_errors"] = pdf_errors
                 _save_jobs()
+            log.info("Job completato: %s | has_pdf=%s | pdf_errors=%d",
+                     job_id, has_pdf, len(pdf_errors))
             # File originali non più necessari dopo completamento
             shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
         else:
             with _jobs_lock:
                 jobs[job_id]["status"] = "error"
                 _save_jobs()
+            log.error("Job fallito: %s | returncode=%s", job_id, returncode)
             shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
 
     except subprocess.TimeoutExpired:
@@ -530,6 +592,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             jobs[job_id]["status"] = "error"
             jobs[job_id]["stderr"] = f"Timeout: pipeline impiegata più di {_pipeline_timeout//60} minuti"
             _save_jobs()
+        log.error("Job timeout: %s dopo %d minuti", job_id, _pipeline_timeout // 60)
         shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
     except Exception as e:
         try:
@@ -540,6 +603,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             jobs[job_id]["status"] = "error"
             jobs[job_id]["stderr"] = str(e)
             _save_jobs()
+        log.exception("Job eccezione non gestita: %s", job_id)
         shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
 
 
@@ -574,6 +638,17 @@ async def run_pipeline(
     _subject    = subject.strip().lower() if subject and subject.strip() not in ("", "auto") else None
     if _subject and _subject not in _VALID_SUBJECTS:
         _subject = None
+
+    # Rate limiting: controlla job in esecuzione
+    _max_concurrent = int(_SETTINGS.get("max_concurrent_jobs", 2))
+    with _jobs_lock:
+        _running_count = sum(1 for j in jobs.values() if j.get("status") == "running")
+    if _running_count >= _max_concurrent:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Troppi job in esecuzione ({_running_count}/{_max_concurrent}). "
+                   f"Attendi che uno finisca prima di avviarne un altro."
+        )
 
     # Crea job
     job_id     = str(uuid.uuid4())[:8]
