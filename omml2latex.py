@@ -33,6 +33,7 @@ Uso:
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from lxml import etree
 from typing import Optional
 
@@ -601,9 +602,12 @@ def _postprocess(latex: str) -> str:
 # API PUBBLICA
 # ─────────────────────────────────────────────────────────────
 
+@lru_cache(maxsize=512)
 def omml_to_latex(omml_xml: str) -> Optional[str]:
     """
     Converte una stringa XML OMML (m:oMath o m:oMathPara) in LaTeX.
+    Risultati memoizzati (LRU 512 entry) — formule identiche non vengono
+    riconvertite su PPTX con elementi ripetuti.
 
     Parametri:
         omml_xml  — stringa XML come prodotta da extractor.py

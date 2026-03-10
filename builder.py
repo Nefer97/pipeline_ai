@@ -3,10 +3,10 @@ builder.py
 Genera il file .tex finale a partire dai dati estratti.
 """
 
-LATEX_HEADER = r"""\documentclass[12pt,a4paper]{article}
+_LATEX_HEADER_TMPL = r"""\documentclass[12pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
-\usepackage[italian]{babel}
+\usepackage[{babel_lang}]{babel}
 \usepackage{amsmath}
 \usepackage{amssymb}
 \usepackage{amsfonts}
@@ -34,6 +34,25 @@ LATEX_HEADER = r"""\documentclass[12pt,a4paper]{article}
 LATEX_FOOTER = r"""
 \end{document}
 """
+
+# Mappa codici Whisper/BCP-47 → nomi babel
+_WHISPER_TO_BABEL: dict[str, str] = {
+    "it": "italian",   "en": "english",   "fr": "french",
+    "de": "ngerman",   "es": "spanish",   "pt": "portuguese",
+    "nl": "dutch",     "ru": "russian",   "pl": "polish",
+    "cs": "czech",     "el": "greek",     "zh": "chinese",
+    "ja": "japanese",  "ar": "arabic",
+}
+
+
+def _make_header(lang: str = "italian") -> str:
+    """Restituisce LATEX_HEADER con la lingua babel corretta."""
+    babel_lang = _WHISPER_TO_BABEL.get(lang, lang) if len(lang) <= 3 else lang
+    return _LATEX_HEADER_TMPL.replace("{babel_lang}", babel_lang)
+
+
+# Header default per compatibilità backward
+LATEX_HEADER: str = _make_header("italian")
 
 
 def _escape_latex(text: str) -> str:
@@ -90,13 +109,15 @@ def _format_text_block(text: str) -> str:
     return '\n'.join(result)
 
 
-def build_latex(slides: list, output_path: str, title: str = "Note del Corso", images_rel_path: str = "images"):
+def build_latex(slides: list, output_path: str, title: str = "Note del Corso",
+                images_rel_path: str = "images", lang: str = "italian"):
     """
     Genera il file .tex finale.
     slides: lista di SlideData con obj.latex_result popolato
     images_rel_path: percorso relativo alla cartella immagini (usato in \\graphicspath)
+    lang: lingua babel — codice Whisper (es. "it", "en") o nome babel diretto
     """
-    header = LATEX_HEADER.replace(
+    header = _make_header(lang).replace(
         r"\graphicspath{{./images/}}",
         f"\\graphicspath{{{{{images_rel_path}/}}}}"
     )
