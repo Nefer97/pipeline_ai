@@ -1,0 +1,45 @@
+# Appunti AI — dipendenze Python
+# Installa con: pip install -r requirements.txt
+# Richiede Python >= 3.10
+
+# ── Trascrizione audio ─────────────────────────────────────────
+openai-whisper>=20231117
+
+# ── Estrazione testo da documenti ─────────────────────────────
+pdfplumber>=0.10.0
+python-pptx>=0.6.23
+python-docx>=1.1.0
+
+# ── Rendering immagini (slide PNG, pagine PDF PNG) ─────────────
+PyMuPDF>=1.23.0          # importato come "fitz"
+Pillow>=9.0.0
+
+# ── Parsing XML (formule OMML PowerPoint) ─────────────────────
+lxml>=4.9.0
+
+# ── Calcolo numerico ───────────────────────────────────────────
+numpy>=1.24.0
+
+# ── Backend web ────────────────────────────────────────────────
+fastapi>=0.100.0
+uvicorn>=0.23.0
+python-multipart>=0.0.6
+aiofiles>=23.0.0
+
+# ── Claude API ─────────────────────────────────────────────────
+anthropic>=0.20.0
+
+# ── Test (opzionale) ───────────────────────────────────────────
+pytest>=7.0.0
+
+# ────────────────────────────────────────────────────────────────
+# Dipendenze opzionali — non installate di default
+# ────────────────────────────────────────────────────────────────
+# OCR per PDF scansionati:
+#   pip install pytesseract
+#   sudo apt install tesseract-ocr tesseract-ocr-ita tesseract-ocr-eng   (Linux)
+#   brew install tesseract                                                  (macOS)
+#
+# OCR formule matematiche (venv separato consigliato — PyTorch ~2 GB):
+#   python3 -m venv ~/pix2tex_venv && source ~/pix2tex_venv/bin/activate
+#   pip install pix2tex
