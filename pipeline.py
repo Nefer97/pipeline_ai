@@ -66,7 +66,7 @@ try:
     from omml2latex import omml_to_latex
     from ocr_math import image_to_latex, unload_models as _ocr_unload
     from slide_renderer import render_slide_images, slide_figure_latex
-    from pdf_renderer import render_pdf_pages
+    from pdf_renderer import render_pdf_pages, _build_pdf_latex_skeleton
     COLLEAGUE_MODULES = True
     print("✓ Moduli collega: extractor, builder, formula_detector, omml2latex, ocr_math, slide_renderer, pdf_renderer")
 except ImportError as e:
@@ -1673,7 +1673,6 @@ def _collect_pdf(sources: dict, source_names: list, pdf_files: list,
                     pages.extend(_ocr)
                     pages.sort(key=lambda p: p["page"])
                     if COLLEAGUE_MODULES:
-                        from pdf_renderer import _build_pdf_latex_skeleton
                         latex_skeleton = _build_pdf_latex_skeleton(pf, pages, page_images)
         if not pages:
             print(f"    [WARN] {pf.name}: nessun testo disponibile — saltato")
