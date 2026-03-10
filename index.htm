@@ -22,6 +22,7 @@
     <a class="nav-link" href="schema.htm"><span class="nd"></span>Schema</a>
   </div>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambia tema"></button>
+  <button class="theme-toggle" id="musicToggle" onclick="toggleMusic()" title="Musica ambiente: OFF" style="margin-left:6px;font-size:.72rem;opacity:.45;">♫</button>
 </nav>
 <div class="container">
   <header>
@@ -30,8 +31,9 @@
   </header>
 
   <div class="pipeline">
-    <audio id="bgMusic" src="assets/audio/ambient.mp3" loop></audio>
-    <div class="section-label">// 01 · carica le tue fonti</div>
+
+    <!-- ── 01 · FONTI ─────────────────────────────────────────── -->
+    <div class="section-label">// 01 · fonti</div>
     <div class="input-row">
       <div class="upload-col">
         <div class="upload-card" style="--cc:#00e5ff" id="card-audio">
@@ -40,7 +42,7 @@
           <div class="progress-bar" id="progress-audio"></div>
           <div class="icon">🎵</div><div class="name">AUDIO</div>
           <div class="exts">.mp3 · .wav · .m4a</div>
-          <div class="upload-hint">↑ drag & drop</div>
+          <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
         <div class="file-list" id="files-audio" style="--cc:#00e5ff"></div>
       </div>
@@ -51,7 +53,7 @@
           <div class="progress-bar" id="progress-video"></div>
           <div class="icon">🎬</div><div class="name">VIDEO</div>
           <div class="exts">.mp4 · .mkv · .webm</div>
-          <div class="upload-hint">↑ drag & drop</div>
+          <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
         <div class="file-list" id="files-video" style="--cc:#7c3aed"></div>
       </div>
@@ -62,7 +64,7 @@
           <div class="progress-bar" id="progress-slide"></div>
           <div class="icon">📊</div><div class="name">SLIDE</div>
           <div class="exts">.pptx</div>
-          <div class="upload-hint">↑ drag & drop</div>
+          <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
         <div class="file-list" id="files-slide" style="--cc:#f59e0b"></div>
       </div>
@@ -73,7 +75,7 @@
           <div class="progress-bar" id="progress-doc"></div>
           <div class="icon">📄</div><div class="name">DOC</div>
           <div class="exts">.docx · .pdf · .txt</div>
-          <div class="upload-hint">↑ drag & drop</div>
+          <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
         <div class="file-list" id="files-doc" style="--cc:#10b981"></div>
       </div>
@@ -86,27 +88,30 @@
         </div>
         <div class="file-list" id="files-teams" style="--cc:#ef4444"></div>
         <div id="teams-url-area" style="display:none;margin-top:8px;">
-          <input type="text" id="teams-url-input" placeholder="Incolla URL Teams…" style="width:100%;background:color-mix(in srgb,#ef4444 8%,#11151c);border:1px solid color-mix(in srgb,#ef4444 25%,transparent);border-radius:8px;padding:8px 12px;font-family:'JetBrains Mono',monospace;font-size:.64rem;color:#e2e8f0;outline:none;">
-          <div style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:#ef4444;opacity:.55;margin-top:5px;">↵ Invio per aggiungere · Esc per chiudere</div>
+          <input type="text" id="teams-url-input" class="teams-url-input" placeholder="Incolla URL Teams…">
+          <div class="teams-url-hint">↵ Invio per aggiungere · Esc per chiudere</div>
         </div>
       </div>
     </div>
 
-    <!-- CONFIG -->
+    <!-- ── 02 · CONFIGURAZIONE ────────────────────────────────── -->
     <div style="margin-top:24px;">
-      <div class="section-label">// 02 · configurazione pipeline</div>
+      <div class="section-label">// 02 · configurazione</div>
       <div class="config-panel">
 
+        <!-- Titolo lezione -->
         <div class="config-field">
           <label>Titolo corso / lezione <span style="color:var(--c5);font-size:.7em">*</span></label>
           <input type="text" id="titleInput" placeholder="es. Analisi Matematica 1 — Lezione 03" required>
         </div>
 
+        <!-- Stato sistema (API key, ffmpeg, pdflatex) -->
+        <div class="health-strip" id="healthBadges"></div>
+
         <div class="config-grid">
-          <!-- Colonna sinistra -->
+          <!-- Moduli AI -->
           <div class="config-group">
             <div class="config-group-label">Moduli AI</div>
-
             <div class="toggle-row">
               <div class="toggle-info">
                 <span class="t-name">Claude AI</span>
@@ -116,8 +121,6 @@
                 <input type="checkbox" id="opt-claude" checked><label for="opt-claude"></label>
               </div>
             </div>
-            <div id="healthBadges" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;padding-left:2px;"></div>
-
             <div class="toggle-row">
               <div class="toggle-info">
                 <span class="t-name">OCR formule (pix2tex)</span>
@@ -127,7 +130,6 @@
                 <input type="checkbox" id="opt-ocr"><label for="opt-ocr"></label>
               </div>
             </div>
-
             <div class="toggle-row">
               <div class="toggle-info">
                 <span class="t-name">Contesto corso</span>
@@ -137,13 +139,11 @@
                 <input type="checkbox" id="opt-context" checked><label for="opt-context"></label>
               </div>
             </div>
-
           </div>
 
-          <!-- Colonna destra -->
+          <!-- Trascrizione & Output -->
           <div class="config-group">
             <div class="config-group-label">Trascrizione &amp; Output</div>
-
             <div class="config-field" style="gap:6px">
               <label>Modello Whisper</label>
               <div class="whisper-row">
@@ -156,19 +156,17 @@
                 </select>
                 <span class="whisper-speed">vel: <span id="whisperSpeedLabel">1×</span></span>
               </div>
-              <div id="whisperEstimate" style="display:none;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);opacity:.75;margin-top:3px;"></div>
+              <div id="whisperEstimate" class="whisper-est"></div>
             </div>
-
             <div class="config-field" style="gap:6px">
               <label>Cartella output <span style="color:var(--muted);font-size:.85em">(da titolo)</span></label>
               <input type="text" id="opt-output" readonly placeholder="generato dal titolo…" style="border-left-color:var(--c3);opacity:.7;cursor:default">
             </div>
-
             <div style="margin:2px 0 -2px;">
-              <button type="button" id="advancedToggle" onclick="toggleAdvanced()" style="background:none;border:none;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--muted);padding:0;opacity:.6;">▸ opzioni avanzate</button>
+              <button type="button" id="advancedToggle" onclick="toggleAdvanced()" class="adv-toggle-btn">▸ opzioni avanzate</button>
             </div>
             <div class="config-field" style="gap:6px;display:none;" id="ttl-field">
-              <label>Retention output <span style="opacity:.6">(giorni prima della cancellazione automatica)</span></label>
+              <label>Retention output <span style="opacity:.6">(giorni, poi cancellazione automatica)</span></label>
               <div style="display:flex;gap:8px;align-items:center;">
                 <input type="number" id="opt-ttl" min="1" max="365" value="7" style="border-left-color:var(--c3);width:90px;" oninput="saveTtl()">
                 <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);">giorni</span>
@@ -179,18 +177,17 @@
               <label>Start-from <span style="opacity:.6">(0 = auto da state.json)</span></label>
               <input type="number" id="opt-startfrom" value="0" min="0" style="border-left-color:var(--c2)">
             </div>
-
             <div class="config-field" style="gap:6px">
-              <label>Lezione precedente <span style="opacity:.6;font-size:.85em">(Job ID — per continuare il corso)</span></label>
+              <label>Lezione precedente <span style="opacity:.6;font-size:.85em">(Job ID — continua corso)</span></label>
               <input type="text" id="opt-continue" placeholder="es. 8ccdc0a7 — lascia vuoto per nuovo corso" style="border-left-color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.72rem;">
-              <span id="continue-hint" style="display:none;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--c4);opacity:.7;">state.json copiato automaticamente — start-from ignorato</span>
+              <span id="continue-hint" class="continue-hint">state.json copiato automaticamente — start-from ignorato</span>
             </div>
           </div>
         </div>
 
-        <!-- Subject -->
+        <!-- Materia -->
         <div class="config-group">
-          <div class="config-group-label">Tipo di materia — profilo prompt LaTeX</div>
+          <div class="config-group-label">Materia — profilo prompt LaTeX</div>
           <div class="subject-grid" id="subjectGrid">
             <button class="subject-btn selected" data-subject="auto"><span class="s-icon">🔍</span>auto-detect</button>
             <button class="subject-btn" data-subject="ingegneria"><span class="s-icon">⚙️</span>Ingegneria</button>
@@ -203,7 +200,7 @@
           </div>
         </div>
 
-        <!-- Status tags -->
+        <!-- Config status tags (aggiornati via JS, visibili come riepilogo impostazioni) -->
         <div class="config-status">
           <span class="config-tag active" id="tag-claude" style="--tag-color:#00e5ff">claude ON</span>
           <span class="config-tag" id="tag-ocr" style="--tag-color:#f59e0b">ocr OFF</span>
@@ -218,11 +215,20 @@
       </div>
     </div>
 
+    <!-- ── PRE-FLIGHT (titolo + file pronti) ─────────────────── -->
+    <div class="preflight-row" id="preflightRow" style="display:none;">
+      <span class="pf-label">↳</span>
+    </div>
+
+    <!-- ── RUN ───────────────────────────────────────────────── -->
     <div class="run-section">
       <button class="run-btn" id="runBtn" title="Carica almeno un file e inserisci un titolo">▶ AVVIA PIPELINE</button>
-      <div id="run-hint" style="display:none;font-family:'JetBrains Mono',monospace;font-size:.63rem;color:var(--muted);text-align:center;margin-top:6px;opacity:.7;"></div>
+      <button id="cancelBtn" title="Interrompi job in corso" onclick="cancelCurrentJob()">✕ Annulla</button>
+      <div id="run-hint" class="run-hint"></div>
     </div>
-    <div class="live-status" id="liveStatus">
+
+    <!-- ── LIVE STATUS (nascosto a riposo) ───────────────────── -->
+    <div class="live-status" id="liveStatus" style="display:none;">
       <div class="live-header">
         <div class="live-dot"></div>
         <div class="live-phase" id="livePhase">In attesa…</div>
@@ -233,59 +239,67 @@
         <div class="global-progress-bar" id="globalProgressBar"></div>
       </div>
     </div>
-    <!-- Log pipeline in tempo reale -->
-    <div id="logPanel" style="display:none;margin:8px 0;background:color-mix(in srgb,var(--c1) 5%,var(--surface2));border:1px solid color-mix(in srgb,var(--c1) 20%,transparent);border-radius:10px;overflow:hidden;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;cursor:pointer;user-select:none;" onclick="toggleLogPanel()">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--c1);font-weight:700;">// log pipeline</span>
-        <div style="display:flex;gap:10px;align-items:center;">
+
+    <!-- ── LOG PIPELINE ──────────────────────────────────────── -->
+    <div id="logPanel" class="panel panel-log" style="display:none;">
+      <div class="panel-header" onclick="toggleLogPanel()">
+        <span class="panel-title">// log pipeline</span>
+        <div class="panel-meta">
           <span id="logLineCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
-          <span id="logToggleArrow" style="color:var(--c1);font-size:.85rem;">▼</span>
+          <span id="logToggleArrow" class="panel-arrow">▼</span>
         </div>
       </div>
-      <div id="logPanelBody" style="display:none;padding:0 14px 14px;">
-        <pre id="logOutput" style="margin:0;padding:10px;background:#0a0e14;border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:#7dd3fc;overflow-x:auto;max-height:320px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;"></pre>
+      <div id="logPanelBody" class="panel-body" style="display:none;">
+        <pre id="logOutput" class="log-pre"></pre>
       </div>
     </div>
 
-    <div id="jobIdBadge" style="display:none;background:color-mix(in srgb,var(--c4) 8%,var(--surface2));border:1px solid color-mix(in srgb,var(--c4) 30%,transparent);border-radius:10px;padding:10px 16px;margin:8px 0 4px;font-family:'JetBrains Mono',monospace;font-size:.72rem;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span style="color:var(--muted2)">Lezione completata:</span>
-      <span id="jobIdText" style="color:var(--c4);font-weight:700;letter-spacing:.06em;"></span>
-      <a id="downloadLink" href="#" style="background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 40%,transparent);border-radius:6px;color:#10b981;font-family:'JetBrains Mono',monospace;font-size:.65rem;padding:4px 10px;text-decoration:none;">⬇ Scarica ZIP</a>
-      <button onclick="copyJobId()" style="background:color-mix(in srgb,var(--c4) 15%,transparent);border:1px solid color-mix(in srgb,var(--c4) 40%,transparent);border-radius:6px;color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.65rem;padding:4px 10px;cursor:pointer;">📋 Usa per lezione successiva</button>
+    <!-- ── COMPLETAMENTO ─────────────────────────────────────── -->
+    <div id="jobIdBadge" class="panel-job">
+      <span class="job-label">Lezione completata:</span>
+      <span id="jobIdText" class="job-id"></span>
+      <a id="downloadLink" href="#" class="job-btn job-btn-dl">⬇ Scarica ZIP</a>
+      <button onclick="copyJobId()" class="job-btn job-btn-cont">📋 Usa per lezione successiva</button>
+      <button onclick="resetForNextLesson()" class="job-btn job-btn-new">↺ Nuova pipeline</button>
     </div>
-    <!-- LaTeX Preview Panel -->
-    <div id="latexPreviewPanel" style="display:none;margin:8px 0;background:color-mix(in srgb,var(--c3) 6%,var(--surface2));border:1px solid color-mix(in srgb,var(--c3) 25%,transparent);border-radius:10px;overflow:hidden;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;cursor:pointer;user-select:none;" onclick="toggleLatexPreview()">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.72rem;color:var(--c3);font-weight:700;">// main.tex — anteprima LaTeX</span>
-        <div style="display:flex;gap:8px;align-items:center;">
-          <span id="hasPdfBadge" style="display:none;font-size:.62rem;background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 40%,transparent);color:#10b981;border-radius:4px;padding:2px 8px;font-family:'JetBrains Mono',monospace;">✓ PDF compilato</span>
-          <span id="noPdfBadge" style="display:none;cursor:pointer;font-size:.62rem;background:color-mix(in srgb,#ef4444 12%,transparent);border:1px solid color-mix(in srgb,#ef4444 35%,transparent);color:#ef4444;border-radius:4px;padding:2px 8px;font-family:'JetBrains Mono',monospace;" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
-          <span id="previewToggleArrow" style="color:var(--c3);font-size:.9rem;">▼</span>
+
+    <!-- ── ANTEPRIMA LaTeX ───────────────────────────────────── -->
+    <div id="latexPreviewPanel" class="panel panel-latex" style="display:none;">
+      <div class="panel-header" onclick="toggleLatexPreview()">
+        <span class="panel-title">// main.tex — anteprima LaTeX</span>
+        <div class="panel-meta">
+          <span id="hasPdfBadge" class="pdf-badge pdf-badge-ok">✓ PDF compilato</span>
+          <span id="noPdfBadge" class="pdf-badge pdf-badge-err" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
+          <span id="previewToggleArrow" class="panel-arrow">▼</span>
         </div>
       </div>
-      <div id="latexPreviewBody" style="display:none;padding:0 16px 16px;">
-        <pre id="latexPreviewCode" style="margin:0;padding:12px;background:var(--bg);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.62rem;color:#e2e8f0;overflow-x:auto;max-height:420px;overflow-y:auto;white-space:pre;"></pre>
+      <div id="latexPreviewBody" class="panel-body" style="display:none;">
+        <pre id="latexPreviewCode" style="margin:0;padding:12px;background:var(--bg);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.62rem;overflow-x:auto;max-height:420px;overflow-y:auto;white-space:pre;"></pre>
       </div>
-      <!-- Errori pdflatex (solo se PDF non compilato) -->
-      <div id="pdfErrorsBody" style="display:none;padding:0 16px 14px;">
-        <pre id="pdfErrorsCode" style="margin:0;padding:12px;background:color-mix(in srgb,#ef4444 8%,var(--bg));border:1px solid color-mix(in srgb,#ef4444 25%,transparent);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.6rem;color:#fca5a5;overflow-x:auto;max-height:260px;overflow-y:auto;white-space:pre-wrap;"></pre>
+      <div id="pdfErrorsBody" class="panel-body" style="display:none;">
+        <pre id="pdfErrorsCode" style="margin:0;padding:12px;background:color-mix(in srgb,#ef4444 8%,var(--bg));border:1px solid color-mix(in srgb,#ef4444 25%,transparent);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.6rem;overflow-x:auto;max-height:260px;overflow-y:auto;white-space:pre-wrap;"></pre>
       </div>
     </div>
 
-    <!-- History panel — lezioni precedenti -->
-    <div id="historyPanel" style="display:none;margin:8px 0;background:color-mix(in srgb,var(--c2) 5%,var(--surface2));border:1px solid color-mix(in srgb,var(--c2) 18%,transparent);border-radius:10px;overflow:hidden;">
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 14px;cursor:pointer;user-select:none;" onclick="toggleHistory()">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--c2);font-weight:700;">// lezioni precedenti</span>
-        <div style="display:flex;gap:10px;align-items:center;">
+    <!-- ── LEZIONI PRECEDENTI ────────────────────────────────── -->
+    <div id="historyPanel" class="panel panel-history" style="display:none;">
+      <div class="panel-header" onclick="toggleHistory()">
+        <span class="panel-title">// lezioni precedenti</span>
+        <div class="panel-meta">
           <span id="historyCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
-          <span id="historyArrow" style="color:var(--c2);font-size:.85rem;">▼</span>
+          <span id="historyArrow" class="panel-arrow">▼</span>
         </div>
       </div>
-      <div id="historyBody" style="display:none;padding:0 14px 12px;">
+      <div id="historyBody" class="panel-body" style="display:none;">
         <div id="historyList" style="display:flex;flex-direction:column;gap:5px;"></div>
       </div>
     </div>
 
+    <!-- Toggle sezione documentazione -->
+    <div class="info-toggle">
+      <button class="info-toggle-btn" id="infoToggleBtn" onclick="toggleInfoSection()">// come funziona la pipeline ▸</button>
+    </div>
+    <div id="infoSection" style="display:none;">
     <div class="arrow-down"><div class="chevron"></div></div>
     <div class="section-label">// 03 · preprocessing</div>
     <div class="steps">
@@ -392,6 +406,7 @@
       <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>preprocessor.py</div>
       <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>output LaTeX</div>
     </div>
+    </div><!-- /infoSection -->
 
   </div>
 </div>
@@ -407,6 +422,7 @@
 <audio id="AddFile" src="assets/audio/AddFile.mp3"></audio>
 <audio id="ToggleAI" src="assets/audio/Toggle.mp3"></audio>
 <audio id="SelectSubject" src="assets/audio/Select.mp3"></audio>
+<audio id="bgMusic" src="assets/audio/ambient.mp3" loop></audio>
 
 
 <script>
@@ -492,6 +508,16 @@ function useJobId(id){
   showToast('Job ID selezionato',`${id} — carica i file della prossima lezione`,'#f59e0b');
 }
 
+async function deleteJobFromHistory(id){
+  if(!confirm(`Eliminare la lezione "${id}"?\nVerranno cancellati anche il file .tex e le immagini.`))return;
+  try{
+    const r=await fetch(`${API}/job/${id}?full=true`,{method:'DELETE'});
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    showToast('Lezione eliminata',id,'#ef4444');
+    _loadHistory();
+  }catch(e){showToast('Errore eliminazione',e.message,'#ef4444');}
+}
+
 async function _loadHistory(){
   try{
     const data=await(await fetch(`${API}/jobs`)).json();
@@ -517,6 +543,7 @@ async function _loadHistory(){
         <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;">${j.id}</span>
         ${done&&j.has_zip?`<a href="${API}/download/${j.id}" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 35%,transparent);color:#10b981;text-decoration:none;flex-shrink:0;">⬇ ZIP</a>`:''}
         ${done?`<button onclick="useJobId('${j.id}')" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,var(--c4) 15%,transparent);border:1px solid color-mix(in srgb,var(--c4) 35%,transparent);color:var(--c4);cursor:pointer;">▶ Continua</button>`:''}
+        <button onclick="deleteJobFromHistory('${j.id}')" title="Elimina job e output" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:none;border:1px solid color-mix(in srgb,#ef4444 25%,transparent);color:#ef4444;cursor:pointer;opacity:.55;transition:opacity .15s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.55'">✕</button>
       </div>`;
     }).join('');
   }catch(_){}
@@ -540,6 +567,17 @@ function updateWhisperEstimate(){
   el.style.display='block';
 }
 
+function resetForNextLesson(){
+  Object.keys(fileState).forEach(type=>{ fileState[type]=[]; renderFiles(type); });
+  document.getElementById('titleInput').value='';
+  document.getElementById('opt-output').value='';
+  document.getElementById('jobIdBadge').style.display='none';
+  document.getElementById('latexPreviewPanel').style.display='none';
+  updateConfigStatus(false);
+  updateRunButton();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
 function copyJobId(){
   const id=document.getElementById('jobIdText').textContent;
   navigator.clipboard.writeText(id).catch(()=>{});
@@ -552,15 +590,11 @@ function copyJobId(){
 
 function setUIRunning(isRunning){
   const inputs = document.querySelectorAll('input, select, textarea, button');
-
+  const skipIds = new Set(['runBtn','cancelBtn','musicToggle','themeToggle']);
   inputs.forEach(el=>{
-    if(el.id !== 'runBtn'){ // lasciamo gestire run separatamente
-      el.disabled = isRunning;
-    }
+    if(!skipIds.has(el.id)) el.disabled = isRunning;
   });
-
   const runBtn = document.getElementById('runBtn');
-
   if(isRunning){
     runBtn.disabled = true;
     runBtn.classList.add('running');
@@ -655,11 +689,34 @@ function updateGlobalProgress(p){
   bar.style.width=v+'%';
   if(pct) pct.textContent=v>0?Math.round(v)+'%':'—';
 }
+let _currentJobId=null;
 function updateLiveStatus(phase,detail='',color='#10b981',isRunning=false){
+  const el=document.getElementById('liveStatus');
   document.getElementById('livePhase').textContent=phase;
   document.getElementById('liveDetail').textContent=detail;
   document.querySelector('.live-dot').style.background=color;
-  document.getElementById('liveStatus').classList.toggle('is-running',isRunning);
+  el.classList.toggle('is-running',isRunning);
+  el.style.display=(isRunning||phase!=='In attesa…')?'flex':'none';
+  const cancelBtn=document.getElementById('cancelBtn');
+  if(cancelBtn)cancelBtn.style.display=isRunning?'inline-block':'none';
+}
+
+async function cancelCurrentJob(){
+  if(!_currentJobId)return;
+  const id=_currentJobId;
+  if(!confirm(`Annullare il job ${id}?`))return;
+  try{
+    await fetch(`${API}/job/${id}`,{method:'DELETE'});
+    if(_logEs){_logEs.close();_logEs=null;}
+    updateLiveStatus('In attesa…','','#10b981',false);
+    updateGlobalProgress(0);
+    setUIRunning(false);
+    document.getElementById('runBtn').classList.add('active');
+    document.getElementById('runBtn').textContent='▶ AVVIA PIPELINE';
+    showToast('Job annullato',id,'#f59e0b');
+    _currentJobId=null;
+    setTimeout(_loadHistory,500);
+  }catch(e){showToast('Errore annullamento',e.message,'#ef4444');}
 }
 const fileState = {audio:[],video:[],slide:[],doc:[],teams:[]};
 let selectedSubject = 'auto';
@@ -677,7 +734,13 @@ Object.values(sounds).forEach(s=>{ s.volume=0.15; });
 // AMBIENT MUSIC
 const bgMusic = document.getElementById('bgMusic');
 bgMusic.volume = 0.05;
-bgMusic.play().catch(()=>{});
+let _musicOn = false;
+function toggleMusic(){
+  _musicOn = !_musicOn;
+  const btn = document.getElementById('musicToggle');
+  if(_musicOn){ bgMusic.play().catch(()=>{_musicOn=false;if(btn)btn.style.opacity='.45';});if(btn){btn.style.opacity='1';btn.title='Musica ambiente: ON';} }
+  else{ bgMusic.pause();if(btn){btn.style.opacity='.45';btn.title='Musica ambiente: OFF';} }
+}
 
 // UTILITY
 function fmt(b){if(b<1024)return b+' B';if(b<1048576)return(b/1024).toFixed(0)+' KB';return(b/1048576).toFixed(1)+' MB';}
@@ -717,6 +780,43 @@ function updateRunButton(){
       btn.title='Carica almeno un file e inserisci un titolo';
     }
   }
+  updatePreflightRow();
+}
+
+function updatePreflightRow(){
+  const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);
+  const hasTitle=document.getElementById('titleInput').value.trim().length>0;
+  const row=document.getElementById('preflightRow');
+  if(!row)return;
+  if(!total||!hasTitle){row.style.display='none';return;}
+  const colorMap={audio:'#00e5ff',video:'#7c3aed',slide:'#f59e0b',doc:'#10b981',teams:'#ef4444'};
+  const iconMap={audio:'🎵',video:'🎬',slide:'📊',doc:'📄',teams:'🌐'};
+  let html='<span class="pf-label">↳</span>';
+  Object.entries(fileState).forEach(([t,files])=>{
+    if(!files.length)return;
+    const totalSize=files.reduce((s,f)=>s+(f.size||0),0);
+    const sizeStr=totalSize>0?` · ${fmt(totalSize)}`:'';
+    html+=`<span class="pf-chip hi" style="--cc:${colorMap[t]}">${iconMap[t]} ${files.length} ${t}${sizeStr}</span>`;
+  });
+  const claude=document.getElementById('opt-claude').checked;
+  html+=`<span class="pf-chip hi" style="--cc:${claude?'#00e5ff':'#64748b'}">${claude?'✦ Claude':'⚡ skip-ai'}</span>`;
+  const ocr=document.getElementById('opt-ocr').checked;
+  if(ocr)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">🔬 OCR</span>`;
+  const whisperEl=document.getElementById('whisperEstimate');
+  if(whisperEl&&whisperEl.style.display!=='none'&&whisperEl.textContent)
+    html+=`<span class="pf-chip">⏱ ${whisperEl.textContent.replace('⏱ stima trascrizione Whisper: ','')}</span>`;
+  const subject=selectedSubject!=='auto'?selectedSubject:null;
+  if(subject)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">📚 ${subject}</span>`;
+  row.innerHTML=html;
+  row.style.display='flex';
+}
+
+function toggleInfoSection(){
+  const sec=document.getElementById('infoSection');
+  const btn=document.getElementById('infoToggleBtn');
+  const open=sec.style.display==='none';
+  sec.style.display=open?'block':'none';
+  btn.textContent=open?'// come funziona la pipeline ▾':'// come funziona la pipeline ▸';
 }
 
 // FILE RENDER
@@ -825,6 +925,12 @@ document.getElementById('titleInput').addEventListener('input',()=>{
   updateConfigStatus(false);
   updateRunButton();
 });
+document.getElementById('titleInput').addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    const btn=document.getElementById('runBtn');
+    if(btn.classList.contains('active'))btn.click();
+  }
+});
 
 // CONFIG STATUS
 function updateConfigStatus(playSound){
@@ -928,6 +1034,7 @@ runBtn.addEventListener('click',async()=>{
       showToast('⚠ File ignorati',j.warnings.join('\n'),'#f59e0b');
     showToast('Pipeline avviata!',`job ${j.job_id}`,'#10b981');
     btn.textContent='⏳ In esecuzione…';
+    _currentJobId=j.job_id;
     setUIRunning(true);
     _startLogStream(j.job_id);
 

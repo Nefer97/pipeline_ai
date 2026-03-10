@@ -21,6 +21,23 @@
   --c7: #f472b6;
   --text:  #e2e8f0;
   --muted: #4a5568;
+  --theme-icon: '🌙';
+}
+[data-theme="light"] {
+  --bg:      #f8fafc;
+  --surface: #ffffff;
+  --surface2:#f1f5f9;
+  --border:  #e2e8f0;
+  --c1: #0284c7;
+  --c2: #7c3aed;
+  --c3: #059669;
+  --c4: #d97706;
+  --c5: #dc2626;
+  --c6: #7c3aed;
+  --c7: #db2777;
+  --text:  #0f172a;
+  --muted: #64748b;
+  --theme-icon: '☀';
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -44,13 +61,18 @@ body::before {
   pointer-events: none; z-index: 0;
 }
 
-.navbar{position:fixed;top:0;left:0;right:0;z-index:200;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);height:48px;display:flex;align-items:center;padding:0 24px;gap:0;}
+.navbar{position:fixed;top:0;left:0;right:0;z-index:200;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);height:48px;display:flex;align-items:center;padding:0 24px;gap:0;transition:background .25s,border-color .25s;}
 .nav-logo{font-family:'Syne',sans-serif;font-size:.85rem;font-weight:800;background:linear-gradient(135deg,var(--c1),var(--c2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-.02em;margin-right:32px;white-space:nowrap;}
 .nav-links{display:flex;gap:2px;}
 .nav-link{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted);text-decoration:none;padding:6px 14px;border-radius:8px;letter-spacing:.06em;transition:color .2s,background .2s;display:flex;align-items:center;gap:6px;}
 .nav-link:hover{color:var(--text);background:color-mix(in srgb,var(--c1) 8%,transparent);}
 .nav-link.active{color:var(--c1);background:color-mix(in srgb,var(--c1) 10%,transparent);}
 .nav-link .nd{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.7;}
+.theme-toggle{margin-left:auto;background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;color:var(--muted);transition:color .2s,border-color .2s,background .2s;line-height:1;}
+.theme-toggle:hover{color:var(--text);border-color:var(--c1);background:color-mix(in srgb,var(--c1) 8%,transparent);}
+.theme-toggle::before{content:var(--theme-icon,'🌙');}
+body{transition:background .25s,color .25s;}
+.block,.detail-panel,.leg{transition:background .25s,border-color .25s,color .25s;}
 .page {
   position: relative; z-index: 1;
   max-width: 1200px;
@@ -378,12 +400,20 @@ header p {
 </style>
 </head>
 <body>
+<script>
+(function(){
+  var t=localStorage.getItem('theme')||
+    (window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  if(t==='light') document.documentElement.setAttribute('data-theme','light');
+})();
+</script>
 <nav class="navbar">
   <span class="nav-logo">Appunti AI</span>
   <div class="nav-links">
     <a class="nav-link" href="/"><span class="nd"></span>Pipeline</a>
     <a class="nav-link active" href="schema.htm"><span class="nd"></span>Schema</a>
   </div>
+  <button class="theme-toggle" onclick="toggleTheme()" title="Cambia tema"></button>
 </nav>
 <div class="page">
 
@@ -1017,6 +1047,18 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.block') && !e.target.closest('.detail-panel'))
     closeDetail();
 });
+
+// Escape key closes panel
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeDetail();
+});
+
+function toggleTheme(){
+  const html = document.documentElement;
+  const isLight = html.getAttribute('data-theme') === 'light';
+  html.setAttribute('data-theme', isLight ? 'dark' : 'light');
+  localStorage.setItem('theme', isLight ? 'dark' : 'light');
+}
 </script>
 </body>
 </html>
