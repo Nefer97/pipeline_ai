@@ -49,10 +49,32 @@ JOBS_FILE = OUTPUT_DIR / "jobs.json"
 _jobs_lock = threading.Lock()   # protezione accessi concorrenti da BackgroundTasks
 
 
+_JOBS_MEMORY_LIMIT = 200  # max job in memoria; oltre questo, i più vecchi done/error vengono scartati
+
+
+def _trim_jobs_memory() -> None:
+    """
+    Mantiene al massimo _JOBS_MEMORY_LIMIT job in memoria.
+    Scarta i più vecchi tra quelli terminati (done/error), mai quelli running/queued.
+    Deve essere chiamata DENTRO un blocco `with _jobs_lock`.
+    """
+    if len(jobs) <= _JOBS_MEMORY_LIMIT:
+        return
+    evictable = sorted(
+        [(jid, j) for jid, j in jobs.items()
+         if j.get("status") in ("done", "error")],
+        key=lambda x: x[1].get("created_at", ""),
+    )
+    to_remove = len(jobs) - _JOBS_MEMORY_LIMIT
+    for jid, _ in evictable[:to_remove]:
+        jobs.pop(jid, None)
+
+
 def _save_jobs() -> None:
     """Serializza jobs su disco (senza stdout/stderr per tenere il file piccolo).
     Deve essere chiamata DENTRO un blocco `with _jobs_lock`."""
     import json
+    _trim_jobs_memory()
     try:
         slim = {jid: {k: v for k, v in j.items() if k not in ("stdout", "stderr")}
                 for jid, j in jobs.items()}
@@ -452,10 +474,13 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                 jobs[job_id]["has_pdf"]    = has_pdf
                 jobs[job_id]["pdf_errors"] = pdf_errors
                 _save_jobs()
+            # File originali non più necessari dopo completamento
+            shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
         else:
             with _jobs_lock:
                 jobs[job_id]["status"] = "error"
                 _save_jobs()
+            shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
 
     except subprocess.TimeoutExpired:
         try:

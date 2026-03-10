@@ -37,14 +37,20 @@ Uso:
 
 from __future__ import annotations
 
+import gc
 import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as _FuturesTimeout
 from pathlib import Path
 from typing import Optional
+
+
+# Timeout (secondi) per chiamate bloccanti a pix2tex / latex-ocr
+_OCR_TIMEOUT = 20
 
 
 # ─────────────────────────────────────────────────────────────
@@ -58,6 +64,16 @@ _LATEX_OCR_LOADED: bool = False
 _LATEX_OCR_MODEL   = None
 
 _TESSERACT_OK:     Optional[bool] = None  # None = non ancora testato
+
+
+def _call_with_timeout(fn, args: tuple = (), timeout: int = _OCR_TIMEOUT):
+    """
+    Esegue fn(*args) in un thread con timeout.
+    Solleva TimeoutError se supera il limite; propaga eccezioni del thread.
+    """
+    with ThreadPoolExecutor(max_workers=1) as ex:
+        future = ex.submit(fn, *args)
+        return future.result(timeout=timeout)
 
 
 def _find_pix2tex_python() -> Optional[str]:
@@ -194,9 +210,11 @@ def _pix2tex_ocr(image_path: str) -> Optional[str]:
         try:
             from PIL import Image
             img    = Image.open(image_path)
-            result = _PIX2TEX_MODEL(img)
+            result = _call_with_timeout(_PIX2TEX_MODEL, (img,), timeout=_OCR_TIMEOUT)
             if result and result.strip():
                 return _postprocess_latex(result.strip())
+        except _FuturesTimeout:
+            print(f"    [pix2tex] timeout ({_OCR_TIMEOUT}s) su {image_path}", file=sys.stderr)
         except Exception as e:
             print(f"    [pix2tex] errore: {e}", file=sys.stderr)
         return None
@@ -233,9 +251,11 @@ def _latex_ocr_backend(image_path: str) -> Optional[str]:
     try:
         from PIL import Image
         img    = Image.open(image_path)
-        result = _LATEX_OCR_MODEL(img)
+        result = _call_with_timeout(_LATEX_OCR_MODEL, (img,), timeout=_OCR_TIMEOUT)
         if result and str(result).strip():
             return _postprocess_latex(str(result).strip())
+    except _FuturesTimeout:
+        print(f"    [latex-ocr] timeout ({_OCR_TIMEOUT}s) su {image_path}", file=sys.stderr)
     except Exception as e:
         print(f"    [latex-ocr] errore: {e}", file=sys.stderr)
     return None
@@ -630,6 +650,46 @@ def get_available_backends() -> list[str]:
         available.append("tesseract")
     available.append("heuristic")  # sempre disponibile
     return available
+
+
+def unload_models():
+    """
+    Scarica i modelli ML (pix2tex, latex-ocr) dalla memoria.
+
+    Chiamare dopo un batch di formule per liberare RAM/VRAM.
+    Al prossimo uso i modelli vengono ricaricati automaticamente.
+    """
+    global _PIX2TEX_LOADED, _PIX2TEX_MODEL
+    global _LATEX_OCR_LOADED, _LATEX_OCR_MODEL
+
+    unloaded = []
+
+    if _PIX2TEX_MODEL is not None:
+        try:
+            del _PIX2TEX_MODEL
+        except Exception:
+            pass
+        _PIX2TEX_MODEL   = None
+        _PIX2TEX_LOADED  = False
+        unloaded.append("pix2tex")
+
+    if _LATEX_OCR_MODEL is not None:
+        try:
+            del _LATEX_OCR_MODEL
+        except Exception:
+            pass
+        _LATEX_OCR_MODEL   = None
+        _LATEX_OCR_LOADED  = False
+        unloaded.append("latex-ocr")
+
+    if unloaded:
+        gc.collect()
+        try:
+            import torch
+            torch.cuda.empty_cache()
+        except Exception:
+            pass
+        print(f"    [ocr_math] unload: {', '.join(unloaded)}", file=sys.stderr)
 
 
 def clear_cache(image_dir: str, recursive: bool = False) -> int:

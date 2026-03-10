@@ -64,7 +64,7 @@ try:
     from builder import _escape_latex
     from formula_detector import is_formula_image
     from omml2latex import omml_to_latex
-    from ocr_math import image_to_latex
+    from ocr_math import image_to_latex, unload_models as _ocr_unload
     from slide_renderer import render_slide_images, slide_figure_latex
     from pdf_renderer import render_pdf_pages
     COLLEAGUE_MODULES = True
@@ -229,6 +229,9 @@ def process_pptx_full(pptx_path: Path, images_dir: Path, skip_ocr: bool = False)
                 if latex:
                     obj.latex_result = latex
                     n_ocr += 1
+            # Libera modelli ML dopo il batch — evita memory leak su server long-running
+            if COLLEAGUE_MODULES:
+                _ocr_unload()
 
     total_obj = sum(len(s.objects) for s in slides)
     print(f"    ✓ {len(slides)} slide | {total_obj} oggetti | {n_omml} OMML | {n_ocr} OCR")
