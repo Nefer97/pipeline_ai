@@ -818,21 +818,20 @@ REGOLE OBBLIGATORIE:
                 f"{sep2}\n{aligned_text}"
             )
         else:
+            # REGOLE scritte una volta nella header — non ripetute per ogni file
+            parts.append(
+                f"Trascrizione della VOCE DEL PROFESSORE durante la lezione.\n"
+                f"REGOLE:\n"
+                f"  • Integra le spiegazioni nelle \\subsection corrispondenti dello SCHELETRO\n"
+                f"  • Le ripetizioni di un concetto indicano importanza — enfatizzalo\n"
+                f"  • Gli esempi verbali non presenti nello scheletro → \\begin{{example}}\n"
+                f"  • Le frasi 'quindi', 'in altre parole', 'ricordate' → spiegazioni chiave\n"
+                f"  • I timestamp [MM:SS] indicano la progressione temporale"
+            )
             for entry in sources["carne"]:
                 filename = entry["filename"]
                 text     = _trunc(entry["text"], _MAX_CARNE_CHARS, filename)
-                parts.append(
-                    f"{sep2}\n"
-                    f"File: {filename}\n\n"
-                    f"Trascrizione della VOCE DEL PROFESSORE durante la lezione.\n"
-                    f"REGOLE:\n"
-                    f"  • Integra le spiegazioni nelle \\subsection corrispondenti dello SCHELETRO\n"
-                    f"  • Le ripetizioni di un concetto indicano importanza — enfatizzalo\n"
-                    f"  • Gli esempi verbali non presenti nello scheletro → \\begin{{example}}\n"
-                    f"  • Le frasi 'quindi', 'in altre parole', 'ricordate' → spiegazioni chiave\n"
-                    f"  • I timestamp [MM:SS] indicano la progressione temporale\n"
-                    f"{sep2}\n{text}"
-                )
+                parts.append(f"{sep2}\nFile: {filename}\n{sep2}\n{text}")
 
     # ── SUPPORTO ──
     if has_supporto:
@@ -905,11 +904,19 @@ REGOLE OBBLIGATORIE:
     # ─────────────────────────────────────────
     # CHIAMATA API
     # ─────────────────────────────────────────
+    # system come lista di blocchi con cache_control — il testo è identico per ogni lezione
+    # → Anthropic lo cachea dopo la prima chiamata (~70% risparmio su quei token)
     payload = json.dumps({
         "model":      CONFIG["claude_model"],
         "max_tokens": CONFIG["claude_max_tokens"],
-        "system":     system_prompt,
-        "messages":   [{"role": "user", "content": user_prompt}],
+        "system": [
+            {
+                "type":          "text",
+                "text":          system_prompt,
+                "cache_control": {"type": "ephemeral"},
+            }
+        ],
+        "messages": [{"role": "user", "content": user_prompt}],
     }).encode("utf-8")
 
     req = urllib.request.Request(
@@ -919,6 +926,7 @@ REGOLE OBBLIGATORIE:
             "Content-Type":      "application/json",
             "x-api-key":         api_key,
             "anthropic-version": "2023-06-01",
+            "anthropic-beta":    "prompt-caching-2024-07-31",
         },
         method = "POST",
     )
@@ -940,7 +948,12 @@ REGOLE OBBLIGATORIE:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 data  = json.loads(resp.read())
                 latex = data["content"][0]["text"]
-                print(f"  ✓ Claude: {time.time()-t0:.1f}s, {len(latex):,} chars")
+                usage = data.get("usage", {})
+                cache_hit  = usage.get("cache_read_input_tokens", 0)
+                cache_miss = usage.get("cache_creation_input_tokens", 0)
+                cache_info = (f", cache={'hit' if cache_hit else 'miss'} "
+                              f"(r:{cache_hit} w:{cache_miss})") if (cache_hit or cache_miss) else ""
+                print(f"  ✓ Claude: {time.time()-t0:.1f}s, {len(latex):,} chars{cache_info}")
 
                 if PREPROCESSOR and course_context_path:
                     update_course_context(
