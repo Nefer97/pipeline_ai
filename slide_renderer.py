@@ -210,17 +210,21 @@ def _render_with_pptx_pillow(pptx_path: Path, images_dir: Path) -> dict:
                                 y_offset += 8
                                 continue
 
-                            # Dimensione font: leggi dai run pptx, scala a DPI
+                            # Dimensione font: leggi dai run, poi dal paragrafo, poi default
                             pt_size = 12
                             try:
                                 for run in para.runs:
                                     if run.font.size:
                                         pt_size = int(run.font.size.pt)
                                         break
-                                if para.runs and para.runs[0].font.size is None:
-                                    # Prova dal placeholder / theme
-                                    if shape.text_frame.paragraphs[0].runs:
-                                        pass  # usa il default
+                                else:
+                                    # Nessun run con size esplicita → prova livello paragrafo
+                                    if para.font and para.font.size:
+                                        pt_size = int(para.font.size.pt)
+                                    elif shape.text_frame.paragraphs and shape.text_frame.paragraphs[0].runs:
+                                        first_run = shape.text_frame.paragraphs[0].runs[0]
+                                        if first_run.font.size:
+                                            pt_size = int(first_run.font.size.pt)
                             except Exception:
                                 pass
                             font_px = max(8, int(pt_size * DPI / 72))

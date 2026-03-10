@@ -75,15 +75,12 @@ except ImportError as e:
 
     # Fallback: _escape_latex non importata da builder.py → definizione inline
     # Usata da process_pdf_chunked e altri punti che richiedono escape LaTeX
+    import re as _re_esc
     def _escape_latex(t: str) -> str:  # noqa: F811
-        for a, b in [
-            ("\\", "\\textbackslash{}"),
-            ("&",  "\\&"), ("%",  "\\%"), ("$",  "\\$"),
-            ("#",  "\\#"), ("_",  "\\_"), ("^",  "\\^{}"),
-            ("{",  "\\{"), ("}",  "\\}"), ("~",  "\\~{}"),
-        ]:
-            t = t.replace(a, b)
-        return t
+        _MAP = {"\\": "\\textbackslash{}", "&": "\\&", "%": "\\%", "$": "\\$",
+                "#": "\\#", "_": "\\_", "^": "\\^{}", "{": "\\{", "}": "\\}",
+                "~": "\\textasciitilde{}"}
+        return _re_esc.compile(r'[\\&%$#_^{}~]').sub(lambda m: _MAP[m.group()], t)
 
 
 # ───────────────────────────────────────────────────────────────────────────────────

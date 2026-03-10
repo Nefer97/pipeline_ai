@@ -396,7 +396,11 @@ def load_course_context(context_path: Optional[str]) -> dict:
         return {}
     try:
         return json.loads(p.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
+    except json.JSONDecodeError as e:
+        print(f"  [WARN] corso_context.json corrotto ({p}): {e} — ignoro e continuo", file=__import__("sys").stderr)
+        return {}
+    except OSError as e:
+        print(f"  [WARN] corso_context.json non leggibile ({p}): {e}", file=__import__("sys").stderr)
         return {}
 
 
@@ -498,7 +502,7 @@ def _extract_concepts_from_latex(latex: str) -> dict:
     # Simboli: "$x$ = descrizione" o "$x$ indica descrizione"
     symbols = {}
     for m in re.finditer(
-        r'\$([\\a-zA-Z{}_\^]+)\$\s+(?:è|indica|denota|rappresenta|=)\s+([^.,$\n]{5,60})',
+        r'\$([\\a-zA-Z{}_\^]+)\$\s+(?:è|indica|denota|rappresenta|is|denotes|represents|means|=)\s+([^.,$\n]{5,60})',
         latex, re.I
     ):
         sym = m.group(1).strip()
@@ -789,9 +793,14 @@ def parse_sections(text: str) -> list[dict]:
 # ─────────────────────────────────────────────────────────
 # EXTRACT MATH
 # ─────────────────────────────────────────────────────────
-_MATH_INLINE  = re.compile(r'\$[^$\n]{2,80}\$')
-_MATH_DISPLAY = re.compile(r'\$\$[\s\S]{2,300}?\$\$')
-_LATEX_EQ     = re.compile(r'\\begin\{equation\}[\s\S]*?\\end\{equation\}')
+_MATH_INLINE  = re.compile(r'\$[^$\n]{2,120}\$')
+_MATH_DISPLAY = re.compile(r'\$\$[\s\S]{2,2000}?\$\$')
+# Ambienti LaTeX che contengono matematica (equation, align, gather, cases, matrix, …)
+_LATEX_EQ     = re.compile(
+    r'\\begin\{(?:equation|align|gather|multline|cases|pmatrix|bmatrix|vmatrix|array)\*?'
+    r'\}[\s\S]*?'
+    r'\\end\{(?:equation|align|gather|multline|cases|pmatrix|bmatrix|vmatrix|array)\*?\}'
+)
 
 
 def extract_math(text: str) -> tuple[str, list[str]]:
