@@ -16,6 +16,11 @@ import hashlib
 # Formati non supportati da LaTeX/Pillow → da convertire in PNG
 UNSUPPORTED_FORMATS = {'.wmf', '.emf', '.gif', '.bmp', '.tiff', '.tif'}
 
+# Cache per blob già estratti/convertiti nella sessione corrente.
+# Chiave: MD5 completo del blob immagine. Valore: path finale (PNG o originale).
+# Evita di chiamare LibreOffice/Inkscape N volte per blob WMF identici.
+_blob_cache: dict[str, str] = {}
+
 
 def _convert_to_png(src_path: str) -> str:
     """
@@ -225,18 +230,28 @@ def extract_slides(pptx_path: str, image_output_dir: str) -> list:
                 try:
                     image = shape.image
                     ext = image.ext  # png, jpg, ...
-                    # Nome file basato su hash per evitare duplicati
-                    img_hash = hashlib.md5(image.blob).hexdigest()[:8]
-                    img_filename = f"slide{slide_idx:03d}_{img_hash}.{ext}"
-                    img_path = os.path.join(image_output_dir, img_filename)
-                    with open(img_path, 'wb') as f:
-                        f.write(image.blob)
-                    # Converti formati non supportati da LaTeX.
-                    # image.ext restituisce l'estensione SENZA punto (es. "gif"),
-                    # mentre UNSUPPORTED_FORMATS usa punti (es. ".gif").
-                    if ('.' + ext.lower()) in UNSUPPORTED_FORMATS:
-                        img_path = _convert_to_png(img_path)
+                    blob = image.blob
+                    full_hash = hashlib.md5(blob).hexdigest()
+                    img_hash  = full_hash[:8]
+
+                    # Se lo stesso blob è già stato estratto/convertito, riusa il path
+                    if full_hash in _blob_cache and os.path.exists(_blob_cache[full_hash]):
+                        img_path     = _blob_cache[full_hash]
                         img_filename = os.path.basename(img_path)
+                    else:
+                        img_filename = f"slide{slide_idx:03d}_{img_hash}.{ext}"
+                        img_path     = os.path.join(image_output_dir, img_filename)
+                        # Scrive su disco solo se non esiste già (run ripetuti)
+                        if not os.path.exists(img_path):
+                            with open(img_path, 'wb') as f:
+                                f.write(blob)
+                        # Converti formati non supportati da LaTeX.
+                        # image.ext è senza punto (es. "gif"); UNSUPPORTED_FORMATS ha punto.
+                        if ('.' + ext.lower()) in UNSUPPORTED_FORMATS:
+                            img_path = _convert_to_png(img_path)
+                            img_filename = os.path.basename(img_path)
+                        _blob_cache[full_hash] = img_path
+
                     objects.append(SlideObject(
                         obj_type='image',
                         content=img_filename,

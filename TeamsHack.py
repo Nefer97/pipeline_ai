@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import subprocess
 import sys
 import re
@@ -9,7 +10,8 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DOWNLOADS_DIR = os.path.join(SCRIPT_DIR, "downloads")
 LEZIONI_DIR = os.path.join(DOWNLOADS_DIR, "lezioni")
 REGISTRAZIONI_DIR = os.path.join(DOWNLOADS_DIR, "registrazioni")
-CONTATORI_FILE = os.path.join(DOWNLOADS_DIR, "contatori.txt")
+CONTATORI_FILE     = os.path.join(DOWNLOADS_DIR, "contatori.json")   # nuovo formato
+_CONTATORI_FILE_TXT = os.path.join(DOWNLOADS_DIR, "contatori.txt")   # legacy
 
 
 def init_dirs():
@@ -19,40 +21,85 @@ def init_dirs():
 
 
 def leggi_contatori():
-    """Legge i contatori dal file txt"""
-    contatori = {"lezioni": 0, "registrazioni": 0}
+    """
+    Legge i contatori da contatori.json.
+    Se il JSON non esiste ma esiste il vecchio .txt, lo migra automaticamente.
+    """
+    default = {"lezioni": 0, "registrazioni": 0}
+
+    # Formato nuovo — JSON
     if os.path.exists(CONTATORI_FILE):
-        with open(CONTATORI_FILE, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line.startswith("lezioni="):
-                    try:
-                        contatori["lezioni"] = int(line.split("=")[1])
-                    except ValueError:
-                        pass
-                elif line.startswith("registrazioni="):
-                    try:
-                        contatori["registrazioni"] = int(line.split("=")[1])
-                    except ValueError:
-                        pass
-    return contatori
+        try:
+            with open(CONTATORI_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            contatori = {
+                "lezioni":        int(data.get("lezioni", 0)),
+                "registrazioni":  int(data.get("registrazioni", 0)),
+            }
+            return contatori
+        except Exception:
+            pass  # file corrotto → ricostruisce dai valori default
+
+    # Migrazione dal vecchio formato .txt
+    if os.path.exists(_CONTATORI_FILE_TXT):
+        contatori = dict(default)
+        try:
+            with open(_CONTATORI_FILE_TXT, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if "=" in line:
+                        k, _, v = line.partition("=")
+                        if k in contatori:
+                            try:
+                                contatori[k] = int(v)
+                            except ValueError:
+                                pass
+            salva_contatori(contatori)   # salva subito in JSON
+            print(f"✓ Contatori migrati da contatori.txt → contatori.json")
+        except Exception:
+            pass
+        return contatori
+
+    return dict(default)
 
 
 def salva_contatori(contatori):
-    """Salva i contatori nel file txt"""
-    with open(CONTATORI_FILE, "w", encoding="utf-8") as f:
-        f.write(f"lezioni={contatori['lezioni']}\n")
-        f.write(f"registrazioni={contatori['registrazioni']}\n")
+    """Salva i contatori in contatori.json (atomico: scrive su tmp poi rinomina)."""
+    tmp = CONTATORI_FILE + ".tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(contatori, f, indent=2)
+        os.replace(tmp, CONTATORI_FILE)
+    except Exception as e:
+        print(f"✗ Errore salvataggio contatori: {e}")
 
 
-def clean_url(url):
+def clean_url(url: str) -> str:
     """Rimuove solo il parametro altTranscode=1, preservando gli altri parametri."""
+    if not url or not url.strip():
+        return ""
+    url = url.strip()
     # Rimuove &altTranscode=1 (o ?altTranscode=1) senza tagliare i parametri successivi
     url = re.sub(r'[&?]altTranscode=1(?=&|$)', '', url)
     # Ripulisce eventuali && residui o ? rimasto senza valore
     url = re.sub(r'&&+', '&', url)
     url = re.sub(r'\?&', '?', url)
     return url
+
+
+def is_valid_teams_url(url: str) -> bool:
+    """
+    Verifica che l'URL sia un videomanifest Teams valido.
+    Accetta URL da teams.microsoft.com, *.sharepoint.com, *.svc.ms.
+    """
+    if not url or not url.startswith("http"):
+        return False
+    _domains = re.compile(
+        r'https?://[^/]*(teams\.microsoft\.com|sharepoint\.com|svc\.ms|'
+        r'microsoftstream\.com|api\.teams\.skype\.com)',
+        re.IGNORECASE,
+    )
+    return bool(_domains.match(url))
 
 
 def _run_ffmpeg(cmd, timeout=None):
@@ -145,7 +192,17 @@ def main():
         sys.exit(1)
 
     url_pulito = clean_url(url)
-    if url != url_pulito:
+    if not url_pulito:
+        print("✗ URL vuoto dopo pulizia — riprova.")
+        sys.exit(1)
+
+    if not is_valid_teams_url(url_pulito):
+        print(f"⚠ Attenzione: l'URL non sembra un videomanifest Teams.")
+        print(f"  Dominio atteso: teams.microsoft.com / sharepoint.com / svc.ms")
+        conferma = input("Continuare comunque? (s/N) ").strip().lower()
+        if conferma != 's':
+            sys.exit(1)
+    elif url != url_pulito:
         print("✓ URL pulito (rimosso altTranscode)")
 
     # File paths
