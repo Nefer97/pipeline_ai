@@ -166,9 +166,29 @@ async def save_settings_endpoint(request: Request):
         except (ValueError, TypeError):
             pass
 
+    # Timeout ffmpeg download Teams in secondi (300–86400, default 7200)
+    if "ffmpeg_timeout" in body:
+        try:
+            ft = int(body["ffmpeg_timeout"])
+            if 300 <= ft <= 86400:
+                _SETTINGS["ffmpeg_timeout"] = ft
+        except (ValueError, TypeError):
+            pass
+
+    # Timeout intera pipeline in secondi (300–86400, default 3600)
+    if "pipeline_timeout" in body:
+        try:
+            pt = int(body["pipeline_timeout"])
+            if 300 <= pt <= 86400:
+                _SETTINGS["pipeline_timeout"] = pt
+        except (ValueError, TypeError):
+            pass
+
     _save_settings(_SETTINGS)
     return JSONResponse({"ok": True, "api_key": bool(key or _SETTINGS.get("api_key")),
-                         "ttl_days": OUTPUT_TTL_DAYS})
+                         "ttl_days": OUTPUT_TTL_DAYS,
+                         "ffmpeg_timeout": int(_SETTINGS.get("ffmpeg_timeout", 7200)),
+                         "pipeline_timeout": int(_SETTINGS.get("pipeline_timeout", 3600))})
 
 
 @app.get("/settings")
@@ -177,6 +197,8 @@ async def get_settings_endpoint():
     return JSONResponse({
         "api_key": bool(_SETTINGS.get("api_key", "").strip()),
         "ttl_days": OUTPUT_TTL_DAYS,
+        "ffmpeg_timeout": int(_SETTINGS.get("ffmpeg_timeout", 7200)),
+        "pipeline_timeout": int(_SETTINGS.get("pipeline_timeout", 3600)),
     })
 
 
@@ -321,22 +343,33 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
 
     # ── Download audio da URL Teams (videomanifest) ──────────────────
     if teams_urls:
+        _ffmpeg_timeout = int(_SETTINGS.get("ffmpeg_timeout", 7200))
         for i, raw_url in enumerate(teams_urls):
             url = _clean_teams_url(raw_url.strip())
             if not url:
                 continue
             mp3_out = lesson_dir / f"teams_{i+1:02d}.mp3"
             print(f"[TeamsHack] Download audio {i+1}/{len(teams_urls)}: {url[:80]}…")
-            try:
-                subprocess.run(
-                    ["ffmpeg", "-y", "-i", url,
-                     "-vn", "-ac", "1", "-codec:a", "libmp3lame", "-qscale:a", "4",
-                     str(mp3_out)],
-                    timeout=7200,
-                    check=False,
-                )
-            except Exception as e:
-                print(f"[TeamsHack] Errore download: {e}")
+            for attempt in range(1, 4):  # max 3 tentativi
+                try:
+                    r = subprocess.run(
+                        ["ffmpeg", "-y", "-i", url,
+                         "-vn", "-ac", "1", "-codec:a", "libmp3lame", "-qscale:a", "4",
+                         str(mp3_out)],
+                        timeout=_ffmpeg_timeout,
+                        check=False,
+                    )
+                    if r.returncode == 0:
+                        break
+                    print(f"[TeamsHack] Tentativo {attempt}/3 fallito (returncode={r.returncode})")
+                except subprocess.TimeoutExpired:
+                    print(f"[TeamsHack] Timeout ({_ffmpeg_timeout}s) al tentativo {attempt}/3")
+                    break  # timeout → inutile riprovare
+                except FileNotFoundError:
+                    print("[TeamsHack] ffmpeg non trovato — installa ffmpeg")
+                    break
+                except Exception as e:
+                    print(f"[TeamsHack] Errore tentativo {attempt}/3: {e}")
 
     cmd = [
         "python3", "-u", "pipeline.py",  # -u: stdout unbuffered → righe visibili in real-time
@@ -372,12 +405,13 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             cwd=Path(__file__).parent,
         )
 
-        # Timer: killa il processo dopo 1 ora
+        # Timer: killa il processo dopo il timeout configurato (default 1 ora)
+        _pipeline_timeout = int(_SETTINGS.get("pipeline_timeout", 3600))
         _timed_out = threading.Event()
         def _kill():
             _timed_out.set()
             process.kill()
-        _timer = threading.Timer(3600, _kill)
+        _timer = threading.Timer(_pipeline_timeout, _kill)
         _timer.start()
 
         stdout_lines: list[str] = []
@@ -392,7 +426,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             _timer.cancel()
 
         if _timed_out.is_set():
-            raise subprocess.TimeoutExpired(cmd, 3600)
+            raise subprocess.TimeoutExpired(cmd, _pipeline_timeout)
 
         stdout_text = "".join(stdout_lines)
         returncode  = process.returncode
@@ -489,7 +523,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
             pass
         with _jobs_lock:
             jobs[job_id]["status"] = "error"
-            jobs[job_id]["stderr"] = "Timeout: pipeline impiegato più di 1 ora"
+            jobs[job_id]["stderr"] = f"Timeout: pipeline impiegata più di {_pipeline_timeout//60} minuti"
             _save_jobs()
         shutil.rmtree(UPLOAD_DIR / job_id, ignore_errors=True)
     except Exception as e:
