@@ -18,6 +18,8 @@ sudo apt install ffmpeg texlive-full
 ```
 
 > L'opzione A è sufficiente per compilare l'output di Appunti AI. Usa `texlive-full` solo se hai già poco spazio su disco occupato o hai bisogno di pacchetti LaTeX extra.
+>
+> **Altre lingue:** se le tue lezioni sono in inglese, francese, tedesco, spagnolo, ecc., aggiungi il pacchetto babel corrispondente — es. `texlive-lang-english` (di solito già incluso), `texlive-lang-european` per francese/tedesco/spagnolo/olandese. La lingua viene rilevata automaticamente da Whisper e il documento LaTeX usa `\usepackage[lingua]{babel}` in modo dinamico.
 
 ### 2. Clona il progetto e crea il venv
 
@@ -193,6 +195,54 @@ fonti grezze
 
 ---
 
+## Lavoro locale vs Claude — efficienza e costi
+
+Appunti AI usa Claude **esattamente una volta per lezione**, per fare l'unica cosa che richiede intelligenza semantica: sintetizzare la trascrizione orale con le slide in prosa accademica LaTeX. Tutto il resto è elaborazione locale, gratuita e offline.
+
+### Divisione del lavoro
+
+| Fase | Strumento | Dove gira |
+|------|-----------|-----------|
+| Estrazione audio da video | ffmpeg | **locale** |
+| Trascrizione audio → testo con timestamp | Whisper | **locale** |
+| Parsing PPTX (testo, immagini, tabelle) | extractor.py + python-pptx | **locale** |
+| Conversione formule PowerPoint (OMML) → LaTeX | omml2latex.py | **locale** |
+| OCR immagini-formula | ocr_math.py (pix2tex / tesseract) | **locale** |
+| Rendering slide → PNG | slide_renderer.py + Pillow | **locale** |
+| Rendering pagine PDF → PNG | pdf_renderer.py + pymupdf | **locale** |
+| Pulizia, compressione, allineamento slide↔audio | preprocessor.py | **locale** |
+| **Sintesi accademica** → LaTeX strutturato | **Claude API** | **cloud (1 chiamata)** |
+| Assemblaggio file `.tex` finale | builder.py | **locale** |
+| Compilazione PDF | pdflatex | **locale** |
+
+### Cosa fa Claude — e perché non si può sostituire facilmente
+
+Claude riceve lo scheletro delle slide (già in LaTeX) + la trascrizione audio allineata per slide, e produce un capitolo LaTeX in cui la spiegazione del professore è integrata in modo semantico: capisce quando una frase orale espande un bullet point, quando un esempio va in `\begin{example}`, quando una precisazione va in `\begin{remark}`. Nessun modello locale di taglia ragionevole (LLaMA, Mistral) produce risultati comparabili sulla scrittura accademica strutturata.
+
+### Costi API reali
+
+Con **Claude 3 Sonnet** (modello di default):
+
+| Componente | Token tipici | Costo |
+|------------|-------------|-------|
+| Input (trascrizione + slide + istruzioni) | ~40.000 | ~$0.12 |
+| Output (capitolo LaTeX generato) | ~10.000 | ~$0.15 |
+| **Totale per lezione** | ~50.000 | **~$0.27** |
+| **Corso da 30 lezioni** | ~1.500.000 | **~$8** |
+
+### Perché non si risparmiano molti più token
+
+Il 90% dei token inviati a Claude è **contenuto informativo non comprimibile**: la trascrizione audio del professore (~60%) e il LaTeX estratto dalle slide (~25%). Ridurli significherebbe perdere informazione e abbassare la qualità dell'output.
+
+Il 10% restante (istruzioni, contesto corso, metadati) è già ottimizzato:
+- Il **system prompt** è cacheato da Anthropic — dalla seconda lezione in poi costa ~10% del normale
+- Le istruzioni per tipo di fonte sono scritte **una volta per sezione**, non ripetute per ogni file
+- Il contesto corso usa il **pruning automatico**: oltre 10 lezioni precedenti, le più vecchie vengono compresse
+
+Il vero vantaggio economico di Appunti AI non è nel risparmio token, ma nell'**azzeramento del tempo umano**: nessuna copia-incolla, nessuna formattazione manuale, nessuna integrazione a mano di trascrizione e slide.
+
+---
+
 ## Gerarchia delle fonti
 
 La pipeline assegna automaticamente un ruolo semantico a ogni file:
@@ -317,8 +367,8 @@ i dettagli del modulo corrispondente.
 | `/job/{job_id}` | DELETE | Elimina uploads temporanei. Aggiungere `?full=true` per eliminare anche zip e output definitivi |
 | `/jobs` | GET | Lista tutti i job con `created_at`, `has_pdf`, `has_zip` |
 | `/health` | GET | Stato dei tool di sistema: `api_key`, `ffmpeg`, `pdflatex`, `whisper` |
-| `/settings` | GET | Configurazione corrente: `api_key` (bool), `ttl_days` |
-| `/settings` | POST | Salva `api_key` e/o `ttl_days` (1–365 giorni) — persiste su `settings.json` |
+| `/settings` | GET | Configurazione corrente: `api_key` (bool), `ttl_days`, `ffmpeg_timeout`, `pipeline_timeout` |
+| `/settings` | POST | Salva `api_key`, `ttl_days` (1–365), `ffmpeg_timeout` (300–86400 s), `pipeline_timeout` (300–86400 s) — persiste su `settings.json` |
 | `/docs` | GET | Documentazione interattiva FastAPI |
 
 ### Accesso remoto
@@ -377,6 +427,8 @@ Il preprocessor analizza le keyword presenti nelle slide e nella trascrizione e 
 **3. Allineamento temporale trascrizione ↔ slide**
 
 Se la trascrizione Whisper ha i timestamp `[MM:SS]` e le slide hanno i marker `--- SLIDE N ---`, il preprocessor stima il range temporale di ogni slide e associa i segmenti audio corrispondenti. Il prompt che arriva a Claude non è più due blocchi separati, ma slide per slide: `[CONTENUTO SLIDE]` seguito dalla `[SPIEGAZIONE ORALE]` corrispondente. Senza timestamp Whisper, la distribuzione avviene in modo uniforme.
+
+L'algoritmo usa il **tempo di discorso effettivo**: le pause tra segmenti consecutivi vengono cappate a 45 secondi. In questo modo una pausa del professore (cambio slide, domande, interruzione) non distorce l'allineamento dei segmenti successivi.
 
 **4. Contesto corso — `corso_context.json`**
 
@@ -494,6 +546,12 @@ Prima dei due pass `pdflatex` che generano il PDF finale, il server esegue un pa
 **Moduli opzionali:**
 Se `extractor.py`, `slide_renderer.py`, `pdf_renderer.py` e gli altri moduli collega non sono presenti, la pipeline usa un fallback base che funziona comunque. La qualità dell'output (immagini slide, formule OMML) è però significativamente migliore con i moduli completi.
 
+**Timeout configurabili:**
+I timeout di ffmpeg (download Teams) e della pipeline (Whisper + Claude) sono configurabili via `/settings` POST senza riavviare il server. Default: `ffmpeg_timeout=7200s` (2h), `pipeline_timeout=3600s` (1h). Utile per video molto lunghi o reti lente.
+
+**Prompt caching Anthropic:**
+Il system prompt inviato a Claude (19 regole LaTeX, ~600 token) è identico per ogni lezione e viene marcato con `cache_control: ephemeral`. Dalla seconda lezione in poi Anthropic lo restituisce dalla cache al ~10% del costo normale. Il log mostra `cache=hit (r:625 w:0)` o `cache=miss` per ogni chiamata.
+
 **Debug prompt e upload:**
 Ogni job scrive nella cartella `output/{job_id}/{output_name}/debug/`:
 - `prompt_lezione_NN.txt` — prompt completo inviato a Claude (testo + slide allineate)
@@ -533,4 +591,7 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc
 | PDF non compilato — badge rosso in UI | Errori LaTeX nel sorgente generato | Clicca sul badge "✗ PDF non compilato" per vedere gli errori estratti da `main.log`; scarica lo ZIP per il log completo |
 | Tabelle nelle slide non compaiono nel LaTeX | python-pptx non trova `shape.table` | Verifica che la tabella sia un oggetto tabella nativo PPTX (non uno screenshot); le tabelle embedded come immagini non sono estraibili |
 | `corso_context.json` molto grande su corsi lunghi | Accumulo dati lezione per lezione | Il pruning automatico mantiene solo le ultime 10 lezioni complete; le più vecchie conservano solo titolo e ultimo argomento |
+| Pipeline killata dopo 1 ora su video molto lunghi | `pipeline_timeout` default 3600s | Aumenta il timeout via `/settings` POST: `{"pipeline_timeout": 7200}` |
+| Download Teams fallisce su video >2h | `ffmpeg_timeout` default 7200s | Aumenta il timeout via `/settings` POST: `{"ffmpeg_timeout": 14400}` |
+| Allineamento slide↔audio spostato dopo una pausa | Pause lunghe distorcevano la distribuzione lineare | Fix già applicato: le pause >45s vengono cappate nel calcolo del tempo di discorso |
 | TTL output non cambia dopo modifica in UI | Il campo è nelle opzioni avanzate | Espandi "▾ opzioni avanzate" e modifica il campo "Retention output" — il salvataggio è automatico con feedback "✓ salvato" |
