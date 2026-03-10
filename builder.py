@@ -6,6 +6,7 @@ Genera il file .tex finale a partire dai dati estratti.
 _LATEX_HEADER_TMPL = r"""\documentclass[12pt,a4paper]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{textcomp}
 \usepackage[{babel_lang}]{babel}
 \usepackage{amsmath}
 \usepackage{amssymb}

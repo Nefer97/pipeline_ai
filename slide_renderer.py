@@ -97,6 +97,29 @@ def render_slide_images(pptx_path: Path, images_dir: Path) -> dict:
 # Ignora le animazioni → mostra tutto il contenuto nello stato finale.
 # ─────────────────────────────────────────────
 
+def _load_font(size_px: int):
+    """Carica font scalato: cerca font TrueType di sistema, fallback a default Pillow."""
+    from PIL import ImageFont
+    _SYSTEM_FONT_CANDIDATES = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+        "/usr/share/fonts/TTF/DejaVuSans.ttf",          # Arch
+        "/Library/Fonts/Arial.ttf",                      # macOS
+        "C:/Windows/Fonts/arial.ttf",                    # Windows
+    ]
+    for candidate in _SYSTEM_FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(candidate, size=size_px)
+        except (IOError, OSError):
+            continue
+    # Fallback: default Pillow (scalato su Pillow ≥ 10, fisso su Pillow < 10)
+    try:
+        return ImageFont.load_default(size=size_px)
+    except TypeError:
+        return ImageFont.load_default()
+
+
 def _render_with_pptx_pillow(pptx_path: Path, images_dir: Path) -> dict:
     from pptx import Presentation
     from pptx.util import Emu
@@ -213,12 +236,8 @@ def _render_with_pptx_pillow(pptx_path: Path, images_dir: Path) -> dict:
                             except Exception:
                                 pass
 
-                            # Carica font scalato
-                            try:
-                                font = ImageFont.load_default(size=font_px)
-                            except TypeError:
-                                # Pillow < 10 non supporta size=
-                                font = ImageFont.load_default()
+                            # Carica font scalato — cerca font di sistema, fallback default
+                            font = _load_font(font_px)
 
                             # Word-wrap: spezza la riga per stare nella box
                             box_w = width - 8 if width > 8 else slide_w_px - 8

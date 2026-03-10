@@ -1271,10 +1271,12 @@ def load_state(output_dir: Path) -> dict:
 
 
 def save_state(output_dir: Path, state: dict):
-    """Salva state.json nella cartella output del corso."""
+    """Salva state.json nella cartella output del corso (scrittura atomica)."""
     import json as _json
     path = output_dir / _STATE_FILE
-    path.write_text(_json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp  = path.with_suffix(".json.tmp")
+    tmp.write_text(_json.dumps(state, indent=2, ensure_ascii=False), encoding="utf-8")
+    tmp.replace(path)   # atomico: nessun file corrotto se il processo viene killato
 
 
 # ─────────────────────────────────────────────

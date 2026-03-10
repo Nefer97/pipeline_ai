@@ -311,19 +311,30 @@ def align_transcript_to_slides(
         return aligned
 
     # Con timestamp: assegna ogni segmento alla slide corretta
-    first_time = segments[0]["time_sec"]
-    last_time  = segments[-1]["time_sec"]
-    duration   = total_duration_sec or (last_time + 60)
-    span       = max(1, duration - first_time)
-    n_slides   = len(slides)
+    # Strategia: calcola "tempo di discorso" escludendo le pause lunghe (> 45s).
+    # Senza questo, una pausa di 10 minuti al cambio slide scalza tutti i segmenti
+    # successivi verso slide più avanzate di quanto non siano in realtà.
+    _PAUSE_CAP_SEC = 45   # gap tra segmenti consecutivi viene cappato a questo valore
 
-    def slide_idx(t: int) -> int:
-        idx = int((t - first_time) / span * n_slides)
+    n_slides = len(slides)
+
+    # Calcola speech_time cumulativo per ogni segmento
+    speech_times: list[float] = [0.0] * len(segments)
+    cumulative = 0.0
+    for i in range(1, len(segments)):
+        gap = segments[i]["time_sec"] - segments[i - 1]["time_sec"]
+        cumulative += min(gap, _PAUSE_CAP_SEC)
+        speech_times[i] = cumulative
+
+    total_speech = max(1.0, speech_times[-1])
+
+    def slide_idx(seg_i: int) -> int:
+        idx = int(speech_times[seg_i] / total_speech * n_slides)
         return max(0, min(n_slides - 1, idx))
 
     aligned = [{**s, "transcript_segments": []} for s in slides]
-    for seg in segments:
-        aligned[slide_idx(seg["time_sec"])]["transcript_segments"].append(seg)
+    for i, seg in enumerate(segments):
+        aligned[slide_idx(i)]["transcript_segments"].append(seg)
 
     return aligned
 

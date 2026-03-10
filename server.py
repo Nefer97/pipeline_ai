@@ -414,13 +414,18 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
         _timer = threading.Timer(_pipeline_timeout, _kill)
         _timer.start()
 
-        stdout_lines: list[str] = []
+        # Buffer circolare: teniamo solo le ultime 500 righe in RAM
+        # Il log completo è su disco (log_path) — nessun memory leak
+        _MAX_LOG_LINES = 500
+        stdout_tail: list[str] = []
         try:
             with open(log_path, "a", encoding="utf-8") as _lf:
                 for line in process.stdout:
-                    stdout_lines.append(line)
                     _lf.write(line)
                     _lf.flush()
+                    stdout_tail.append(line)
+                    if len(stdout_tail) > _MAX_LOG_LINES:
+                        stdout_tail.pop(0)
             process.wait()
         finally:
             _timer.cancel()
@@ -428,15 +433,15 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
         if _timed_out.is_set():
             raise subprocess.TimeoutExpired(cmd, _pipeline_timeout)
 
-        stdout_text = "".join(stdout_lines)
+        # In memoria: ultime 500 righe (max ~50KB) per UI; log completo su disco
+        stdout_text = "".join(stdout_tail)
         returncode  = process.returncode
 
         with _jobs_lock:
-            jobs[job_id]["stdout"]      = stdout_text
-            # stderr: preview 3000 char + testo completo per debug
-            jobs[job_id]["stderr"]      = "" if returncode == 0 else stdout_text[-3000:]
-            jobs[job_id]["stderr_full"] = "" if returncode == 0 else stdout_text
-            jobs[job_id]["returncode"]  = returncode
+            jobs[job_id]["stdout"]     = stdout_text
+            jobs[job_id]["stderr"]     = "" if returncode == 0 else stdout_text
+            jobs[job_id]["log_path"]   = str(log_path)   # percorso log completo su disco
+            jobs[job_id]["returncode"] = returncode
 
         if returncode == 0:
             # Tenta compilazione PDF con pdflatex (se disponibile)
