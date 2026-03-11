@@ -894,11 +894,9 @@ async def download_pdf(job_id: str):
     if not pdf_path.exists():
         raise HTTPException(status_code=404, detail="main.pdf non trovato")
 
-    title_safe = "".join(c for c in title if c.isalnum() or c in "_- ").strip().replace(" ", "_")
     return FileResponse(
         path=pdf_path,
         media_type="application/pdf",
-        filename=f"appunti_{title_safe}.pdf"
     )
 
 
