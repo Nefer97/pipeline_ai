@@ -884,18 +884,18 @@ async def preview_latex(job_id: str):
     if job and job["status"] != "done":
         raise HTTPException(status_code=400, detail=f"Job non completato (stato: {job['status']})")
 
-    # Ricostruisci il path se il job non è più in memoria
-    if job:
-        output_dir = Path(job["output_dir"])
-        title      = job["title"]
-        has_pdf    = job.get("has_pdf", False)
+    # Ricostruisci il path — usa output_dir dal job se disponibile, altrimenti rglob
+    title   = job["title"] if job else job_id
+    has_pdf = job.get("has_pdf", False) if job else False
+
+    stored_dir = job.get("output_dir") if job else None
+    if stored_dir and Path(stored_dir).exists():
+        output_dir = Path(stored_dir)
     else:
-        # Cerca main.tex in OUTPUT_DIR/job_id/**/
         candidates = list((OUTPUT_DIR / job_id).rglob("main.tex")) if (OUTPUT_DIR / job_id).exists() else []
         if not candidates:
-            raise HTTPException(status_code=404, detail="Job non trovato e nessun output su disco")
+            raise HTTPException(status_code=404, detail="main.tex non trovato su disco")
         output_dir = candidates[0].parent
-        title      = job_id
         has_pdf    = (output_dir / "main.pdf").exists()
 
     main_tex = output_dir / "main.tex"

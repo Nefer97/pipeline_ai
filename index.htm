@@ -527,7 +527,9 @@ async function previewFromHistory(id){
   document.getElementById('previewToggleArrow').textContent='▲';
   panel.scrollIntoView({behavior:'smooth',block:'start'});
   try{
-    const data=await(await fetch(`${API}/preview/${id}`)).json();
+    const r=await fetch(`${API}/preview/${id}`);
+    if(!r.ok){const t=await r.text();throw new Error(`HTTP ${r.status}: ${t.slice(0,120)}`);}
+    const data=await r.json();
     code.textContent=data.content||'';
     const hasPdf=data.has_pdf||false;
     document.getElementById('hasPdfBadge').style.display=hasPdf?'inline':'none';
