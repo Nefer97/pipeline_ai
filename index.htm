@@ -263,18 +263,31 @@
       <button onclick="resetForNextLesson()" class="job-btn job-btn-new">↺ Nuova pipeline</button>
     </div>
 
-    <!-- ── ANTEPRIMA LaTeX ───────────────────────────────────── -->
+    <!-- ── PDF VIEWER ────────────────────────────────────────── -->
+    <div id="pdfViewerPanel" class="panel" style="display:none;">
+      <div class="panel-header">
+        <span class="panel-title">// PDF compilato</span>
+        <div class="panel-meta">
+          <span id="pdfJobLabel" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+        </div>
+      </div>
+      <div class="panel-body">
+        <iframe id="pdfFrame" src="" style="width:100%;height:640px;border:none;border-radius:6px;background:#fff;"></iframe>
+      </div>
+    </div>
+
+    <!-- ── MODIFICA LaTeX ─────────────────────────────────────── -->
     <div id="latexPreviewPanel" class="panel panel-latex" style="display:none;">
       <div class="panel-header" onclick="toggleLatexPreview()">
-        <span class="panel-title">// main.tex — anteprima LaTeX</span>
+        <span class="panel-title">// main.tex — modifica LaTeX</span>
         <div class="panel-meta">
-          <a id="hasPdfBadge" class="pdf-badge pdf-badge-ok" href="#" target="_blank" style="text-decoration:none;">✓ PDF compilato — apri</a>
+          <button id="recompileBtn" onclick="event.stopPropagation();recompileLatex()" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 9px;border-radius:4px;background:color-mix(in srgb,#f59e0b 15%,transparent);border:1px solid color-mix(in srgb,#f59e0b 35%,transparent);color:#f59e0b;cursor:pointer;">⚙ Ricompila</button>
           <span id="noPdfBadge" class="pdf-badge pdf-badge-err" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
           <span id="previewToggleArrow" class="panel-arrow">▼</span>
         </div>
       </div>
       <div id="latexPreviewBody" class="panel-body" style="display:none;">
-        <pre id="latexPreviewCode" style="margin:0;padding:12px;background:var(--bg);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.62rem;overflow-x:auto;max-height:420px;overflow-y:auto;white-space:pre;"></pre>
+        <textarea id="latexPreviewCode" spellcheck="false" style="width:100%;box-sizing:border-box;margin:0;padding:12px;background:var(--bg);border:none;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.62rem;resize:vertical;height:460px;color:inherit;outline:none;"></textarea>
       </div>
       <div id="pdfErrorsBody" class="panel-body" style="display:none;">
         <pre id="pdfErrorsCode" style="margin:0;padding:12px;background:color-mix(in srgb,#ef4444 8%,var(--bg));border:1px solid color-mix(in srgb,#ef4444 25%,transparent);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.6rem;overflow-x:auto;max-height:260px;overflow-y:auto;white-space:pre-wrap;"></pre>
@@ -518,26 +531,73 @@ async function deleteJobFromHistory(id){
   }catch(e){showToast('Errore eliminazione',e.message,'#ef4444');}
 }
 
+let _currentPreviewJobId=null;
+
+function _showPdfAndLatex(id,hasPdf,latexContent,pdfErrors){
+  _currentPreviewJobId=id;
+  document.getElementById('latexPreviewCode').value=latexContent;
+  document.getElementById('latexPreviewPanel').style.display='block';
+  document.getElementById('noPdfBadge').style.display=hasPdf?'none':'inline';
+  const pdfPanel=document.getElementById('pdfViewerPanel');
+  if(hasPdf){
+    document.getElementById('pdfFrame').src=`${API}/pdf/${id}`;
+    document.getElementById('pdfJobLabel').textContent=id.slice(0,8);
+    pdfPanel.style.display='block';
+    pdfPanel.scrollIntoView({behavior:'smooth',block:'start'});
+    document.getElementById('latexPreviewBody').style.display='none';
+    document.getElementById('previewToggleArrow').textContent='▼';
+    document.getElementById('pdfErrorsBody').style.display='none';
+  }else{
+    pdfPanel.style.display='none';
+    document.getElementById('latexPreviewBody').style.display='block';
+    document.getElementById('previewToggleArrow').textContent='▲';
+    document.getElementById('pdfErrorsCode').textContent=(pdfErrors||[]).join('\n\n');
+    document.getElementById('pdfErrorsBody').style.display=(pdfErrors?.length)?'block':'none';
+    document.getElementById('latexPreviewPanel').scrollIntoView({behavior:'smooth',block:'start'});
+  }
+}
+
+async function recompileLatex(){
+  if(!_currentPreviewJobId)return;
+  const btn=document.getElementById('recompileBtn');
+  const content=document.getElementById('latexPreviewCode').value;
+  btn.textContent='⚙ compilando…';btn.disabled=true;
+  try{
+    const r=await fetch(`${API}/recompile/${_currentPreviewJobId}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({content})
+    });
+    if(!r.ok){const t=await r.text();throw new Error(`HTTP ${r.status}: ${t.slice(0,80)}`);}
+    const data=await r.json();
+    if(data.has_pdf){
+      document.getElementById('pdfFrame').src=`${API}/pdf/${_currentPreviewJobId}?t=${Date.now()}`;
+      document.getElementById('pdfViewerPanel').style.display='block';
+      document.getElementById('noPdfBadge').style.display='none';
+      document.getElementById('pdfErrorsBody').style.display='none';
+      showToast('Compilazione riuscita','PDF aggiornato','#10b981');
+    }else{
+      document.getElementById('pdfViewerPanel').style.display='none';
+      document.getElementById('noPdfBadge').style.display='inline';
+      const errs=data.pdf_errors||[];
+      document.getElementById('pdfErrorsCode').textContent=errs.join('\n\n');
+      document.getElementById('pdfErrorsBody').style.display=errs.length?'block':'none';
+      showToast('Errori compilazione',errs[0]?.slice(0,60)||'?','#ef4444');
+    }
+  }catch(e){showToast('Errore ricompilazione',e.message,'#ef4444');}
+  finally{btn.textContent='⚙ Ricompila';btn.disabled=false;}
+}
+
 async function previewFromHistory(id){
-  const panel=document.getElementById('latexPreviewPanel');
-  const code=document.getElementById('latexPreviewCode');
-  code.textContent='// caricamento…';
-  panel.style.display='block';
-  document.getElementById('latexPreviewBody').style.display='block';
-  document.getElementById('previewToggleArrow').textContent='▲';
-  panel.scrollIntoView({behavior:'smooth',block:'start'});
+  document.getElementById('latexPreviewCode').value='// caricamento…';
+  document.getElementById('latexPreviewPanel').style.display='block';
+  document.getElementById('latexPreviewPanel').scrollIntoView({behavior:'smooth',block:'start'});
   try{
     const r=await fetch(`${API}/preview/${id}`);
     if(!r.ok){const t=await r.text();throw new Error(`HTTP ${r.status}: ${t.slice(0,120)}`);}
     const data=await r.json();
-    code.textContent=data.content||'';
-    const hasPdf=data.has_pdf||false;
-    const pdfBadge=document.getElementById('hasPdfBadge');
-    pdfBadge.href=`${API}/pdf/${id}`;
-    pdfBadge.style.display=hasPdf?'inline':'none';
-    document.getElementById('noPdfBadge').style.display=hasPdf?'none':'inline';
+    _showPdfAndLatex(id,data.has_pdf||false,data.content||'',[]);
   }catch(e){
-    code.textContent=`// errore: ${e.message}`;
+    document.getElementById('latexPreviewCode').value=`// errore: ${e.message}`;
   }
 }
 
@@ -597,6 +657,7 @@ function resetForNextLesson(){
   document.getElementById('opt-output').value='';
   document.getElementById('jobIdBadge').style.display='none';
   document.getElementById('latexPreviewPanel').style.display='none';
+  document.getElementById('pdfViewerPanel').style.display='none';
   updateConfigStatus(false);
   updateRunButton();
   window.scrollTo({top:0,behavior:'smooth'});
@@ -1012,6 +1073,7 @@ runBtn.addEventListener('click',async()=>{
   updateLiveStatus('Avvio pipeline…','Preparazione upload…','#f59e0b',true);
   document.getElementById('jobIdBadge').style.display='none';
   document.getElementById('latexPreviewPanel').style.display='none';
+  document.getElementById('pdfViewerPanel').style.display='none';
   document.getElementById('logPanel').style.display='none';
   if(_logEs){_logEs.close();_logEs=null;}
   const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);
@@ -1120,23 +1182,7 @@ runBtn.addEventListener('click',async()=>{
           // Fetch LaTeX preview
           fetch(`${API}/preview/${j.job_id}`)
             .then(r=>r.ok?r.json():null)
-            .then(data=>{
-              if(!data)return;
-              document.getElementById('latexPreviewCode').textContent=data.content||'';
-              document.getElementById('latexPreviewPanel').style.display='block';
-              if(data.has_pdf){
-                const pdfBadge=document.getElementById('hasPdfBadge');
-                pdfBadge.href=`${API}/pdf/${j.job_id}`;
-                pdfBadge.style.display='inline';
-              } else {
-                document.getElementById('noPdfBadge').style.display='inline';
-                const errs=j.pdf_errors||[];
-                if(errs.length){
-                  document.getElementById('pdfErrorsCode').textContent=errs.join('\n\n');
-                  document.getElementById('pdfErrorsBody').style.display='block';
-                }
-              }
-            })
+            .then(data=>{if(!data)return;_showPdfAndLatex(j.job_id,data.has_pdf||false,data.content||'',j.pdf_errors||[]);})
             .catch(()=>{});
           // Cleanup uploads dopo 5s — l'output (tex + immagini) rimane in outputs/
           setTimeout(()=>fetch(`${API}/job/${j.job_id}`,{method:'DELETE'}).catch(()=>{}),5000);

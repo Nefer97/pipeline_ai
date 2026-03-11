@@ -900,6 +900,68 @@ async def download_pdf(job_id: str):
     )
 
 
+@app.post("/recompile/{job_id}")
+async def recompile_latex(job_id: str, request: Request):
+    """Salva main.tex (se body.content fornito) e ricompila con pdflatex."""
+    body = {}
+    try:
+        if request.headers.get("content-type", "").startswith("application/json"):
+            body = await request.json()
+    except Exception:
+        pass
+
+    job = jobs.get(job_id)
+    stored_dir = job.get("output_dir") if job else None
+    if stored_dir and Path(stored_dir).exists():
+        output_dir = Path(stored_dir)
+    else:
+        candidates = list((OUTPUT_DIR / job_id).rglob("main.tex")) if (OUTPUT_DIR / job_id).exists() else []
+        if not candidates:
+            raise HTTPException(status_code=404, detail="output non trovato su disco")
+        output_dir = candidates[0].parent
+
+    content = body.get("content")
+    if content:
+        (output_dir / "main.tex").write_text(content, encoding="utf-8")
+
+    if not shutil.which("pdflatex"):
+        return JSONResponse({"has_pdf": False, "pdf_errors": ["pdflatex non installato"]})
+
+    for _ in range(2):
+        try:
+            subprocess.run(
+                ["pdflatex", "-interaction=nonstopmode", "main.tex"],
+                cwd=output_dir, timeout=120, capture_output=True,
+            )
+        except Exception:
+            break
+
+    has_pdf = (output_dir / "main.pdf").exists()
+    pdf_errors: list[str] = []
+    if not has_pdf:
+        log_file = output_dir / "main.log"
+        if log_file.exists():
+            try:
+                lines = log_file.read_text(encoding="utf-8", errors="replace").splitlines()
+                for i, ln in enumerate(lines):
+                    if ln.startswith("!"):
+                        pdf_errors.append("\n".join(lines[i:i+3]).strip())
+                    if len(pdf_errors) >= 10:
+                        break
+            except Exception:
+                pass
+        if not pdf_errors:
+            pdf_errors = ["pdflatex ha fallito senza errori espliciti"]
+
+    if job_id in jobs:
+        with _jobs_lock:
+            jobs[job_id]["has_pdf"] = has_pdf
+            jobs[job_id]["pdf_errors"] = pdf_errors
+            _save_jobs()
+
+    return JSONResponse({"has_pdf": has_pdf, "pdf_errors": pdf_errors})
+
+
 @app.get("/preview/{job_id}")
 async def preview_latex(job_id: str):
     """Restituisce il contenuto di main.tex per la preview nel browser.
