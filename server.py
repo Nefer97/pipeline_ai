@@ -875,6 +875,33 @@ async def download_output(job_id: str):
     )
 
 
+@app.get("/pdf/{job_id}")
+async def download_pdf(job_id: str):
+    """Scarica il main.pdf compilato da pdflatex."""
+    job   = jobs.get(job_id)
+    title = job["title"] if job else job_id
+
+    stored_dir = job.get("output_dir") if job else None
+    if stored_dir and Path(stored_dir).exists():
+        output_dir = Path(stored_dir)
+    else:
+        candidates = list((OUTPUT_DIR / job_id).rglob("main.pdf")) if (OUTPUT_DIR / job_id).exists() else []
+        if not candidates:
+            raise HTTPException(status_code=404, detail="main.pdf non trovato su disco")
+        output_dir = candidates[0].parent
+
+    pdf_path = output_dir / "main.pdf"
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="main.pdf non trovato")
+
+    title_safe = "".join(c for c in title if c.isalnum() or c in "_- ").strip().replace(" ", "_")
+    return FileResponse(
+        path=pdf_path,
+        media_type="application/pdf",
+        filename=f"appunti_{title_safe}.pdf"
+    )
+
+
 @app.get("/preview/{job_id}")
 async def preview_latex(job_id: str):
     """Restituisce il contenuto di main.tex per la preview nel browser.

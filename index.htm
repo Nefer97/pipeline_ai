@@ -268,7 +268,7 @@
       <div class="panel-header" onclick="toggleLatexPreview()">
         <span class="panel-title">// main.tex — anteprima LaTeX</span>
         <div class="panel-meta">
-          <span id="hasPdfBadge" class="pdf-badge pdf-badge-ok">✓ PDF compilato</span>
+          <a id="hasPdfBadge" class="pdf-badge pdf-badge-ok" href="#" target="_blank" style="text-decoration:none;">⬇ PDF compilato</a>
           <span id="noPdfBadge" class="pdf-badge pdf-badge-err" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
           <span id="previewToggleArrow" class="panel-arrow">▼</span>
         </div>
@@ -532,7 +532,9 @@ async function previewFromHistory(id){
     const data=await r.json();
     code.textContent=data.content||'';
     const hasPdf=data.has_pdf||false;
-    document.getElementById('hasPdfBadge').style.display=hasPdf?'inline':'none';
+    const pdfBadge=document.getElementById('hasPdfBadge');
+    pdfBadge.href=`${API}/pdf/${id}`;
+    pdfBadge.style.display=hasPdf?'inline':'none';
     document.getElementById('noPdfBadge').style.display=hasPdf?'none':'inline';
   }catch(e){
     code.textContent=`// errore: ${e.message}`;
@@ -1123,7 +1125,9 @@ runBtn.addEventListener('click',async()=>{
               document.getElementById('latexPreviewCode').textContent=data.content||'';
               document.getElementById('latexPreviewPanel').style.display='block';
               if(data.has_pdf){
-                document.getElementById('hasPdfBadge').style.display='inline';
+                const pdfBadge=document.getElementById('hasPdfBadge');
+                pdfBadge.href=`${API}/pdf/${j.job_id}`;
+                pdfBadge.style.display='inline';
               } else {
                 document.getElementById('noPdfBadge').style.display='inline';
                 const errs=j.pdf_errors||[];
