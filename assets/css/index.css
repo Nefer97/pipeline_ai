@@ -30,7 +30,8 @@ body::before{content:'';position:fixed;inset:0;background-image:linear-gradient(
 .nav-link:hover{color:var(--text);background:color-mix(in srgb,var(--c1) 8%,transparent);}
 .nav-link.active{color:var(--c1);background:color-mix(in srgb,var(--c1) 10%,transparent);}
 .nav-link .nd{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.7;}
-.container{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:80px 24px 80px;}
+/* .container{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:80px 24px 80px;} */
+.container{position:relative;z-index:1;margin:0 auto;padding:80px 24px 80px;}
 header{text-align:center;margin-bottom:56px;}
 header h1{font-size:clamp(2rem,5vw,3.5rem);font-weight:800;letter-spacing:-.03em;background:linear-gradient(135deg,var(--c1),var(--c2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
 header p{margin-top:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;font-size:.8rem;letter-spacing:.12em;}
@@ -209,6 +210,58 @@ button.running{opacity:.6;cursor:not-allowed;transform:none !important;}
 .pdf-badge{font-size:.62rem;border-radius:4px;padding:2px 8px;font-family:'JetBrains Mono',monospace;display:none;}
 .pdf-badge-ok{background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 40%,transparent);color:#10b981;}
 .pdf-badge-err{cursor:pointer;background:color-mix(in srgb,#ef4444 12%,transparent);border:1px solid color-mix(in srgb,#ef4444 35%,transparent);color:#ef4444;}
+/* ── SPLIT EDITOR (editor LaTeX sx + PDF viewer dx) ── */
+#splitEditorWrapper{
+  display:flex;flex-direction:row;align-items:stretch;
+  margin:12px 0;border-radius:12px;overflow:hidden;
+  border:1px solid var(--border2);min-height:640px;
+}
+#latexPreviewPanel,#pdfViewerPanel{
+  flex:1;min-width:0;display:flex;flex-direction:column;
+  margin:0!important;border-radius:0!important;border:none!important;
+}
+#latexPreviewPanel{border-right:1px solid var(--border2)!important;}
+#latexPreviewBody{
+  flex:1;min-height:0;overflow:hidden;padding:0!important;
+  display:flex;flex-direction:column;
+}
+#pdfViewerPanel .panel-body{
+  flex:1;min-height:0;padding:0!important;overflow:hidden;
+  display:flex;flex-direction:column;
+}
+#latexPreviewCode{
+  flex:1;min-height:0;resize:none!important;height:auto!important;
+  padding:12px 14px!important;border-radius:0!important;
+}
+#pdfFrame{flex:1;min-height:0;height:100%!important;border-radius:0!important;}
+/* File tabs */
+#texFileTabs{
+  display:flex;flex-wrap:wrap;gap:2px;
+  padding:6px 10px 0;flex-shrink:0;
+  border-bottom:1px solid var(--border);
+  background:color-mix(in srgb,var(--c3) 3%,var(--surface2));
+}
+.tex-tab{
+  font-family:'JetBrains Mono',monospace;font-size:.6rem;
+  padding:4px 10px;border-radius:4px 4px 0 0;
+  border:1px solid transparent;border-bottom:none;
+  cursor:pointer;color:var(--muted);background:none;
+  transition:all .15s;margin-bottom:-1px;
+}
+.tex-tab:hover{color:var(--c3);background:color-mix(in srgb,var(--c3) 8%,transparent);}
+.tex-tab.active{
+  color:var(--c3);
+  background:color-mix(in srgb,var(--c3) 12%,var(--surface2));
+  border-color:color-mix(in srgb,var(--c3) 30%,transparent);
+}
+/* PDF header — no cursor needed */
+#pdfViewerPanel .panel-header{cursor:default;}
+@media(max-width:860px){
+  #splitEditorWrapper{flex-direction:column;min-height:unset;}
+  #latexPreviewPanel{border-right:none!important;border-bottom:1px solid var(--border2)!important;}
+  #latexPreviewCode{height:360px!important;}
+  #pdfFrame{height:520px!important;}
+}
 /* HEALTH STRIP */
 .health-strip{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;min-height:22px;}
 /* MISC INLINE ELEMENTS */

@@ -263,38 +263,42 @@
       <button onclick="resetForNextLesson()" class="job-btn job-btn-new">↺ Nuova pipeline</button>
     </div>
 
-    <!-- ── PDF VIEWER ────────────────────────────────────────── -->
-    <div id="pdfViewerPanel" class="panel" style="display:none;">
-      <div class="panel-header">
-        <span class="panel-title">// PDF compilato</span>
-        <div class="panel-meta">
-          <span id="pdfJobLabel" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+    <!-- ── SPLIT EDITOR: LaTeX (sx) + PDF viewer (dx) ────────── -->
+    <div id="splitEditorWrapper" style="display:none;">
+
+      <div id="latexPreviewPanel" class="panel panel-latex" style="display:none;">
+        <div class="panel-header" onclick="toggleLatexPreview()">
+          <span class="panel-title">// <span id="latexCurrentFile">main.tex</span></span>
+          <div class="panel-meta">
+            <button id="saveTexBtn" onclick="event.stopPropagation();saveTexFile()" class="job-btn" style="color:#10b981;background:color-mix(in srgb,#10b981 12%,transparent);border-color:color-mix(in srgb,#10b981 35%,transparent);">💾 Salva</button>
+            <button id="recompileBtn" onclick="event.stopPropagation();recompileLatex()" class="job-btn" style="color:var(--c4);background:color-mix(in srgb,var(--c4) 12%,transparent);border-color:color-mix(in srgb,var(--c4) 35%,transparent);">⚙ Ricompila</button>
+            <span id="noPdfBadge" class="pdf-badge pdf-badge-err" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
+            <span id="previewToggleArrow" class="panel-arrow">▲</span>
+          </div>
+        </div>
+        <div id="latexPreviewBody" class="panel-body">
+          <div id="texFileTabs"></div>
+          <textarea id="latexPreviewCode" spellcheck="false"></textarea>
+        </div>
+        <div id="pdfErrorsBody" class="panel-body" style="display:none;flex-shrink:0;">
+          <pre id="pdfErrorsCode" style="margin:0;padding:12px;background:color-mix(in srgb,#ef4444 8%,var(--bg));border:1px solid color-mix(in srgb,#ef4444 25%,transparent);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.6rem;overflow-x:auto;max-height:220px;overflow-y:auto;white-space:pre-wrap;"></pre>
         </div>
       </div>
-      <div class="panel-body">
-        <iframe id="pdfFrame" src="" style="width:100%;height:640px;border:none;border-radius:6px;background:#fff;"></iframe>
+
+      <div id="pdfViewerPanel" class="panel" style="display:none;background:var(--surface2);">
+        <div class="panel-header">
+          <span class="panel-title" style="color:var(--c1);">// PDF compilato</span>
+          <div class="panel-meta">
+            <span id="pdfJobLabel" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+          </div>
+        </div>
+        <div class="panel-body">
+          <iframe id="pdfFrame" src="" style="width:100%;border:none;background:#fff;"></iframe>
+        </div>
       </div>
+
     </div>
 
-    <!-- ── MODIFICA LaTeX ─────────────────────────────────────── -->
-    <div id="latexPreviewPanel" class="panel panel-latex" style="display:none;">
-      <div class="panel-header" onclick="toggleLatexPreview()">
-        <span class="panel-title">// <span id="latexCurrentFile">main.tex</span> — modifica LaTeX</span>
-        <div class="panel-meta">
-          <button id="saveTexBtn" onclick="event.stopPropagation();saveTexFile()" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 9px;border-radius:4px;background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 35%,transparent);color:#10b981;cursor:pointer;">💾 Salva</button>
-          <button id="recompileBtn" onclick="event.stopPropagation();recompileLatex()" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 9px;border-radius:4px;background:color-mix(in srgb,#f59e0b 15%,transparent);border:1px solid color-mix(in srgb,#f59e0b 35%,transparent);color:#f59e0b;cursor:pointer;">⚙ Ricompila</button>
-          <span id="noPdfBadge" class="pdf-badge pdf-badge-err" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
-          <span id="previewToggleArrow" class="panel-arrow">▼</span>
-        </div>
-      </div>
-      <div id="latexPreviewBody" class="panel-body" style="display:none;">
-        <div id="texFileTabs" style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 8px 0;"></div>
-        <textarea id="latexPreviewCode" spellcheck="false" style="width:100%;box-sizing:border-box;margin:0;padding:12px;background:var(--bg);border:none;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.62rem;resize:vertical;height:460px;color:inherit;outline:none;"></textarea>
-      </div>
-      <div id="pdfErrorsBody" class="panel-body" style="display:none;">
-        <pre id="pdfErrorsCode" style="margin:0;padding:12px;background:color-mix(in srgb,#ef4444 8%,var(--bg));border:1px solid color-mix(in srgb,#ef4444 25%,transparent);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.6rem;overflow-x:auto;max-height:260px;overflow-y:auto;white-space:pre-wrap;"></pre>
-      </div>
-    </div>
 
     <!-- ── LEZIONI PRECEDENTI ────────────────────────────────── -->
     <div id="historyPanel" class="panel panel-history" style="display:none;">
@@ -539,7 +543,9 @@ let _currentTexFile='main.tex';
 function _renderTexTabs(files){
   const tabs=document.getElementById('texFileTabs');
   if(!files||files.length<=1){tabs.innerHTML='';return;}
-  tabs.innerHTML=files.map(f=>`<button onclick="event.stopPropagation();_switchTexFile('${f}')" id="tab-${CSS.escape(f)}" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:3px 9px;border-radius:4px 4px 0 0;border:1px solid color-mix(in srgb,var(--c1) 30%,transparent);cursor:pointer;transition:background .15s;background:${f===_currentTexFile?'color-mix(in srgb,var(--c1) 20%,transparent)':'none'};color:${f===_currentTexFile?'var(--c1)':'var(--muted)'};">${f}</button>`).join('');
+  tabs.innerHTML=files.map(f=>
+    `<button class="tex-tab${f===_currentTexFile?' active':''}" onclick="event.stopPropagation();_switchTexFile('${f}')">${f}</button>`
+  ).join('');
 }
 
 async function _switchTexFile(filename){
@@ -565,26 +571,27 @@ function _showPdfAndLatex(id,hasPdf,latexContent,pdfErrors,texFiles){
   _texFiles=texFiles||['main.tex'];
   document.getElementById('latexCurrentFile').textContent='main.tex';
   document.getElementById('latexPreviewCode').value=latexContent;
-  document.getElementById('latexPreviewPanel').style.display='block';
-  _renderTexTabs(_texFiles);
   document.getElementById('noPdfBadge').style.display=hasPdf?'none':'inline';
+  // Pannello LaTeX — sempre visibile, corpo sempre espanso nel split
+  document.getElementById('latexPreviewPanel').style.display='flex';
+  document.getElementById('latexPreviewBody').style.display='flex';
+  document.getElementById('previewToggleArrow').textContent='▲';
+  _renderTexTabs(_texFiles);
+  // Pannello PDF
   const pdfPanel=document.getElementById('pdfViewerPanel');
   if(hasPdf){
     document.getElementById('pdfFrame').src=`${API}/pdf/${id}`;
     document.getElementById('pdfJobLabel').textContent=id.slice(0,8);
-    pdfPanel.style.display='block';
-    pdfPanel.scrollIntoView({behavior:'smooth',block:'start'});
-    document.getElementById('latexPreviewBody').style.display='none';
-    document.getElementById('previewToggleArrow').textContent='▼';
+    pdfPanel.style.display='flex';
     document.getElementById('pdfErrorsBody').style.display='none';
   }else{
     pdfPanel.style.display='none';
-    document.getElementById('latexPreviewBody').style.display='block';
-    document.getElementById('previewToggleArrow').textContent='▲';
     document.getElementById('pdfErrorsCode').textContent=(pdfErrors||[]).join('\n\n');
     document.getElementById('pdfErrorsBody').style.display=(pdfErrors?.length)?'block':'none';
-    document.getElementById('latexPreviewPanel').scrollIntoView({behavior:'smooth',block:'start'});
   }
+  const wrapper=document.getElementById('splitEditorWrapper');
+  wrapper.style.display='flex';
+  wrapper.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 async function saveTexFile(){
@@ -617,7 +624,7 @@ async function recompileLatex(){
     const data=await r.json();
     if(data.has_pdf){
       document.getElementById('pdfFrame').src=`${API}/pdf/${_currentPreviewJobId}?t=${Date.now()}`;
-      document.getElementById('pdfViewerPanel').style.display='block';
+      document.getElementById('pdfViewerPanel').style.display='flex';
       document.getElementById('noPdfBadge').style.display='none';
       document.getElementById('pdfErrorsBody').style.display='none';
       showToast('Compilazione riuscita','PDF aggiornato','#10b981');
@@ -702,8 +709,7 @@ function resetForNextLesson(){
   document.getElementById('titleInput').value='';
   document.getElementById('opt-output').value='';
   document.getElementById('jobIdBadge').style.display='none';
-  document.getElementById('latexPreviewPanel').style.display='none';
-  document.getElementById('pdfViewerPanel').style.display='none';
+  document.getElementById('splitEditorWrapper').style.display='none';
   updateConfigStatus(false);
   updateRunButton();
   window.scrollTo({top:0,behavior:'smooth'});
@@ -801,8 +807,8 @@ function saveTtl(){
 function toggleLatexPreview(){
   const body=document.getElementById('latexPreviewBody');
   const arrow=document.getElementById('previewToggleArrow');
-  const open=body.style.display==='none';
-  body.style.display=open?'block':'none';
+  const open=body.style.display==='none'||body.style.display==='';
+  body.style.display=open?'flex':'none';
   arrow.textContent=open?'▲':'▼';
 }
 function togglePdfErrors(){
@@ -1118,8 +1124,7 @@ const runBtn = document.getElementById('runBtn');
 runBtn.addEventListener('click',async()=>{
   updateLiveStatus('Avvio pipeline…','Preparazione upload…','#f59e0b',true);
   document.getElementById('jobIdBadge').style.display='none';
-  document.getElementById('latexPreviewPanel').style.display='none';
-  document.getElementById('pdfViewerPanel').style.display='none';
+  document.getElementById('splitEditorWrapper').style.display='none';
   document.getElementById('logPanel').style.display='none';
   if(_logEs){_logEs.close();_logEs=null;}
   const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);
