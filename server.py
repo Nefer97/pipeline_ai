@@ -289,8 +289,63 @@ def _cleanup_old_outputs(max_age_days: int = OUTPUT_TTL_DAYS) -> int:
     return removed
 
 
+def _recover_orphan_jobs() -> int:
+    """
+    Scansiona outputs/ e reinserisce in jobs{} i job che hanno un output su disco
+    ma non sono presenti in memoria (es. dopo perdita di jobs.json).
+    """
+    recovered = 0
+    for out_dir in OUTPUT_DIR.iterdir():
+        if not out_dir.is_dir():
+            continue
+        jid = out_dir.name
+        with _jobs_lock:
+            if jid in jobs:
+                continue
+        # Prova a leggere state.json per titolo e data
+        state_files = list(out_dir.rglob("state.json"))
+        title = jid
+        created_at = ""
+        if state_files:
+            try:
+                import json as _j
+                state = _j.loads(state_files[0].read_text(encoding="utf-8"))
+                title = state.get("course_title") or jid
+                lessons = state.get("lessons", [])
+                if lessons:
+                    created_at = lessons[-1].get("processed_at", "")
+            except Exception:
+                pass
+        if not created_at:
+            try:
+                import datetime as _dt
+                created_at = _dt.datetime.fromtimestamp(
+                    out_dir.stat().st_mtime).strftime("%Y-%m-%dT%H:%M:%S")
+            except Exception:
+                pass
+        zip_exists = (OUTPUT_DIR / f"{jid}.zip").exists()
+        with _jobs_lock:
+            jobs[jid] = {
+                "status":     "done",
+                "title":      title,
+                "files":      [],
+                "created_at": created_at,
+                "has_pdf":    False,
+                "stdout":     "",
+                "stderr":     "[recuperato da disco dopo perdita jobs.json]",
+            }
+            recovered += 1
+    if recovered:
+        with _jobs_lock:
+            _save_jobs()
+    return recovered
+
+
 @app.on_event("startup")
 async def _on_startup():
+    r = await asyncio.to_thread(_recover_orphan_jobs)
+    if r:
+        print(f"[recovery] {r} job recuperati da disco (jobs.json era incompleto)")
     n = await asyncio.to_thread(_cleanup_old_outputs)
     if n:
         print(f"[cleanup] {n} output vecchi rimossi all'avvio (TTL={OUTPUT_TTL_DAYS}d)")
