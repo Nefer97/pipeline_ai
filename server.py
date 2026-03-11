@@ -900,6 +900,37 @@ async def download_pdf(job_id: str):
     )
 
 
+@app.post("/save/{job_id}")
+async def save_tex_file(job_id: str, request: Request):
+    """Salva un file .tex senza ricompilare."""
+    body = {}
+    try:
+        if request.headers.get("content-type", "").startswith("application/json"):
+            body = await request.json()
+    except Exception:
+        pass
+
+    content  = body.get("content")
+    filename = body.get("file", "main.tex")
+    if "/" in filename or "\\" in filename or not filename.endswith(".tex"):
+        filename = "main.tex"
+    if content is None:
+        raise HTTPException(status_code=400, detail="content mancante")
+
+    job = jobs.get(job_id)
+    stored_dir = job.get("output_dir") if job else None
+    if stored_dir and Path(stored_dir).exists():
+        output_dir = Path(stored_dir)
+    else:
+        candidates = list((OUTPUT_DIR / job_id).rglob("main.tex")) if (OUTPUT_DIR / job_id).exists() else []
+        if not candidates:
+            raise HTTPException(status_code=404, detail="output non trovato su disco")
+        output_dir = candidates[0].parent
+
+    (output_dir / filename).write_text(content, encoding="utf-8")
+    return JSONResponse({"saved": filename})
+
+
 @app.post("/recompile/{job_id}")
 async def recompile_latex(job_id: str, request: Request):
     """Salva main.tex (se body.content fornito) e ricompila con pdflatex."""

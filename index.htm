@@ -281,6 +281,7 @@
       <div class="panel-header" onclick="toggleLatexPreview()">
         <span class="panel-title">// <span id="latexCurrentFile">main.tex</span> — modifica LaTeX</span>
         <div class="panel-meta">
+          <button id="saveTexBtn" onclick="event.stopPropagation();saveTexFile()" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 9px;border-radius:4px;background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 35%,transparent);color:#10b981;cursor:pointer;">💾 Salva</button>
           <button id="recompileBtn" onclick="event.stopPropagation();recompileLatex()" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 9px;border-radius:4px;background:color-mix(in srgb,#f59e0b 15%,transparent);border:1px solid color-mix(in srgb,#f59e0b 35%,transparent);color:#f59e0b;cursor:pointer;">⚙ Ricompila</button>
           <span id="noPdfBadge" class="pdf-badge pdf-badge-err" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
           <span id="previewToggleArrow" class="panel-arrow">▼</span>
@@ -584,6 +585,22 @@ function _showPdfAndLatex(id,hasPdf,latexContent,pdfErrors,texFiles){
     document.getElementById('pdfErrorsBody').style.display=(pdfErrors?.length)?'block':'none';
     document.getElementById('latexPreviewPanel').scrollIntoView({behavior:'smooth',block:'start'});
   }
+}
+
+async function saveTexFile(){
+  if(!_currentPreviewJobId)return;
+  const btn=document.getElementById('saveTexBtn');
+  const content=document.getElementById('latexPreviewCode').value;
+  btn.textContent='💾 salvando…';btn.disabled=true;
+  try{
+    const r=await fetch(`${API}/save/${_currentPreviewJobId}`,{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({content,file:_currentTexFile})
+    });
+    if(!r.ok){const t=await r.text();throw new Error(`HTTP ${r.status}: ${t.slice(0,80)}`);}
+    showToast('Salvato',_currentTexFile,'#10b981');
+  }catch(e){showToast('Errore salvataggio',e.message,'#ef4444');}
+  finally{btn.textContent='💾 Salva';btn.disabled=false;}
 }
 
 async function recompileLatex(){
