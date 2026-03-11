@@ -920,9 +920,12 @@ async def recompile_latex(job_id: str, request: Request):
             raise HTTPException(status_code=404, detail="output non trovato su disco")
         output_dir = candidates[0].parent
 
-    content = body.get("content")
-    if content:
-        (output_dir / "main.tex").write_text(content, encoding="utf-8")
+    content  = body.get("content")
+    filename = body.get("file", "main.tex")
+    if "/" in filename or "\\" in filename or not filename.endswith(".tex"):
+        filename = "main.tex"
+    if content is not None:
+        (output_dir / filename).write_text(content, encoding="utf-8")
 
     if not shutil.which("pdflatex"):
         return JSONResponse({"has_pdf": False, "pdf_errors": ["pdflatex non installato"]})
@@ -988,12 +991,39 @@ async def preview_latex(job_id: str):
     main_tex = output_dir / "main.tex"
     if not main_tex.exists():
         raise HTTPException(status_code=404, detail="main.tex non trovato")
+    tex_files = sorted(
+        [f.name for f in output_dir.glob("*.tex")],
+        key=lambda n: (n != "main.tex", n)   # main.tex sempre primo
+    )
     return JSONResponse({
-        "job_id":  job_id,
-        "title":   title,
-        "has_pdf": has_pdf,
-        "content": main_tex.read_text(encoding="utf-8"),
+        "job_id":    job_id,
+        "title":     title,
+        "has_pdf":   has_pdf,
+        "content":   main_tex.read_text(encoding="utf-8"),
+        "tex_files": tex_files,
     })
+
+
+@app.get("/tex/{job_id}/{filename}")
+async def read_tex_file(job_id: str, filename: str):
+    """Restituisce il contenuto di un qualsiasi .tex nell'output del job."""
+    if not filename.endswith(".tex") or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Nome file non valido")
+
+    job = jobs.get(job_id)
+    stored_dir = job.get("output_dir") if job else None
+    if stored_dir and Path(stored_dir).exists():
+        output_dir = Path(stored_dir)
+    else:
+        candidates = list((OUTPUT_DIR / job_id).rglob("main.tex")) if (OUTPUT_DIR / job_id).exists() else []
+        if not candidates:
+            raise HTTPException(status_code=404, detail="output non trovato su disco")
+        output_dir = candidates[0].parent
+
+    tex_path = output_dir / filename
+    if not tex_path.exists():
+        raise HTTPException(status_code=404, detail=f"{filename} non trovato")
+    return JSONResponse({"filename": filename, "content": tex_path.read_text(encoding="utf-8")})
 
 
 @app.get("/job/{job_id}/stream")

@@ -279,7 +279,7 @@
     <!-- ── MODIFICA LaTeX ─────────────────────────────────────── -->
     <div id="latexPreviewPanel" class="panel panel-latex" style="display:none;">
       <div class="panel-header" onclick="toggleLatexPreview()">
-        <span class="panel-title">// main.tex — modifica LaTeX</span>
+        <span class="panel-title">// <span id="latexCurrentFile">main.tex</span> — modifica LaTeX</span>
         <div class="panel-meta">
           <button id="recompileBtn" onclick="event.stopPropagation();recompileLatex()" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 9px;border-radius:4px;background:color-mix(in srgb,#f59e0b 15%,transparent);border:1px solid color-mix(in srgb,#f59e0b 35%,transparent);color:#f59e0b;cursor:pointer;">⚙ Ricompila</button>
           <span id="noPdfBadge" class="pdf-badge pdf-badge-err" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
@@ -287,6 +287,7 @@
         </div>
       </div>
       <div id="latexPreviewBody" class="panel-body" style="display:none;">
+        <div id="texFileTabs" style="display:flex;flex-wrap:wrap;gap:4px;padding:8px 8px 0;"></div>
         <textarea id="latexPreviewCode" spellcheck="false" style="width:100%;box-sizing:border-box;margin:0;padding:12px;background:var(--bg);border:none;border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.62rem;resize:vertical;height:460px;color:inherit;outline:none;"></textarea>
       </div>
       <div id="pdfErrorsBody" class="panel-body" style="display:none;">
@@ -532,11 +533,39 @@ async function deleteJobFromHistory(id){
 }
 
 let _currentPreviewJobId=null;
+let _currentTexFile='main.tex';
 
-function _showPdfAndLatex(id,hasPdf,latexContent,pdfErrors){
+function _renderTexTabs(files){
+  const tabs=document.getElementById('texFileTabs');
+  if(!files||files.length<=1){tabs.innerHTML='';return;}
+  tabs.innerHTML=files.map(f=>`<button onclick="event.stopPropagation();_switchTexFile('${f}')" id="tab-${CSS.escape(f)}" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:3px 9px;border-radius:4px 4px 0 0;border:1px solid color-mix(in srgb,var(--c1) 30%,transparent);cursor:pointer;transition:background .15s;background:${f===_currentTexFile?'color-mix(in srgb,var(--c1) 20%,transparent)':'none'};color:${f===_currentTexFile?'var(--c1)':'var(--muted)'};">${f}</button>`).join('');
+}
+
+async function _switchTexFile(filename){
+  if(!_currentPreviewJobId)return;
+  if(filename===_currentTexFile)return;
+  _currentTexFile=filename;
+  document.getElementById('latexCurrentFile').textContent=filename;
+  document.getElementById('latexPreviewCode').value='// caricamento…';
+  _renderTexTabs(_texFiles);
+  try{
+    const r=await fetch(`${API}/tex/${_currentPreviewJobId}/${encodeURIComponent(filename)}`);
+    if(!r.ok)throw new Error(`HTTP ${r.status}`);
+    const data=await r.json();
+    document.getElementById('latexPreviewCode').value=data.content||'';
+  }catch(e){document.getElementById('latexPreviewCode').value=`// errore: ${e.message}`;}
+}
+
+let _texFiles=[];
+
+function _showPdfAndLatex(id,hasPdf,latexContent,pdfErrors,texFiles){
   _currentPreviewJobId=id;
+  _currentTexFile='main.tex';
+  _texFiles=texFiles||['main.tex'];
+  document.getElementById('latexCurrentFile').textContent='main.tex';
   document.getElementById('latexPreviewCode').value=latexContent;
   document.getElementById('latexPreviewPanel').style.display='block';
+  _renderTexTabs(_texFiles);
   document.getElementById('noPdfBadge').style.display=hasPdf?'none':'inline';
   const pdfPanel=document.getElementById('pdfViewerPanel');
   if(hasPdf){
@@ -565,7 +594,7 @@ async function recompileLatex(){
   try{
     const r=await fetch(`${API}/recompile/${_currentPreviewJobId}`,{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({content})
+      body:JSON.stringify({content,file:_currentTexFile})
     });
     if(!r.ok){const t=await r.text();throw new Error(`HTTP ${r.status}: ${t.slice(0,80)}`);}
     const data=await r.json();
@@ -595,7 +624,7 @@ async function previewFromHistory(id){
     const r=await fetch(`${API}/preview/${id}`);
     if(!r.ok){const t=await r.text();throw new Error(`HTTP ${r.status}: ${t.slice(0,120)}`);}
     const data=await r.json();
-    _showPdfAndLatex(id,data.has_pdf||false,data.content||'',[]);
+    _showPdfAndLatex(id,data.has_pdf||false,data.content||'',[],data.tex_files||['main.tex']);
   }catch(e){
     document.getElementById('latexPreviewCode').value=`// errore: ${e.message}`;
   }
@@ -1182,7 +1211,7 @@ runBtn.addEventListener('click',async()=>{
           // Fetch LaTeX preview
           fetch(`${API}/preview/${j.job_id}`)
             .then(r=>r.ok?r.json():null)
-            .then(data=>{if(!data)return;_showPdfAndLatex(j.job_id,data.has_pdf||false,data.content||'',j.pdf_errors||[]);})
+            .then(data=>{if(!data)return;_showPdfAndLatex(j.job_id,data.has_pdf||false,data.content||'',j.pdf_errors||[],data.tex_files||['main.tex']);})
             .catch(()=>{});
           // Cleanup uploads dopo 5s — l'output (tex + immagini) rimane in outputs/
           setTimeout(()=>fetch(`${API}/job/${j.job_id}`,{method:'DELETE'}).catch(()=>{}),5000);
