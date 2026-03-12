@@ -180,7 +180,7 @@ fonti grezze (audio / video / pptx / pdf / docx / txt)
         ├── omml2latex.py         → formule PowerPoint (OMML) → LaTeX (nessun OCR)
         ├── formula_detector.py   → riconosce immagini-formula nelle slide
         ├── ocr_math.py           → pix2tex / tesseract: immagine formula → LaTeX
-        ├── slide_renderer.py     → ogni slide PPTX → PNG
+        ├── slide_renderer.py     → ogni slide PPTX → PNG (LibreOffice+pymupdf se disponibile, altrimenti Pillow)
         │
         ├── pdfplumber            → estrae testo da PDF
         ├── pytesseract           → OCR fallback per PDF scansionati
@@ -190,7 +190,8 @@ fonti grezze (audio / video / pptx / pdf / docx / txt)
         │
         ├── Claude API (cloud)    → riceve testo + PNG slide → genera LaTeX strutturato
         │                           (multimodale: vede grafici e schemi oltre al testo)
-        │
+        ├── _clean_claude_output  → rimuove code fences, prefissi e suffissi spurii
+        │                           prima di scrivere il .tex su disco
         └── builder.py            → assembla i .tex finali con escape unicode completo
 ```
 
@@ -433,7 +434,7 @@ Si disabilita con `--no-context`. Pruning automatico: oltre le ultime 10 lezioni
 | `schema.htm` | Diagramma architettura interattivo |
 | `preprocessor.py` | Normalizza e comprime testo; rileva materia; allinea trascrizione↔slide; gestisce contesto corso |
 | `extractor.py` | Parsing approfondito `.pptx` (testo, immagini, tabelle, formule OMML) |
-| `slide_renderer.py` | Ogni slide PPTX → PNG |
+| `slide_renderer.py` | Ogni slide PPTX → PNG (LibreOffice+pymupdf prioritario, Pillow come fallback) |
 | `pdf_renderer.py` | Ogni pagina PDF → PNG + LaTeX skeleton |
 | `omml2latex.py` | Formule OMML (PowerPoint) → LaTeX |
 | `formula_detector.py` | Riconosce immagini-formula (aspect ratio, luminosità, saturazione) |
@@ -455,18 +456,22 @@ Si disabilita con `--no-context`. Pruning automatico: oltre le ultime 10 lezioni
 
 **PDF grandi (chunking automatico):** PDF > 20 pagine senza audio → suddiviso in chunk da 10 pagine, ognuno elaborato da Claude separatamente. Con audio associato il PDF viene usato come scheletro strutturale senza chunking.
 
-**PDF scansionati:** pytesseract viene applicato automaticamente sulle pagine senza testo digitale. Copre sia PDF 100% scansionati sia PDF misti. La lingua OCR segue `WHISPER_LANG`; senza variabile usa `ita+eng`.
+**PDF scansionati:** pytesseract viene applicato automaticamente sulle pagine senza testo digitale. Copre sia PDF 100% scansionati sia PDF misti. La lingua OCR segue `WHISPER_LANG`; senza variabile usa `eng+ita` (inglese prioritario).
 
 **Formule PowerPoint:** le formule scritte con l'editor equazioni di Office (OMML) vengono convertite direttamente da `omml2latex.py` senza OCR. Le formule come immagini (screenshot, foto di lavagna) vengono rilevate da `formula_detector.py` e passate a pix2tex.
 
 **Unicode nel testo:** `builder.py` gestisce automaticamente 150+ caratteri Unicode comuni nei PDF/DOCX/PPTX — subscript (₂→`$_{2}$`), lettere greche (α→`$\alpha$`), operatori (≤→`$\leq$`), simboli testo (€→`\texteuro{}`). Caratteri non mappati passano attraverso ed eventualmente causano errori LaTeX visibili in `main.log`.
 
-**WHISPER_LANG:** imposta la lingua per Whisper, OCR e LaTeX babel.
+**Rendering slide:** se LibreOffice è installato, le slide PPTX vengono convertite a PDF e poi renderizzate con pymupdf a 200 DPI — fedeltà massima (font reali, temi, gradienti). Se LibreOffice non è disponibile, si usa python-pptx + Pillow (rendering elemento per elemento). In entrambi i casi le immagini vengono allegate a Claude.
+
+**Output Claude:** prima di scrivere il `.tex` su disco, la risposta viene pulita automaticamente — vengono rimossi code fences markdown (` ```latex ``` `), testo introduttivo prima di `\section` e note conclusive. Se qualcosa viene rimosso viene loggato con anteprima.
+
+**Lingua Whisper:** solo `en` (default) e `it` sono supportati. Se auto-detect rileva un'altra lingua, la pipeline ri-trascrive forzando `en`. Per forzare italiano:
 ```bash
-export WHISPER_LANG=it   # italiano
-export WHISPER_LANG=en   # inglese
-export WHISPER_LANG=fr   # francese
+export WHISPER_LANG=it
 ```
+
+**Auto-save editor:** le modifiche nel pannello LaTeX vengono salvate automaticamente in `localStorage` dopo 2 secondi di inattività. Se si riapre lo stesso job prima di aver cliccato "💾 Salva", la bozza locale viene ripristinata con un avviso giallo. Si cancella automaticamente dopo il salvataggio confermato.
 
 **Timeout configurabili** (senza riavviare il server):
 ```bash
@@ -519,3 +524,6 @@ python -m pytest tests/ -v
 | Allineamento slide↔audio spostato | Pause lunghe distorcevano la distribuzione | Fix già applicato: pause > 45s vengono cappate |
 | Immagini non allegate a Claude | Nessun PPTX nella lezione | Le PNG PDF vengono allegate solo senza audio; quelle PPTX sempre |
 | Debug `images_lezione_NN/` vuoto | Nessuna immagine trovata in `images/` | Verifica che slide_renderer abbia prodotto i PNG (log: `✓ Renderizzate N/N slide`) |
+| Slide renderizzate con font sbagliati | LibreOffice non installato, uso Pillow | `sudo apt install libreoffice` — le slide torneranno pixel-perfect |
+| Claude risponde in inglese su audio italiano | `WHISPER_LANG` non impostato | `export WHISPER_LANG=it` prima di avviare il server |
+| `.tex` contiene testo prima di `\section` | Claude ha aggiunto un'introduzione | Fix automatico: `_clean_claude_output` lo rimuove; se persiste controlla `main.log` |
