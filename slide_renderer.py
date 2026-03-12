@@ -63,6 +63,17 @@ def _check_deps() -> dict:
 # RENDERING PRINCIPALE
 # ─────────────────────────────────────────────
 
+def _libreoffice_available() -> bool:
+    """Verifica se LibreOffice è installato e funzionante."""
+    import subprocess
+    try:
+        r = subprocess.run(["libreoffice", "--version"],
+                           capture_output=True, timeout=10)
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def render_slide_images(pptx_path: Path, images_dir: Path) -> dict:
     """
     Renderizza ogni slide come PNG.
@@ -71,24 +82,32 @@ def render_slide_images(pptx_path: Path, images_dir: Path) -> dict:
         {slide_number: "{stem}_slide_001.png", ...}
     I path sono relativi a images_dir (pronti per \includegraphics).
 
-    Se il rendering fallisce su una slide, quella slide viene saltata
-    senza bloccare le altre.
+    Ordine di priorità renderer:
+      1. LibreOffice + pymupdf — fedeltà massima (font, temi, gradienti)
+      2. python-pptx + Pillow  — rendering elemento per elemento, robusto
+      3. placeholder PNG       — fallback finale
     """
     images_dir = Path(images_dir)
     images_dir.mkdir(parents=True, exist_ok=True)
 
     deps = _check_deps()
 
+    # Priorità 1: LibreOffice → PDF → pymupdf (render pixel-perfect)
+    if deps["pymupdf"] and _libreoffice_available():
+        print(f"    [renderer] LibreOffice + pymupdf (alta fedeltà)")
+        result = _render_with_pymupdf(pptx_path, images_dir)
+        if result:
+            return result
+        print(f"    [renderer] LibreOffice fallito → fallback Pillow")
+
+    # Priorità 2: python-pptx + Pillow (rendering elemento per elemento)
     if deps["pptx"] and deps["pillow"]:
         print(f"    [renderer] python-pptx + Pillow")
         return _render_with_pptx_pillow(pptx_path, images_dir)
-    elif deps["pymupdf"]:
-        print(f"    [renderer] pymupdf (fallback)")
-        return _render_with_pymupdf(pptx_path, images_dir)
-    else:
-        print(f"    [renderer] WARN: nessuna libreria disponibile")
-        print(f"               pip install Pillow  oppure  pip install pymupdf")
-        return _render_placeholder(pptx_path, images_dir)
+
+    print(f"    [renderer] WARN: nessuna libreria disponibile")
+    print(f"               pip install pymupdf  oppure  pip install Pillow")
+    return _render_placeholder(pptx_path, images_dir)
 
 
 # ─────────────────────────────────────────────
@@ -299,22 +318,41 @@ def _render_with_pymupdf(pptx_path: Path, images_dir: Path) -> dict:
 
     result   = {}
     stem     = Path(pptx_path).stem
-    pdf_path = images_dir / (stem + "_slides.pdf")
+    # LibreOffice scrive {stem}.pdf nella outdir — usiamo un nome univoco
+    # per evitare collisioni con altri PDF nella stessa cartella
+    lo_pdf_name = stem + "_lo_slides.pdf"
+    pdf_path    = images_dir / lo_pdf_name
 
-    # Converti PPTX → PDF
+    # Converti PPTX → PDF con LibreOffice
     if not pdf_path.exists():
-        try:
-            subprocess.run(
-                ["libreoffice", "--headless", "--convert-to", "pdf",
-                 "--outdir", str(images_dir), str(pptx_path)],
-                capture_output=True, timeout=60
-            )
-        except Exception as e:
-            print(f"    [ERRORE] LibreOffice: {e}")
-            return {}
+        import tempfile, shutil
+        with tempfile.TemporaryDirectory() as tmpdir:
+            try:
+                r = subprocess.run(
+                    ["libreoffice", "--headless", "--convert-to", "pdf",
+                     "--outdir", tmpdir, str(pptx_path.resolve())],
+                    capture_output=True, timeout=120
+                )
+                if r.returncode != 0:
+                    print(f"    [ERRORE] LibreOffice exit {r.returncode}: "
+                          f"{r.stderr.decode(errors='replace')[:200]}")
+                    return {}
+                # LibreOffice produce {stem}.pdf nel tmpdir
+                lo_out = Path(tmpdir) / (stem + ".pdf")
+                if not lo_out.exists():
+                    # Cerca qualsiasi PDF prodotto
+                    pdfs = list(Path(tmpdir).glob("*.pdf"))
+                    if not pdfs:
+                        print(f"    [ERRORE] LibreOffice non ha prodotto PDF")
+                        return {}
+                    lo_out = pdfs[0]
+                shutil.move(str(lo_out), str(pdf_path))
+            except Exception as e:
+                print(f"    [ERRORE] LibreOffice: {e}")
+                return {}
 
     if not pdf_path.exists():
-        print(f"    [ERRORE] PDF non generato da LibreOffice")
+        print(f"    [ERRORE] PDF non trovato dopo conversione")
         return {}
 
     # Renderizza ogni pagina del PDF
@@ -326,7 +364,7 @@ def _render_with_pymupdf(pptx_path: Path, images_dir: Path) -> dict:
             if img_path.exists():
                 result[page_idx] = img_filename
                 continue
-            mat = fitz.Matrix(150/72, 150/72)  # 150 DPI
+            mat = fitz.Matrix(200/72, 200/72)  # 200 DPI
             pix = page.get_pixmap(matrix=mat)
             pix.save(str(img_path))
             result[page_idx] = img_filename

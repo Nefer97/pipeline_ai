@@ -166,9 +166,13 @@ def transcribe_audio(audio_path: Path, model_name: str = "base",
         threading.Thread(target=_heartbeat, daemon=True).start()
 
     model = whisper.load_model(model_name)
-    # language=None → Whisper auto-rileva la lingua (funziona per italiano, inglese, ecc.)
-    # Imposta WHISPER_LANG=it (o altra lingua) come variabile d'ambiente per forzarla
-    whisper_lang = os.environ.get("WHISPER_LANG") or None
+    # Lingue supportate: en (default) e it. Qualsiasi altra lingua rilevata → forzata a en.
+    # WHISPER_LANG=it per forzare italiano; senza variabile: auto-detect tra en/it.
+    _ALLOWED_LANGS = {"en", "it"}
+    whisper_lang = os.environ.get("WHISPER_LANG", "").strip().lower() or None
+    if whisper_lang and whisper_lang not in _ALLOWED_LANGS:
+        print(f"    [WARN] WHISPER_LANG='{whisper_lang}' non supportato → uso 'en'")
+        whisper_lang = "en"
     # fp16 richiede CUDA; su CPU deve essere False altrimenti Whisper crasha
     try:
         import torch as _torch
@@ -176,6 +180,11 @@ def transcribe_audio(audio_path: Path, model_name: str = "base",
     except ImportError:
         _fp16 = False
     result = model.transcribe(str(audio_path), language=whisper_lang, verbose=False, fp16=_fp16)
+    # Valida lingua rilevata: se non en/it (es. turco), ri-trascrivi forzando en
+    _detected = result.get("language", "en")
+    if _detected not in _ALLOWED_LANGS:
+        print(f"    [WARN] Lingua rilevata '{_detected}' non supportata → ri-trascrivo con 'en'")
+        result = model.transcribe(str(audio_path), language="en", verbose=False, fp16=_fp16)
 
     if _prog_dir:
         _stop.set()
@@ -345,10 +354,11 @@ def _ocr_pages_with_tesseract(images_dir: Path, page_images: dict) -> list[dict]
         return []
 
     # Determina la lingua: mappa codici Whisper/BCP-47 → Tesseract
-    _whisper_lang = os.environ.get("WHISPER_LANG") or ""
-    _lang_map = {"it": "ita", "en": "eng", "fr": "fra", "de": "deu", "es": "spa",
-                 "pt": "por", "nl": "nld", "ru": "rus", "zh": "chi_sim"}
-    tess_lang = _lang_map.get(_whisper_lang, _whisper_lang) if _whisper_lang else "ita+eng"
+    _whisper_lang = os.environ.get("WHISPER_LANG", "").strip().lower()
+    if _whisper_lang not in {"en", "it"}:
+        _whisper_lang = ""  # ignora lingue non supportate
+    _lang_map = {"it": "ita", "en": "eng"}
+    tess_lang = _lang_map.get(_whisper_lang, "eng+ita")  # default: eng+ita (en prima)
 
     print(f"    [OCR PDF] pytesseract fallback — {len(page_images)} pagine, lang={tess_lang}")
     pages = []
@@ -623,6 +633,43 @@ def _resize_images_dir(images_dir: Path, max_px: int = MAX_IMG_PX) -> None:
             pass
     if resized:
         print(f"    ✓ {resized} immagini ridimensionate a max {max_px}px")
+
+
+def _clean_claude_output(text: str) -> str:
+    """
+    Rimuove artefatti comuni nelle risposte Claude prima che l'output
+    venga scritto nel file .tex:
+    - Blocchi markdown ```latex ... ``` o ``` ... ```
+    - Testo introduttivo prima del primo comando LaTeX (\section, \chapter, ecc.)
+    - Testo conclusivo dopo l'ultimo comando LaTeX
+    """
+    import re as _re
+
+    # 1. Rimuovi code fences markdown (```latex ... ``` oppure ``` ... ```)
+    text = _re.sub(r'^```(?:latex)?\s*\n', '', text, flags=_re.MULTILINE)
+    text = _re.sub(r'\n```\s*$', '', text, flags=_re.MULTILINE)
+    text = text.strip()
+
+    # 2. Rimuovi testo prima del primo comando LaTeX rilevante
+    #    (Claude a volte prepone "Ecco il LaTeX:", "Here is the code:", ecc.)
+    _first = _re.search(r'\\(?:section|chapter|subsection|begin)\s*[\[{]', text)
+    if _first and _first.start() > 0:
+        prefix = text[:_first.start()].strip()
+        if prefix:  # c'era davvero del testo spurio prima
+            print(f"  [CLEANUP] Rimosso prefisso Claude ({len(prefix)} char): "
+                  f"{prefix[:80]!r}{'…' if len(prefix)>80 else ''}")
+        text = text[_first.start():]
+
+    # 3. Rimuovi testo dopo l'ultimo } o \end{...} (note finali occasionali)
+    _last = _re.search(r'(\\end\{[^}]+\}|^\})\s*$', text, flags=_re.MULTILINE)
+    if _last:
+        suffix = text[_last.end():].strip()
+        if suffix:
+            print(f"  [CLEANUP] Rimosso suffisso Claude ({len(suffix)} char): "
+                  f"{suffix[:80]!r}{'…' if len(suffix)>80 else ''}")
+            text = text[:_last.end()]
+
+    return text.strip()
 
 
 def generate_with_claude(lesson_number: int, title: str,
@@ -1034,7 +1081,7 @@ REGOLE OBBLIGATORIE:
                 content_blocks = data.get("content") or []
                 if not content_blocks:
                     raise ValueError(f"Risposta Claude vuota o malformata: {str(data)[:200]}")
-                latex = content_blocks[0].get("text", "")
+                latex = _clean_claude_output(content_blocks[0].get("text", ""))
                 usage = data.get("usage", {})
                 cache_hit  = usage.get("cache_read_input_tokens", 0)
                 cache_miss = usage.get("cache_creation_input_tokens", 0)
@@ -2145,7 +2192,7 @@ def main():
             state["course_title"] or args.title,
             all_tex_files,
             output_dir,
-            lang = os.environ.get("WHISPER_LANG") or state.get("subject_lang") or "it",
+            lang = os.environ.get("WHISPER_LANG") or state.get("subject_lang") or "en",
         )
         # Salva errori batch se --continue-on-error era attivo
         if batch_errors:
