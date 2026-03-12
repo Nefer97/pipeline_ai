@@ -2137,16 +2137,27 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
     out_tex = output_dir / f"lezione_{lesson_number:02d}.tex"
 
     def _latex_from_skeleton(sources, lesson_number, title, pptx_slides):
-        entry = (
-            next((s for s in sources["scheletro"] if s.get("latex")), None) or
-            next((s for s in sources["supporto"]  if s.get("latex")), None)
-        )
-        if entry:
-            return (
-                f"\\section{{Lezione {lesson_number}: {title}}}\n"
-                f"\\label{{sec:lezione{lesson_number:02d}}}\n\n"
-                + entry["latex"]
-            )
+        # Raccoglie i LaTeX skeleton da TUTTI gli scheletro (non solo il primo)
+        latex_entries = [s for s in sources["scheletro"] if s.get("latex")]
+        if not latex_entries:
+            latex_entries = [s for s in sources["supporto"] if s.get("latex")]
+
+        if latex_entries:
+            parts = [
+                f"\\section{{Lezione {lesson_number}: {title}}}",
+                f"\\label{{sec:lezione{lesson_number:02d}}}\n",
+            ]
+            for entry in latex_entries:
+                if len(latex_entries) > 1:
+                    # Separatore visivo tra più fonti (solo in fallback senza Claude)
+                    fname = COLLEAGUE_MODULES and entry.get("filename", "")
+                    if fname:
+                        parts.append(
+                            f"\n% ── Fonte: {fname} ──\n"
+                        )
+                parts.append(entry["latex"])
+            return "\n".join(parts)
+
         slide_text = "\n".join(s["text"] for s in sources["scheletro"])
         carne_text = "\n".join(s["text"] for s in sources["carne"])
         extra_text = "\n".join(s["text"] for s in sources["supporto"] + sources["contorno"])
