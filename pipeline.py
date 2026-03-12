@@ -306,105 +306,154 @@ def process_pptx_fallback(pptx_path: Path) -> str:
 # ─────────────────────────────────────────────
 # STEP 4: PDF — estrazione a chunk di pagine
 # ─────────────────────────────────────────────
+
+def _clean_extracted_text(text: str) -> str:
+    """
+    Pulisce il testo estratto da un PDF:
+    1. Corregge caratteri doppi (artefatto font PDF: "ffiilliippppoo" → "filippo")
+    2. Collassa spazi multipli in un singolo spazio
+    3. Rimuove righe che sono >85% spazi (padding layout)
+    4. Collassa 3+ righe vuote consecutive in 1
+    """
+    import re
+    if not text:
+        return text
+
+    # ── 1. Rileva e correggi caratteri doppi ──
+    # Artefatto tipico di certi PDF dove ogni char è scritto due volte.
+    # Euristica: se >40% dei char non-spazio sono in coppie consecutive,
+    # è quasi certamente un artefatto → deduplicazione.
+    non_ws = re.sub(r'\s', '', text)
+    if non_ws:
+        pairs = re.findall(r'(.)\1', non_ws)
+        if len(pairs) / len(non_ws) > 0.40:
+            text = re.sub(r'(.)\1', r'\1', text)
+
+    # ── 2. Pulisci riga per riga ──
+    cleaned = []
+    for line in text.splitlines():
+        if not line:
+            cleaned.append('')
+            continue
+        # Salta righe che sono quasi solo spazi (resto <5 char utili)
+        if len(line.strip()) < 5 and line.count(' ') / len(line) > 0.85:
+            continue
+        # Collassa spazi multipli interni
+        line = re.sub(r'  +', ' ', line).rstrip()
+        cleaned.append(line)
+
+    # ── 3. Collassa 3+ righe vuote → 1 ──
+    text = '\n'.join(cleaned)
+    text = re.sub(r'\n{3,}', '\n\n', text)
+    return text.strip()
+
+
+def _text_density(text: str) -> float:
+    """Densità testo: rapporto char non-spazio / lunghezza totale. Più alto = meglio."""
+    if not text:
+        return 0.0
+    non_ws = sum(1 for c in text if not c.isspace())
+    return non_ws / len(text)
+
+
 def extract_pdf_pages(pdf_path: Path) -> list[dict]:
     """
     Estrae il testo del PDF pagina per pagina.
     Ritorna lista di dict: [{page: N, text: "...", chars_count: N}]
 
-    Strategia pdfplumber:
-    1. extract_text(layout=True)  — preserva layout spaziale (colonne, indentazione)
-    2. extract_tables()           — aggiunge tabelle in formato ASCII affiancato al testo
+    Strategia duale:
+    1. pdfplumber senza layout (più pulito per slide; layout=True generava
+       righe di spazi per preservare posizione spaziale)
+    2. PyMuPDF (get_text blocks) — confrontato per qualità per ogni pagina
+    Per ogni pagina vince l'estrazione con densità testo più alta.
+    Risultato finale pulito con _clean_extracted_text().
     """
-    pages = []
+    import re
+
+    pages_plumber: dict[int, str] = {}  # {page_num: raw_text}
     n_total_pages = 0
+
+    # ── pdfplumber: layout=False (niente padding spaziale) ──
     try:
         import pdfplumber
         with pdfplumber.open(str(pdf_path)) as pdf:
             n_total_pages = len(pdf.pages)
             for i, page in enumerate(pdf.pages, 1):
-                # layout=True migliora l'estrazione su multi-colonna e indentazione
-                try:
-                    t = page.extract_text(layout=True, x_tolerance=3, y_tolerance=3)
-                except TypeError:
-                    # pdfplumber < 0.7 non supporta layout=True
-                    t = page.extract_text()
+                # layout=False: testo senza padding spaziale (ottimo per slide)
+                t = page.extract_text(x_tolerance=3, y_tolerance=3) or ""
 
-                # Estrai tabelle e appendile al testo
-                table_parts = []
+                # Tabelle → aggiunte in coda
+                table_parts: list[str] = []
                 try:
                     for tbl in page.extract_tables():
                         if not tbl:
                             continue
-                        rows = []
-                        for row in tbl:
-                            cells = [str(c).strip() if c else "" for c in row]
-                            if any(cells):
-                                rows.append(" | ".join(cells))
+                        rows = [
+                            " | ".join(str(c).strip() if c else "" for c in row)
+                            for row in tbl
+                            if any(c and str(c).strip() for c in row)
+                        ]
                         if rows:
                             table_parts.append("[TABELLA]\n" + "\n".join(rows))
                 except Exception:
                     pass
 
-                combined = "\n".join(filter(None, [t.strip() if t else "", *table_parts]))
-                if combined:
-                    pages.append({"page": i, "text": combined, "chars_count": len(combined)})
-                elif table_parts:
-                    txt = "\n".join(table_parts)
-                    pages.append({"page": i, "text": txt, "chars_count": len(txt)})
-
-        n_sparse = sum(1 for p in pages if p.get("chars_count", 0) < 80)
-        print(f"    ✓ pdf pdfplumber: {len(pages)}/{n_total_pages} pagine con testo"
-              + (f" ({n_sparse} sparse)" if n_sparse else ""))
-        if n_total_pages > 0 and not pages:
-            print(f"    [WARN] {pdf_path.name}: nessun testo estratto — PDF scansionato?")
-
-        # ── Arricchimento con PyMuPDF dove pdfplumber è sparso ──
-        # PyMuPDF estrae testo con posizionamento spaziale (blocks), spesso
-        # più preciso di pdfplumber su PDF tecnici con formule e layout complessi.
-        if COLLEAGUE_MODULES and (not pages or n_sparse > 0):
-            fitz_pages = extract_pdf_text_pymupdf(pdf_path)
-            if fitz_pages:
-                fitz_map = {p["page"]: p for p in fitz_pages}
-                pd_map   = {p["page"]: p for p in pages}
-                enriched = 0
-                for pn, fp in fitz_map.items():
-                    existing = pd_map.get(pn)
-                    if existing is None:
-                        pages.append(fp)
-                        enriched += 1
-                    elif existing.get("chars_count", 0) < 80 and fp["chars_count"] > existing.get("chars_count", 0):
-                        existing["text"]        = fp["text"]
-                        existing["chars_count"] = fp["chars_count"]
-                        enriched += 1
-                if enriched:
-                    pages.sort(key=lambda p: p["page"])
-                    print(f"    ✓ PyMuPDF ha arricchito {enriched} pagine sparse")
-
-        return pages
+                combined = "\n".join(filter(None, [t.strip(), *table_parts]))
+                if combined.strip():
+                    pages_plumber[i] = combined
+        print(f"    pdfplumber: {len(pages_plumber)}/{n_total_pages} pag")
     except ImportError:
         pass
-    # Fallback PyMuPDF diretto se pdfplumber non è installato
+
+    # ── PyMuPDF: get_text("blocks") ordinato per posizione ──
+    pages_fitz: dict[int, str] = {}
     if COLLEAGUE_MODULES:
-        fitz_pages = extract_pdf_text_pymupdf(pdf_path)
-        if fitz_pages:
-            print(f"    ✓ pdf PyMuPDF (fallback): {len(fitz_pages)} pagine con testo")
-            return fitz_pages
-    try:
-        import PyPDF2
-        with open(pdf_path, "rb") as f:
-            reader = PyPDF2.PdfReader(f)
-            n_total_pages = len(reader.pages)
-            for i, page in enumerate(reader.pages, 1):
-                t = page.extract_text()
-                if t and t.strip():
-                    pages.append({"page": i, "text": t.strip(), "chars_count": len(t.strip())})
-        print(f"    ✓ pdf PyPDF2: {len(pages)}/{n_total_pages} pagine con testo")
-        if n_total_pages > 0 and not pages:
-            print(f"    [WARN] {pdf_path.name}: nessun testo estratto — PDF scansionato?")
-        return pages
-    except ImportError:
-        print("    [MANCANTE] pdfplumber — pip install pdfplumber")
-        return []
+        for p in extract_pdf_text_pymupdf(pdf_path):
+            pages_fitz[p["page"]] = p["text"]
+        if pages_fitz:
+            print(f"    PyMuPDF:    {len(pages_fitz)}/{n_total_pages} pag")
+
+    # ── Unifica: per ogni pagina vince il testo con densità maggiore ──
+    all_page_nums = sorted(
+        set(pages_plumber.keys()) | set(pages_fitz.keys())
+        or set(range(1, n_total_pages + 1))
+    )
+    pages: list[dict] = []
+    for pn in all_page_nums:
+        tp = pages_plumber.get(pn, "")
+        tf = pages_fitz.get(pn, "")
+        # Densità dopo pulizia provvisoria (collasso spazi)
+        dp = _text_density(re.sub(r'  +', ' ', tp))
+        df = _text_density(tf)
+        raw = tp if dp >= df else tf
+        text = _clean_extracted_text(raw)
+        if text:
+            pages.append({"page": pn, "text": text, "chars_count": len(text)})
+
+    if not pages_plumber and not pages_fitz:
+        # Fallback PyPDF2
+        try:
+            import PyPDF2
+            with open(pdf_path, "rb") as fh:
+                reader = PyPDF2.PdfReader(fh)
+                n_total_pages = len(reader.pages)
+                for i, pg in enumerate(reader.pages, 1):
+                    t = (pg.extract_text() or "").strip()
+                    if t:
+                        t = _clean_extracted_text(t)
+                        pages.append({"page": i, "text": t, "chars_count": len(t)})
+            print(f"    PyPDF2:     {len(pages)}/{n_total_pages} pag")
+        except ImportError:
+            print("    [MANCANTE] pdfplumber e PyMuPDF — pip install pdfplumber pymupdf")
+            return []
+
+    n_sparse = sum(1 for p in pages if p["chars_count"] < 80)
+    print(f"    ✓ pdf: {len(pages)}/{n_total_pages} pagine con testo"
+          + (f" ({n_sparse} sparse)" if n_sparse else ""))
+    if n_total_pages > 0 and not pages:
+        print(f"    [WARN] {pdf_path.name}: nessun testo — PDF scansionato?")
+
+    return pages
 
 # ──────────────────────────────
 # PDF → singole pagine salvate
