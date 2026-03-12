@@ -179,8 +179,9 @@
             </div>
             <div class="config-field" style="gap:6px">
               <label>Lezione precedente <span style="opacity:.6;font-size:.85em">(Job ID — continua corso)</span></label>
-              <input type="text" id="opt-continue" placeholder="es. 8ccdc0a7 — lascia vuoto per nuovo corso" style="border-left-color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.72rem;">
-              <span id="continue-hint" class="continue-hint">state.json copiato automaticamente — start-from ignorato</span>
+              <input type="text" id="opt-continue" list="jobids-datalist" placeholder="es. 8ccdc0a7 — lascia vuoto per nuovo corso" style="border-left-color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.72rem;" autocomplete="off">
+              <datalist id="jobids-datalist"></datalist>
+              <span id="continue-hint" class="continue-hint" style="display:none"></span>
             </div>
           </div>
         </div>
@@ -729,13 +730,22 @@ async function previewFromHistory(id){
   }
 }
 
+let _knownJobs={};  // {job_id: {title,created_at}} — usato per validazione opt-continue
+
 async function _loadHistory(){
   try{
     const data=await(await fetch(`${API}/jobs`)).json();
     const list=Object.entries(data)
       .map(([id,j])=>({...j,id}))
-      .filter(j=>j.status==='done'||j.status==='error')
+      .filter(j=>j.status==='done')   // solo completati — errori non sono continuabili
       .sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
+    // Aggiorna mappa job noti e datalist per autocomplete
+    _knownJobs={};
+    list.forEach(j=>{ _knownJobs[j.id]={title:j.title||'',created_at:j.created_at||''}; });
+    const dl=document.getElementById('jobids-datalist');
+    if(dl) dl.innerHTML=list.map(j=>`<option value="${j.id}" label="${j.title||j.id} — ${_timeAgo(j.created_at)}">`).join('');
+    // Rivalida il campo opt-continue se era già compilato
+    document.getElementById('opt-continue').dispatchEvent(new Event('input'));
     const panel=document.getElementById('historyPanel');
     const listEl=document.getElementById('historyList');
     const countEl=document.getElementById('historyCount');
@@ -783,6 +793,8 @@ function resetForNextLesson(){
   Object.keys(fileState).forEach(type=>{ fileState[type]=[]; renderFiles(type); });
   document.getElementById('titleInput').value='';
   document.getElementById('opt-output').value='';
+  document.getElementById('opt-continue').value='';
+  document.getElementById('opt-continue').dispatchEvent(new Event('input'));
   document.getElementById('jobIdBadge').style.display='none';
   document.getElementById('splitEditorWrapper').style.display='none';
   document.getElementById('imagesPanel').style.display='none';
@@ -795,9 +807,7 @@ function copyJobId(){
   const id=document.getElementById('jobIdText').textContent;
   navigator.clipboard.writeText(id).catch(()=>{});
   document.getElementById('opt-continue').value=id;
-  // Aggiorna visibilità startfrom-field (l'evento input non scatta su set programmatico)
-  document.getElementById('startfrom-field').style.display='none';
-  document.getElementById('continue-hint').style.display='block';
+  document.getElementById('opt-continue').dispatchEvent(new Event('input'));
   showToast('Job ID copiato','Incollato nel campo "Continua corso" — carica i file della prossima lezione e avvia','#f59e0b');
 }
 
@@ -860,10 +870,16 @@ function _startLogStream(jobId){
 }
 
 function toggleAdvanced(){
-  const fields=['startfrom-field','ttl-field'];
   const btn=document.getElementById('advancedToggle');
-  const open=document.getElementById('startfrom-field').style.display==='none';
-  fields.forEach(id=>{const el=document.getElementById(id);if(el)el.style.display=open?'flex':'none';});
+  const startField=document.getElementById('startfrom-field');
+  const ttlField=document.getElementById('ttl-field');
+  const continueActive=document.getElementById('opt-continue').value.trim().length>0;
+  // startfrom-field è sempre nascosto se continue è attivo (le due opzioni si escludono)
+  const open=startField.style.display==='none'||startField.style.display==='';
+  // ttl-field si toglia normalmente
+  if(ttlField) ttlField.style.display=open?'flex':'none';
+  // startfrom-field solo se continue non attivo
+  if(!continueActive && startField) startField.style.display=open?'flex':'none';
   btn.textContent=open?'▾ opzioni avanzate':'▸ opzioni avanzate';
   btn.style.opacity=open?'1':'.6';
 }
@@ -970,9 +986,12 @@ function updateRunButton(){
   const btn=document.getElementById('runBtn');
   const hint=document.getElementById('run-hint');
   const titleInput=document.getElementById('titleInput');
+  const continueVal=document.getElementById('opt-continue').value.trim();
   if(total>0 && hasTitle){
     btn.classList.add('active');
-    btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
+    btn.textContent=continueVal
+      ?`▶ CONTINUA CORSO (${total} file)`
+      :`▶ AVVIA PIPELINE (${total} file)`;
     btn.title='';
     titleInput.style.borderLeftColor='';
     if(hint)hint.style.display='none';
@@ -1176,18 +1195,49 @@ document.getElementById('opt-startfrom').addEventListener('input',()=>updateConf
 document.getElementById('opt-continue').addEventListener('input',()=>{
   const val=document.getElementById('opt-continue').value.trim();
   const has=val.length>0;
-  // Se continue ha un valore, start-from si nasconde sempre (e resetta il toggle avanzate)
+  const hint=document.getElementById('continue-hint');
+  const tagStart=document.getElementById('tag-start');
+  const tagCont=document.getElementById('tag-continue');
+
+  // Nasconde start-from e resetta toggle avanzate quando continue è attivo
   if(has){
     document.getElementById('startfrom-field').style.display='none';
     const advBtn=document.getElementById('advancedToggle');
     if(advBtn){advBtn.textContent='▸ opzioni avanzate';advBtn.style.opacity='.6';}
   }
-  document.getElementById('continue-hint').style.display=has?'block':'none';
-  const tagStart=document.getElementById('tag-start');
-  const tagCont=document.getElementById('tag-continue');
+
+  // Hint dinamica con validazione
+  if(!has){
+    hint.style.display='none';
+    hint.style.color='';
+    hint.textContent='';
+  } else {
+    hint.style.display='block';
+    const known=_knownJobs[val];
+    if(known){
+      hint.textContent=`✓ Continua da: "${known.title||val}" (${_timeAgo(known.created_at)})`;
+      hint.style.color='#10b981';
+      document.getElementById('opt-continue').style.borderLeftColor='#10b981';
+    } else if(val.length>=6){
+      // ID abbastanza lungo ma non in storico (potrebbe essere vecchio)
+      hint.textContent='state.json copiato automaticamente da lezione precedente';
+      hint.style.color='var(--muted)';
+      document.getElementById('opt-continue').style.borderLeftColor='var(--c4)';
+    } else {
+      hint.textContent='↑ incolla il Job ID della lezione precedente';
+      hint.style.color='var(--muted)';
+      document.getElementById('opt-continue').style.borderLeftColor='var(--c5)';
+    }
+  }
+  if(!has) document.getElementById('opt-continue').style.borderLeftColor='var(--c4)';
+
+  // Tag config status
   tagStart.style.display=has?'none':'';
   tagCont.style.display=has?'':'none';
   if(has){tagCont.textContent=`continue:${val}`;tagCont.classList.add('active');}
+  else{tagCont.classList.remove('active');}
+  // Aggiorna testo bottone (AVVIA vs CONTINUA)
+  updateRunButton();
 });
 updateConfigStatus(false);
 
@@ -1297,10 +1347,13 @@ runBtn.addEventListener('click',async()=>{
           btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
           showToast('✓ Completato!','Download in corso…','#10b981');
           sounds.download.play().catch(e=>console.log("Suono download bloccato:", e));
-          // Mostra badge Job ID per poter continuare il corso alla lezione successiva
+          // Mostra badge Job ID e pre-compila continua-corso per la prossima lezione
           document.getElementById('jobIdText').textContent=j.job_id;
           const badge=document.getElementById('jobIdBadge');
           badge.style.display='flex';
+          // Pre-compila opt-continue → l'utente carica i file della prossima lezione e avvia
+          document.getElementById('opt-continue').value=j.job_id;
+          setTimeout(()=>document.getElementById('opt-continue').dispatchEvent(new Event('input')),600);
           const title=document.getElementById('titleInput').value.trim()||'appunti';
           const dlLink=document.getElementById('downloadLink');
           dlLink.href=`${API}/download/${j.job_id}`;
@@ -1323,10 +1376,15 @@ runBtn.addEventListener('click',async()=>{
           clearInterval(poll);
           setUIRunning(false);
           if(_logEs){_logEs.close();_logEs=null;}
-          updateLiveStatus('Errore pipeline',s.stderr?.slice(-200)||'errore sconosciuto','#ef4444',false);
+          const errMsg=s.stderr||'errore sconosciuto';
+          const continueId=document.getElementById('opt-continue').value.trim();
+          const errLabel=continueId&&errMsg.toLowerCase().includes('continu')
+            ?`Job ID precedente non trovato: ${continueId}`
+            :errMsg.slice(-200);
+          updateLiveStatus('Errore pipeline',errLabel,'#ef4444',false);
           Object.keys(fileState).forEach(type=>document.getElementById(`card-${type}`)?.classList.remove('uploading'));
           btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
-          showToast('Errore',s.stderr?.slice(-200)||'errore sconosciuto','#ef4444');
+          showToast('Errore pipeline',errLabel,'#ef4444');
           setTimeout(_loadHistory, 500);
         }
       }catch(_){}
