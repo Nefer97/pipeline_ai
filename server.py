@@ -430,7 +430,7 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
     if continue_from:
         # Prima cerca in memoria (job ancora presente), poi su disco (server riavviato)
         with _jobs_lock:
-            prev_out_str = jobs[continue_from]["output_dir"] if continue_from in jobs else None
+            prev_out_str = jobs[continue_from].get("output_dir") if continue_from in jobs else None
         if prev_out_str:
             prev_out = Path(prev_out_str)
         else:
