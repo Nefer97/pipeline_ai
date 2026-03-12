@@ -60,9 +60,13 @@ def _check_deps() -> dict:
 
 def render_pdf_pages(pdf_path: Path, images_dir: Path,
                      pages_data: list[dict] = None,
-                     dpi: int = 150) -> tuple[dict, str]:
+                     dpi: int = 200) -> tuple[dict, str]:
     """
     Renderizza ogni pagina del PDF come PNG e genera LaTeX scheletro.
+
+    Con pymupdf: estrae testo E immagini in un solo passaggio.
+    Il testo pymupdf viene usato per arricchire/sostituire pages_data
+    dove l'estrazione esterna (pdfplumber) era sparsa (< 80 char).
 
     Ritorna:
         page_images    — {page_num: "stem_pag_001.png", ...}
@@ -74,9 +78,13 @@ def render_pdf_pages(pdf_path: Path, images_dir: Path,
 
     deps = _check_deps()
 
+    pymupdf_texts: dict = {}   # {page_num: text} estratto da fitz in questo render
+
     if deps["pymupdf"]:
         page_numbers = {p["page"] for p in pages_data} if pages_data else None
-        page_images = _render_with_pymupdf(pdf_path, images_dir, dpi, page_numbers)
+        page_images, pymupdf_texts = _render_with_pymupdf(
+            pdf_path, images_dir, dpi, page_numbers
+        )
     elif deps["pdf2image"] and deps["pillow"]:
         print(f"    [pdf_renderer] pdf2image")
         page_images = _render_with_pdf2image(pdf_path, images_dir, dpi)
@@ -85,10 +93,34 @@ def render_pdf_pages(pdf_path: Path, images_dir: Path,
         print(f"                   pip install pymupdf  oppure  pip install pdf2image")
         page_images = {}
 
+    # ── Arricchisci pages_data con testo pymupdf dove necessario ──
+    # Se la pagina non ha testo (pages_data mancante) o ne ha poco (< 80 char),
+    # sostituiamo/integriamo con il testo estratto direttamente da fitz.
+    if pymupdf_texts and pages_data is not None:
+        pd_map = {p["page"]: p for p in pages_data}
+        for pn, fitz_text in pymupdf_texts.items():
+            existing = pd_map.get(pn)
+            if existing is None:
+                # Pagina non presente in pages_data → aggiungila
+                pages_data.append({"page": pn, "text": fitz_text, "chars_count": len(fitz_text)})
+            elif existing.get("chars_count", len(existing.get("text", ""))) < 80:
+                # Testo sparso → sostituisci con quello fitz (più affidabile)
+                existing["text"]        = fitz_text
+                existing["chars_count"] = len(fitz_text)
+        pages_data.sort(key=lambda p: p["page"])
+
+    # Se pages_data era None (render senza testo fornito), costruiscilo da pymupdf
+    effective_pages = pages_data
+    if effective_pages is None and pymupdf_texts:
+        effective_pages = [
+            {"page": pn, "text": txt, "chars_count": len(txt)}
+            for pn, txt in sorted(pymupdf_texts.items())
+        ]
+
     # Costruisci LaTeX scheletro con testo + figure
     latex_skeleton = _build_pdf_latex_skeleton(
         pdf_path    = pdf_path,
-        pages_data  = pages_data or [],
+        pages_data  = effective_pages or [],
         page_images = page_images,
     )
 
@@ -96,41 +128,116 @@ def render_pdf_pages(pdf_path: Path, images_dir: Path,
 
 
 # ─────────────────────────────────────────────
-# METODO 1: pymupdf (fitz) — standard, veloce
+# METODO 1: pymupdf (fitz) — render + testo
 # ─────────────────────────────────────────────
 
 def _render_with_pymupdf(pdf_path: Path, images_dir: Path,
-                          dpi: int, page_numbers: set = None) -> dict:
+                          dpi: int, page_numbers: set = None) -> tuple[dict, dict]:
+    """
+    Apre il PDF una sola volta con fitz e produce:
+      - page_images  {page_num: filename}   — PNG renderizzati
+      - page_texts   {page_num: text_str}   — testo estratto per pagina
+
+    Usa get_text("blocks") per ottenere testo ordinato per posizione
+    (blocchi in ordine y→x, migliore di "text" semplice per layout complessi).
+    """
     import fitz
-    stem   = pdf_path.stem
-    result = {}
-    doc    = fitz.open(str(pdf_path))
-    mat    = fitz.Matrix(dpi / 72, dpi / 72)
-    total  = len(doc)
+    stem        = pdf_path.stem
+    page_images = {}
+    page_texts  = {}
+    doc         = fitz.open(str(pdf_path))
+    mat         = fitz.Matrix(dpi / 72, dpi / 72)
+    total       = len(doc)
 
     try:
         for page_idx, page in enumerate(doc, start=1):
-            # ← salta le pagine fuori dal chunk
             if page_numbers and page_idx not in page_numbers:
                 continue
 
+            # ── Estrazione testo con blocks (ordinati per posizione) ──
+            try:
+                blocks = page.get_text("blocks", sort=True)  # sort=True: y→x
+                lines = []
+                prev_y = None
+                for b in blocks:
+                    # b = (x0, y0, x1, y1, text, block_no, block_type)
+                    # block_type 1 = immagine → skip
+                    if len(b) < 6 or b[6] == 1:
+                        continue
+                    txt = b[4].strip()
+                    if not txt:
+                        continue
+                    # Riga vuota tra blocchi distanti verticalmente (> 10pt)
+                    if prev_y is not None and b[1] - prev_y > 10:
+                        lines.append("")
+                    lines.append(txt)
+                    prev_y = b[3]
+                text = "\n".join(lines).strip()
+            except Exception:
+                text = page.get_text("text").strip()
+
+            if text:
+                page_texts[page_idx] = text
+
+            # ── Rendering PNG ──
             img_filename = f"{stem}_pag_{page_idx:03d}.png"
             img_path     = images_dir / img_filename
             if img_path.exists():
-                result[page_idx] = img_filename
+                page_images[page_idx] = img_filename
                 continue
             try:
                 pix = page.get_pixmap(matrix=mat, alpha=False)
                 pix.save(str(img_path))
-                result[page_idx] = img_filename
+                page_images[page_idx] = img_filename
                 print(f"    ✓ {img_filename}  ({pix.width}×{pix.height}px)")
             except Exception as e:
                 print(f"    [WARN] pagina {page_idx} non renderizzata: {e}")
     finally:
         doc.close()
 
-    print(f"    ✓ Renderizzate {len(result)}/{total} pagine")
-    return result
+    print(f"    ✓ Renderizzate {len(page_images)}/{total} pagine | "
+          f"testo: {len(page_texts)}/{total} pagine")
+    return page_images, page_texts
+
+
+def extract_pdf_text_pymupdf(pdf_path: Path) -> list[dict]:
+    """
+    Estrae testo da tutte le pagine del PDF usando PyMuPDF.
+    Ritorna lista [{page: N, text: "...", chars_count: N}].
+    Chiamata da pipeline.py come extractor primario/complementare.
+    """
+    try:
+        import fitz
+    except ImportError:
+        return []
+
+    pages = []
+    doc   = fitz.open(str(pdf_path))
+    try:
+        for page_idx, page in enumerate(doc, start=1):
+            try:
+                blocks = page.get_text("blocks", sort=True)
+                lines  = []
+                prev_y = None
+                for b in blocks:
+                    if len(b) < 6 or b[6] == 1:
+                        continue
+                    txt = b[4].strip()
+                    if not txt:
+                        continue
+                    if prev_y is not None and b[1] - prev_y > 10:
+                        lines.append("")
+                    lines.append(txt)
+                    prev_y = b[3]
+                text = "\n".join(lines).strip()
+            except Exception:
+                text = page.get_text("text").strip()
+            if text:
+                pages.append({"page": page_idx, "text": text, "chars_count": len(text)})
+    finally:
+        doc.close()
+
+    return pages
 
 
 # ─────────────────────────────────────────────

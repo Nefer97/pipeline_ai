@@ -66,7 +66,8 @@ try:
     from omml2latex import omml_to_latex
     from ocr_math import image_to_latex, unload_models as _ocr_unload
     from slide_renderer import render_slide_images, slide_figure_latex
-    from pdf_renderer import render_pdf_pages, _build_pdf_latex_skeleton
+    from pdf_renderer import render_pdf_pages, _build_pdf_latex_skeleton, extract_pdf_text_pymupdf
+    from builder import sanitize_formula_unicode as _sanitize_formula
     COLLEAGUE_MODULES = True
     print("✓ Moduli collega: extractor, builder, formula_detector, omml2latex, ocr_math, slide_renderer, pdf_renderer")
 except ImportError as e:
@@ -81,6 +82,9 @@ except ImportError as e:
                 "#": "\\#", "_": "\\_", "^": "\\^{}", "{": "\\{", "}": "\\}",
                 "~": "\\textasciitilde{}"}
         return _re_esc.compile(r'[\\&%$#_^{}~]').sub(lambda m: _MAP[m.group()], t)
+
+    def _sanitize_formula(t: str) -> str:  # noqa: F811
+        return t  # no-op fallback senza builder
 
 
 # ───────────────────────────────────────────────────────────────────────────────────
@@ -305,7 +309,11 @@ def process_pptx_fallback(pptx_path: Path) -> str:
 def extract_pdf_pages(pdf_path: Path) -> list[dict]:
     """
     Estrae il testo del PDF pagina per pagina.
-    Ritorna lista di dict: [{page: N, text: "..."}]
+    Ritorna lista di dict: [{page: N, text: "...", chars_count: N}]
+
+    Strategia pdfplumber:
+    1. extract_text(layout=True)  — preserva layout spaziale (colonne, indentazione)
+    2. extract_tables()           — aggiunge tabelle in formato ASCII affiancato al testo
     """
     pages = []
     n_total_pages = 0
@@ -314,16 +322,73 @@ def extract_pdf_pages(pdf_path: Path) -> list[dict]:
         with pdfplumber.open(str(pdf_path)) as pdf:
             n_total_pages = len(pdf.pages)
             for i, page in enumerate(pdf.pages, 1):
-                t = page.extract_text()
-                if t and t.strip():
-                    pages.append({"page": i, "text": t.strip()})
-        print(f"    ✓ pdf pdfplumber: {len(pages)}/{n_total_pages} pagine con testo")
+                # layout=True migliora l'estrazione su multi-colonna e indentazione
+                try:
+                    t = page.extract_text(layout=True, x_tolerance=3, y_tolerance=3)
+                except TypeError:
+                    # pdfplumber < 0.7 non supporta layout=True
+                    t = page.extract_text()
+
+                # Estrai tabelle e appendile al testo
+                table_parts = []
+                try:
+                    for tbl in page.extract_tables():
+                        if not tbl:
+                            continue
+                        rows = []
+                        for row in tbl:
+                            cells = [str(c).strip() if c else "" for c in row]
+                            if any(cells):
+                                rows.append(" | ".join(cells))
+                        if rows:
+                            table_parts.append("[TABELLA]\n" + "\n".join(rows))
+                except Exception:
+                    pass
+
+                combined = "\n".join(filter(None, [t.strip() if t else "", *table_parts]))
+                if combined:
+                    pages.append({"page": i, "text": combined, "chars_count": len(combined)})
+                elif table_parts:
+                    txt = "\n".join(table_parts)
+                    pages.append({"page": i, "text": txt, "chars_count": len(txt)})
+
+        n_sparse = sum(1 for p in pages if p.get("chars_count", 0) < 80)
+        print(f"    ✓ pdf pdfplumber: {len(pages)}/{n_total_pages} pagine con testo"
+              + (f" ({n_sparse} sparse)" if n_sparse else ""))
         if n_total_pages > 0 and not pages:
-            print(f"    [WARN] {pdf_path.name}: nessun testo estratto — potrebbe essere un PDF scansionato (solo immagini).")
-            print(f"           Per OCR su PDF scansionati: pip install pytesseract pdf2image")
+            print(f"    [WARN] {pdf_path.name}: nessun testo estratto — PDF scansionato?")
+
+        # ── Arricchimento con PyMuPDF dove pdfplumber è sparso ──
+        # PyMuPDF estrae testo con posizionamento spaziale (blocks), spesso
+        # più preciso di pdfplumber su PDF tecnici con formule e layout complessi.
+        if COLLEAGUE_MODULES and (not pages or n_sparse > 0):
+            fitz_pages = extract_pdf_text_pymupdf(pdf_path)
+            if fitz_pages:
+                fitz_map = {p["page"]: p for p in fitz_pages}
+                pd_map   = {p["page"]: p for p in pages}
+                enriched = 0
+                for pn, fp in fitz_map.items():
+                    existing = pd_map.get(pn)
+                    if existing is None:
+                        pages.append(fp)
+                        enriched += 1
+                    elif existing.get("chars_count", 0) < 80 and fp["chars_count"] > existing.get("chars_count", 0):
+                        existing["text"]        = fp["text"]
+                        existing["chars_count"] = fp["chars_count"]
+                        enriched += 1
+                if enriched:
+                    pages.sort(key=lambda p: p["page"])
+                    print(f"    ✓ PyMuPDF ha arricchito {enriched} pagine sparse")
+
         return pages
     except ImportError:
         pass
+    # Fallback PyMuPDF diretto se pdfplumber non è installato
+    if COLLEAGUE_MODULES:
+        fitz_pages = extract_pdf_text_pymupdf(pdf_path)
+        if fitz_pages:
+            print(f"    ✓ pdf PyMuPDF (fallback): {len(fitz_pages)} pagine con testo")
+            return fitz_pages
     try:
         import PyPDF2
         with open(pdf_path, "rb") as f:
@@ -332,11 +397,10 @@ def extract_pdf_pages(pdf_path: Path) -> list[dict]:
             for i, page in enumerate(reader.pages, 1):
                 t = page.extract_text()
                 if t and t.strip():
-                    pages.append({"page": i, "text": t.strip()})
+                    pages.append({"page": i, "text": t.strip(), "chars_count": len(t.strip())})
         print(f"    ✓ pdf PyPDF2: {len(pages)}/{n_total_pages} pagine con testo")
         if n_total_pages > 0 and not pages:
-            print(f"    [WARN] {pdf_path.name}: nessun testo estratto — potrebbe essere un PDF scansionato (solo immagini).")
-            print(f"           Per OCR su PDF scansionati: pip install pytesseract pdf2image")
+            print(f"    [WARN] {pdf_path.name}: nessun testo estratto — PDF scansionato?")
         return pages
     except ImportError:
         print("    [MANCANTE] pdfplumber — pip install pdfplumber")
@@ -405,7 +469,7 @@ def save_pdf_pages_as_txt(pdf_path: Path, output_dir: Path) -> list[Path]:
     print(f"    ✓ Salvate {len(saved_files)} pagine in {output_dir}")
     return saved_files
 
-def chunk_pdf_pages(pages: list[dict], chunk_size: int = 10) -> list[list[dict]]:
+def chunk_pdf_pages(pages: list[dict], chunk_size: int = 7) -> list[list[dict]]:
     """Divide le pagine in gruppi da chunk_size."""
     return [pages[i:i+chunk_size] for i in range(0, len(pages), chunk_size)]
 
@@ -419,7 +483,7 @@ def extract_pdf(pdf_path: Path) -> str:
 def process_pdf_chunked(pdf_path: Path, output_dir: Path,
                          base_lesson_number: int, title: str,
                          skip_ai: bool = False,
-                         chunk_size: int = 10,
+                         chunk_size: int = 7,
                          subject_hint: str = None,
                          course_context_path: str = None) -> list[Path]:
     """
@@ -431,8 +495,39 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
     images_dir = output_dir / "images"
     images_dir.mkdir(exist_ok=True)
     pages = extract_pdf_pages(pdf_path)
+
+    # ── OCR pre-rendering: render tutte le pagine subito, poi OCR quelle sparse ──
+    # Rendiamo prima di chunkare così l'OCR può arricchire il testo prima
+    # che venga suddiviso in chunk (e le immagini vengono riutilizzate dal cache).
+    if COLLEAGUE_MODULES:
+        _all_page_nums = {p["page"] for p in pages} if pages else None
+        # Renderizza anche pagine senza testo (page_numbers=None = tutte)
+        _all_images, _ = render_pdf_pages(pdf_path, images_dir, pages_data=None)
+        if _all_images:
+            # Pagine con testo scarso (< 80 char) o completamente mancanti
+            _page_text_map = {p["page"]: p["chars_count"] for p in pages}
+            _sparse = {
+                pn: fn for pn, fn in _all_images.items()
+                if _page_text_map.get(pn, 0) < 80
+            }
+            if _sparse:
+                print(f"  [OCR] {len(_sparse)} pagine sparse/vuote → OCR con Tesseract")
+                _ocr_result = _ocr_pages_with_tesseract(images_dir, _sparse)
+                if _ocr_result:
+                    # Sostituisci o aggiungi il testo OCR nelle pagine
+                    _ocr_map = {p["page"]: p["text"] for p in _ocr_result}
+                    pages_map = {p["page"]: p for p in pages}
+                    for pn, txt in _ocr_map.items():
+                        if pn in pages_map:
+                            pages_map[pn]["text"] += "\n" + txt
+                            pages_map[pn]["chars_count"] += len(txt)
+                        else:
+                            pages_map[pn] = {"page": pn, "text": txt, "chars_count": len(txt)}
+                    pages = sorted(pages_map.values(), key=lambda p: p["page"])
+                    print(f"  [OCR] testo aggiunto per {len(_ocr_map)} pagine")
+
     if not pages:
-        print("  [ERRORE] Nessun testo estratto dal PDF")
+        print("  [ERRORE] Nessun testo estratto dal PDF (né OCR disponibile)")
         return []
 
     total_pages = pages[-1]["page"] if pages else 0
@@ -453,12 +548,36 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
         out_tex = output_dir / f"lezione_{lesson_num:02d}.tex"
         print(f"\n  Chunk {idx+1}/{len(chunks)}: pag {p_start}–{p_end}")
 
-        if skip_ai:
-            page_images, latex_skeleton = render_pdf_pages(
-                pdf_path   = pdf_path,
-                images_dir = images_dir,
-                pages_data = chunk,
-            ) if COLLEAGUE_MODULES else ({}, None)
+        # ── Costruisce sources (sempre, anche con skip_ai — così il debug viene salvato) ──
+        page_images, latex_skeleton = render_pdf_pages(
+            pdf_path   = pdf_path,
+            images_dir = images_dir,
+            pages_data = chunk,
+        ) if COLLEAGUE_MODULES else ({}, None)
+        chunk_sources = {
+            "has_audio": False,
+            "scheletro": [{
+                "filename":    pdf_path.name,
+                "text":        chunk_text,
+                "pages":       len(chunk),
+                "latex":       latex_skeleton,
+                "page_images": page_images,
+            }],
+            "carne":    [],
+            "supporto": [],
+            "contorno": [],
+        }
+        content = generate_with_claude(
+            lesson_number        = lesson_num,
+            title                = chunk_title,
+            sources              = chunk_sources,
+            subject_hint         = subject_hint,
+            course_context_path  = course_context_path,
+            _progress_output_dir = output_dir,
+            skip_ai              = skip_ai,
+        )
+        if not content:
+            # Fallback: struttura LaTeX dal latex_skeleton o testo grezzo
             if latex_skeleton:
                 content = (
                     f"\\section{{Lezione {lesson_num}: {_escape_latex(chunk_title)}}}\n"
@@ -477,45 +596,6 @@ def process_pdf_chunked(pdf_path: Path, output_dir: Path,
                         if line:
                             content_lines.append(_escape_latex(line) + "\n")
                 content = "\n".join(content_lines)
-        else:
-            # ── Costruisce sources con la nuova struttura ──
-            page_images, latex_skeleton = render_pdf_pages(
-                pdf_path   = pdf_path,
-                images_dir = images_dir,
-                pages_data = chunk,
-            ) if COLLEAGUE_MODULES else ({}, None)
-            chunk_sources = {
-                "has_audio": False,
-                "scheletro": [{
-                    "filename":    pdf_path.name,
-                    "text":        chunk_text,
-                    "pages":       len(chunk),
-                    "latex":       latex_skeleton,
-                    "page_images": page_images,
-                }],
-                "carne":    [],
-                "supporto": [],
-                "contorno": [],
-            }
-            content = generate_with_claude(
-                lesson_number        = lesson_num,
-                title                = chunk_title,
-                sources              = chunk_sources,
-                subject_hint         = subject_hint,
-                course_context_path  = course_context_path,
-                _progress_output_dir = output_dir,
-            )
-            if not content:
-                content = (
-                    f"\\section{{{_escape_latex(chunk_title)}}}\n"
-                    f"\\label{{sec:lezione{lesson_num:02d}}}\n\n"
-                )
-                for p in chunk:
-                    content += f"\\subsection*{{Pagina {p['page']}}}\n"
-                    for line in p["text"].split("\n"):
-                        line = line.strip()
-                        if line:
-                            content += _escape_latex(line) + "\n"
 
         write_lesson_tex(lesson_num, chunk_title, content,
                          [f"{pdf_path.name} pag.{p_start}-{p_end}"], out_tex)
@@ -822,13 +902,26 @@ REGOLE OBBLIGATORIE:
 
             elif is_pdf:
                 meta = f"File: {filename} | {pages} pagine"
-                role = (
-                    "Documento PDF che funge da SCHELETRO perché è presente la trascrizione audio.\n"
-                    "REGOLE:\n"
-                    "  • Usa la struttura del documento (titoli, sezioni) come guida per \\subsection\n"
-                    "  • Ogni [PAG N] è una pagina del documento — usala come unità strutturale\n"
-                    "  • Arricchisci con la CARNE (trascrizione audio)"
-                )
+                if has_carne:
+                    role = (
+                        "Documento PDF che funge da SCHELETRO perché è presente la trascrizione audio.\n"
+                        "REGOLE:\n"
+                        "  • Usa la struttura del documento (titoli, sezioni) come guida per \\subsection\n"
+                        "  • Ogni [PAG N] è una pagina del documento — usala come unità strutturale\n"
+                        "  • Arricchisci con la CARNE (trascrizione audio)"
+                    )
+                else:
+                    role = (
+                        "Documento PDF — FONTE PRIMARIA (nessuna trascrizione disponibile).\n"
+                        "REGOLE CRITICHE:\n"
+                        "  • HAI LE IMMAGINI DELLE PAGINE: usale come riferimento PRIORITARIO rispetto al testo\n"
+                        "    estratto (il testo può essere incompleto o mal formattato, le immagini sono fedeli)\n"
+                        "  • Ogni \\begin{figure} nello scheletro corrisponde a una pagina — mantienilo nella posizione esatta\n"
+                        "  • Trascrivi formule, diagrammi e tabelle dalle immagini in LaTeX, NON dal testo estratto\n"
+                        "  • Usa la struttura visiva delle pagine (titoli, paragrafi, rientri) per costruire \\subsection\n"
+                        "  • ZERO invenzioni: ogni contenuto deve provenire dalle pagine visibili\n"
+                        "  • Se il testo estratto e l'immagine divergono, l'immagine ha ragione"
+                    )
                 raw     = entry.get("latex") or text
                 content = _trunc(raw, _MAX_SCHELETRO_CHARS, filename)
 
@@ -1290,7 +1383,7 @@ def build_fallback_latex(lesson_number: int, title: str,
                     f = getattr(obj, "latex_result", "")
                     if f and not f.startswith("%"):
                         parts.append("\\begin{equation}")
-                        parts.append(f)
+                        parts.append(_sanitize_formula(f))
                         parts.append("\\end{equation}\n")
                     elif f:
                         parts.append(f"% OMML parziale:\n% {f}\n")
@@ -1301,7 +1394,7 @@ def build_fallback_latex(lesson_number: int, title: str,
                     if f and f.strip():
                         # Formula riconosciuta da pix2tex
                         parts.append("\\begin{equation}")
-                        parts.append(f)
+                        parts.append(_sanitize_formula(f))
                         parts.append("\\end{equation}\n")
                     else:
                         # Immagine embedded normale
