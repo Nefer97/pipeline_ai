@@ -19,7 +19,15 @@ UNSUPPORTED_FORMATS = {'.wmf', '.emf', '.gif', '.bmp', '.tiff', '.tif'}
 # Cache per blob già estratti/convertiti nella sessione corrente.
 # Chiave: MD5 completo del blob immagine. Valore: path finale (PNG o originale).
 # Evita di chiamare LibreOffice/Inkscape N volte per blob WMF identici.
+# Cap a 256 entry: su server long-running previene accumulo illimitato in memoria.
 _blob_cache: dict[str, str] = {}
+_BLOB_CACHE_MAX = 256
+
+def _blob_cache_set(key: str, value: str) -> None:
+    if len(_blob_cache) >= _BLOB_CACHE_MAX:
+        # Rimuovi la entry più vecchia (FIFO — dict mantiene ordine di inserimento)
+        _blob_cache.pop(next(iter(_blob_cache)))
+    _blob_cache[key] = value
 
 
 def _convert_to_png(src_path: str) -> str:
@@ -250,7 +258,7 @@ def extract_slides(pptx_path: str, image_output_dir: str) -> list:
                         if ('.' + ext.lower()) in UNSUPPORTED_FORMATS:
                             img_path = _convert_to_png(img_path)
                             img_filename = os.path.basename(img_path)
-                        _blob_cache[full_hash] = img_path
+                        _blob_cache_set(full_hash, img_path)
 
                     objects.append(SlideObject(
                         obj_type='image',

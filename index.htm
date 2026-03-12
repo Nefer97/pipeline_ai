@@ -551,6 +551,32 @@ async function deleteJobFromHistory(id){
 
 let _currentPreviewJobId=null;
 let _currentTexFile='main.tex';
+let _autosaveTimer=null;
+
+function _autosaveKey(jobId,file){return `autosave:${jobId}:${file}`;}
+
+function _autosaveSchedule(){
+  clearTimeout(_autosaveTimer);
+  _autosaveTimer=setTimeout(()=>{
+    if(!_currentPreviewJobId)return;
+    const content=document.getElementById('latexPreviewCode').value;
+    try{localStorage.setItem(_autosaveKey(_currentPreviewJobId,_currentTexFile),content);}catch(e){}
+  },2000);
+}
+
+function _autosaveRestore(jobId,file,serverContent){
+  const saved=localStorage.getItem(_autosaveKey(jobId,file));
+  if(saved&&saved!==serverContent){
+    document.getElementById('latexPreviewCode').value=saved;
+    showToast('Bozza locale ripristinata','Usa 💾 Salva per confermare','#f59e0b');
+    return true;
+  }
+  return false;
+}
+
+function _autosaveClear(jobId,file){
+  localStorage.removeItem(_autosaveKey(jobId,file));
+}
 
 function _renderTexTabs(files){
   const tabs=document.getElementById('texFileTabs');
@@ -571,7 +597,9 @@ async function _switchTexFile(filename){
     const r=await fetch(`${API}/tex/${_currentPreviewJobId}/${encodeURIComponent(filename)}`);
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const data=await r.json();
-    document.getElementById('latexPreviewCode').value=data.content||'';
+    const serverContent=data.content||'';
+    document.getElementById('latexPreviewCode').value=serverContent;
+    _autosaveRestore(_currentPreviewJobId,filename,serverContent);
   }catch(e){document.getElementById('latexPreviewCode').value=`// errore: ${e.message}`;}
 }
 
@@ -583,6 +611,7 @@ function _showPdfAndLatex(id,hasPdf,latexContent,pdfErrors,texFiles){
   _texFiles=texFiles||['main.tex'];
   document.getElementById('latexCurrentFile').textContent='main.tex';
   document.getElementById('latexPreviewCode').value=latexContent;
+  _autosaveRestore(id,'main.tex',latexContent);
   document.getElementById('noPdfBadge').style.display=hasPdf?'none':'inline';
   // Pannello LaTeX — sempre visibile, corpo sempre espanso nel split
   document.getElementById('latexPreviewPanel').style.display='flex';
@@ -650,6 +679,7 @@ async function saveTexFile(){
       body:JSON.stringify({content,file:_currentTexFile})
     });
     if(!r.ok){const t=await r.text();throw new Error(`HTTP ${r.status}: ${t.slice(0,80)}`);}
+    _autosaveClear(_currentPreviewJobId,_currentTexFile);
     showToast('Salvato',_currentTexFile,'#10b981');
   }catch(e){showToast('Errore salvataggio',e.message,'#ef4444');}
   finally{btn.textContent='💾 Salva';btn.disabled=false;}
@@ -1164,6 +1194,7 @@ updateConfigStatus(false);
 // Init al caricamento
 _checkHealth();
 _loadHistory();
+document.getElementById('latexPreviewCode').addEventListener('input',_autosaveSchedule);
 
 // RUN PIPELINE
 const runBtn = document.getElementById('runBtn');
