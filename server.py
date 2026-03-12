@@ -364,8 +364,12 @@ async def _on_startup():
 MAX_FILE_SIZE = 3 * 1024 * 1024 * 1024  # 3 GB — limite per singolo file
 
 _SUPPORTED_EXTENSIONS = {
+    # Audio/video
     ".mp3", ".mp4", ".wav", ".m4a", ".ogg", ".webm", ".mkv", ".mov",
+    # Documenti strutturati
     ".pptx", ".pdf", ".docx", ".ppt", ".doc",
+    # Testo (trascrizioni, note, RTF)
+    ".txt", ".md", ".rtf",
 }
 
 # (magic_prefix, set di estensioni compatibili)
@@ -379,6 +383,7 @@ _MAGIC_SIGNATURES: list[tuple[bytes, set[str]]] = [
     (b"RIFF",         {".wav"}),
     (b"OggS",         {".ogg", ".webm"}),
     (b"\x1aE\xdf\xa3", {".webm", ".mkv"}),
+    (b"{\\rtf",       {".rtf", ".txt"}),  # RTF salvato come .txt
 ]
 
 
