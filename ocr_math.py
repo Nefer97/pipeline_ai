@@ -219,26 +219,58 @@ def _pix2tex_ocr(image_path: str) -> Optional[str]:
             print(f"    [pix2tex] errore: {e}", file=sys.stderr)
         return None
 
-    # Prova via subprocess con venv alternativo
-    py = _find_pix2tex_python()
-    if py and py != sys.executable:
-        try:
-            script = (
-                "from pix2tex.cli import LatexOCR; from PIL import Image; "
-                f"model = LatexOCR(); "
-                f"img = Image.open({image_path!r}); "
-                "print(model(img))"
-            )
-            r = subprocess.run(
-                [py, "-c", script],
-                capture_output=True, text=True, timeout=60
-            )
-            if r.returncode == 0 and r.stdout.strip():
-                return _postprocess_latex(r.stdout.strip())
-        except Exception as e:
-            print(f"    [pix2tex subprocess] errore: {e}", file=sys.stderr)
+    # Prova via subprocess con venv alternativo (singola immagine)
+    result = _pix2tex_subprocess_batch([image_path])
+    return result.get(image_path)
 
-    return None
+
+def _pix2tex_subprocess_batch(image_paths: list) -> dict:
+    """
+    Esegue pix2tex su una lista di immagini in un unico subprocess.
+    Il modello viene caricato una volta sola → molto più veloce su batch.
+    Ritorna dict {image_path: latex_string | None}.
+    """
+    results = {p: None for p in image_paths}
+    py = _find_pix2tex_python()
+    if not py or py == sys.executable:
+        return results
+
+    # Script inline: carica modello, processa tutte le immagini, stampa JSON
+    script = (
+        "import sys, json\n"
+        "from pix2tex.cli import LatexOCR\n"
+        "from PIL import Image\n"
+        "model = LatexOCR()\n"
+        "out = {}\n"
+        "for p in sys.argv[1:]:\n"
+        "    try:\n"
+        "        out[p] = model(Image.open(p))\n"
+        "    except Exception as e:\n"
+        "        out[p] = None\n"
+        "print(json.dumps(out))\n"
+    )
+    # Timeout: 90s per init modello + 15s per immagine
+    timeout = 90 + len(image_paths) * 15
+    try:
+        r = subprocess.run(
+            [py, "-c", script, *image_paths],
+            capture_output=True, text=True, timeout=timeout
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            import json as _json
+            data = _json.loads(r.stdout.strip())
+            for p, val in data.items():
+                if val and str(val).strip():
+                    results[p] = _postprocess_latex(str(val).strip())
+        elif r.returncode != 0:
+            print(f"    [pix2tex subprocess] exit {r.returncode}: "
+                  f"{r.stderr.strip()[:200]}", file=sys.stderr)
+    except subprocess.TimeoutExpired:
+        print(f"    [pix2tex subprocess] timeout ({timeout}s) su {len(image_paths)} immagini",
+              file=sys.stderr)
+    except Exception as e:
+        print(f"    [pix2tex subprocess] errore: {e}", file=sys.stderr)
+    return results
 
 
 # ─────────────────────────────────────────────────────────────

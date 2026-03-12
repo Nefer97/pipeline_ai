@@ -222,7 +222,8 @@ def process_pptx_full(pptx_path: Path, images_dir: Path, skip_ocr: bool = False)
                 obj.latex_result = omml_to_latex(obj.content)
                 n_omml += 1
 
-    # pix2tex: OCR su immagini che sembrano formule
+    # pix2tex: OCR su immagini che sembrano formule — batch unico per evitare
+    # reload del modello ML ad ogni immagine (~30s di init per call)
     if not skip_ocr:
         candidates = [
             (s, o) for s in slides for o in s.objects
@@ -230,10 +231,16 @@ def process_pptx_full(pptx_path: Path, images_dir: Path, skip_ocr: bool = False)
         ]
         if candidates:
             print(f"    pix2tex: {len(candidates)} immagini formula ...")
-            for _, obj in candidates:
-                latex = image_to_latex(obj.image_path)
+            from ocr_math import _pix2tex_subprocess_batch
+            paths = [o.image_path for _, o in candidates]
+            batch_results = _pix2tex_subprocess_batch(paths)
+            # fallback image_to_latex per chi non ha ottenuto risultato dal batch
+            obj_map = {o.image_path: o for _, o in candidates}
+            for path, latex in batch_results.items():
+                if not latex:
+                    latex = image_to_latex(path)
                 if latex:
-                    obj.latex_result = latex
+                    obj_map[path].latex_result = latex
                     n_ocr += 1
             # Libera modelli ML dopo il batch — evita memory leak su server long-running
             if COLLEAGUE_MODULES:
