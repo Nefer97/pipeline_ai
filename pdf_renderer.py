@@ -27,6 +27,7 @@ Uso:
 
 import re
 from pathlib import Path
+from builder import _escape_latex
 
 
 # ─────────────────────────────────────────────
@@ -244,22 +245,6 @@ def _detect_sections(text: str) -> list[dict]:
 # COSTRUZIONE LaTeX SCHELETRO
 # ─────────────────────────────────────────────
 
-def _escape_latex_basic(text: str) -> str:
-    """Escape caratteri speciali LaTeX — versione standalone, single-pass."""
-    _MAP = {
-        "\\": "\\textbackslash{}",
-        "&":  "\\&",
-        "%":  "\\%",
-        "$":  "\\$",
-        "#":  "\\#",
-        "{":  "\\{",
-        "}":  "\\}",
-        "~":  "\\textasciitilde{}",
-        "^":  "\\textasciicircum{}",
-    }
-    return re.compile(r'[\\&%$#{}~^]').sub(lambda m: _MAP[m.group()], text)
-
-
 def _build_pdf_latex_skeleton(pdf_path: Path, pages_data: list[dict],
                                 page_images: dict) -> str:
     """
@@ -270,7 +255,7 @@ def _build_pdf_latex_skeleton(pdf_path: Path, pages_data: list[dict],
       \begin{figure}...\end{figure}   (se immagine disponibile)
       testo della pagina
     """
-    esc  = _escape_latex_basic
+    esc  = _escape_latex
     stem = pdf_path.stem
     parts = []
 

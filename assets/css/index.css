@@ -262,6 +262,9 @@ button.running{opacity:.6;cursor:not-allowed;transform:none !important;}
   #latexPreviewCode{height:360px!important;}
   #pdfFrame{height:520px!important;}
 }
+/* IMAGES PANEL */
+#imagesPanel{margin-top:10px;}
+#imagesThumbnails img:hover{border-color:var(--c3);box-shadow:0 0 0 2px color-mix(in srgb,var(--c3) 30%,transparent);}
 /* HEALTH STRIP */
 .health-strip{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;min-height:22px;}
 /* MISC INLINE ELEMENTS */

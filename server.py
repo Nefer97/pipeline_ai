@@ -1057,6 +1057,50 @@ async def read_tex_file(job_id: str, filename: str):
     return JSONResponse({"filename": filename, "content": tex_path.read_text(encoding="utf-8")})
 
 
+@app.get("/images/{job_id}")
+async def list_images(job_id: str):
+    """Restituisce la lista delle immagini nella cartella images/ del job."""
+    job = jobs.get(job_id)
+    stored_dir = job.get("output_dir") if job else None
+    if stored_dir and Path(stored_dir).exists():
+        output_dir = Path(stored_dir)
+    else:
+        candidates = list((OUTPUT_DIR / job_id).rglob("main.tex")) if (OUTPUT_DIR / job_id).exists() else []
+        if not candidates:
+            raise HTTPException(status_code=404, detail="output non trovato su disco")
+        output_dir = candidates[0].parent
+
+    images_dir = output_dir / "images"
+    if not images_dir.exists():
+        return JSONResponse({"images": []})
+
+    exts = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg"}
+    files = sorted(f.name for f in images_dir.iterdir() if f.suffix.lower() in exts)
+    return JSONResponse({"images": files})
+
+
+@app.get("/image/{job_id}/{filename}")
+async def serve_image(job_id: str, filename: str):
+    """Serve un singolo file immagine dalla cartella images/ del job."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        raise HTTPException(status_code=400, detail="Nome file non valido")
+
+    job = jobs.get(job_id)
+    stored_dir = job.get("output_dir") if job else None
+    if stored_dir and Path(stored_dir).exists():
+        output_dir = Path(stored_dir)
+    else:
+        candidates = list((OUTPUT_DIR / job_id).rglob("main.tex")) if (OUTPUT_DIR / job_id).exists() else []
+        if not candidates:
+            raise HTTPException(status_code=404, detail="output non trovato su disco")
+        output_dir = candidates[0].parent
+
+    img_path = output_dir / "images" / filename
+    if not img_path.exists():
+        raise HTTPException(status_code=404, detail=f"{filename} non trovato")
+    return FileResponse(path=img_path)
+
+
 @app.get("/job/{job_id}/stream")
 async def stream_job_log(job_id: str, request: Request):
     """

@@ -263,6 +263,20 @@
       <button onclick="resetForNextLesson()" class="job-btn job-btn-new">↺ Nuova pipeline</button>
     </div>
 
+    <!-- ── LEZIONI PRECEDENTI ────────────────────────────────── -->
+    <div id="historyPanel" class="panel panel-history" style="display:none;">
+      <div class="panel-header" onclick="toggleHistory()">
+        <span class="panel-title">// lezioni precedenti</span>
+        <div class="panel-meta">
+          <span id="historyCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+          <span id="historyArrow" class="panel-arrow">▼</span>
+        </div>
+      </div>
+      <div id="historyBody" class="panel-body" style="display:none;">
+        <div id="historyList" style="display:flex;flex-direction:column;gap:5px;"></div>
+      </div>
+    </div>
+
     <!-- ── SPLIT EDITOR: LaTeX (sx) + PDF viewer (dx) ────────── -->
     <div id="splitEditorWrapper" style="display:none;">
 
@@ -299,18 +313,16 @@
 
     </div>
 
-
-    <!-- ── LEZIONI PRECEDENTI ────────────────────────────────── -->
-    <div id="historyPanel" class="panel panel-history" style="display:none;">
-      <div class="panel-header" onclick="toggleHistory()">
-        <span class="panel-title">// lezioni precedenti</span>
+    <!-- Pannello immagini -->
+    <div id="imagesPanel" style="display:none;" class="panel">
+      <div class="panel-header">
+        <span class="panel-title">// images/</span>
         <div class="panel-meta">
-          <span id="historyCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
-          <span id="historyArrow" class="panel-arrow">▼</span>
+          <span id="imagesCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
         </div>
       </div>
-      <div id="historyBody" class="panel-body" style="display:none;">
-        <div id="historyList" style="display:flex;flex-direction:column;gap:5px;"></div>
+      <div class="panel-body">
+        <div id="imagesThumbnails" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px 0;"></div>
       </div>
     </div>
 
@@ -592,6 +604,39 @@ function _showPdfAndLatex(id,hasPdf,latexContent,pdfErrors,texFiles){
   const wrapper=document.getElementById('splitEditorWrapper');
   wrapper.style.display='flex';
   wrapper.scrollIntoView({behavior:'smooth',block:'start'});
+  _loadImages(id);
+}
+
+async function _loadImages(id){
+  const panel=document.getElementById('imagesPanel');
+  const grid=document.getElementById('imagesThumbnails');
+  const count=document.getElementById('imagesCount');
+  grid.innerHTML='';
+  panel.style.display='none';
+  try{
+    const r=await fetch(`${API}/images/${id}`);
+    if(!r.ok)return;
+    const data=await r.json();
+    const imgs=data.images||[];
+    if(!imgs.length)return;
+    count.textContent=`${imgs.length} file`;
+    imgs.forEach(name=>{
+      const wrap=document.createElement('div');
+      wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;';
+      const img=document.createElement('img');
+      img.src=`${API}/image/${id}/${encodeURIComponent(name)}`;
+      img.alt=name;
+      img.title=name;
+      img.style.cssText='width:100px;height:80px;object-fit:contain;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);padding:2px;';
+      img.onclick=()=>window.open(img.src,'_blank');
+      const lbl=document.createElement('span');
+      lbl.textContent=name;
+      lbl.style.cssText='font-family:"JetBrains Mono",monospace;font-size:.5rem;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;';
+      wrap.appendChild(img);wrap.appendChild(lbl);
+      grid.appendChild(wrap);
+    });
+    panel.style.display='block';
+  }catch(e){}
 }
 
 async function saveTexFile(){
@@ -710,6 +755,7 @@ function resetForNextLesson(){
   document.getElementById('opt-output').value='';
   document.getElementById('jobIdBadge').style.display='none';
   document.getElementById('splitEditorWrapper').style.display='none';
+  document.getElementById('imagesPanel').style.display='none';
   updateConfigStatus(false);
   updateRunButton();
   window.scrollTo({top:0,behavior:'smooth'});
@@ -1125,6 +1171,7 @@ runBtn.addEventListener('click',async()=>{
   updateLiveStatus('Avvio pipeline…','Preparazione upload…','#f59e0b',true);
   document.getElementById('jobIdBadge').style.display='none';
   document.getElementById('splitEditorWrapper').style.display='none';
+  document.getElementById('imagesPanel').style.display='none';
   document.getElementById('logPanel').style.display='none';
   if(_logEs){_logEs.close();_logEs=null;}
   const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);

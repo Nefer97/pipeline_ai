@@ -2,6 +2,8 @@
 
 Trasforma fonti miste di una lezione universitaria — audio, video, slide, PDF, documenti — in un libro LaTeX strutturato e compilabile, usando Whisper per trascrivere e Claude per sintetizzare.
 
+Claude riceve il **prompt testuale completo + le immagini PNG delle slide** (multimodale), così può vedere grafici, schemi e diagrammi che il testo non descrive.
+
 ---
 
 ## Requisiti di sistema
@@ -186,9 +188,10 @@ fonti grezze (audio / video / pptx / pdf / docx / txt)
         │
         ├── preprocessor.py       → pulisce, comprime, allinea slide↔audio per Claude
         │
-        ├── Claude API (cloud)    → genera LaTeX semantico strutturato
+        ├── Claude API (cloud)    → riceve testo + PNG slide → genera LaTeX strutturato
+        │                           (multimodale: vede grafici e schemi oltre al testo)
         │
-        └── builder.py            → assembla i .tex finali
+        └── builder.py            → assembla i .tex finali con escape unicode completo
 ```
 
 ### Gerarchia delle fonti
@@ -201,6 +204,22 @@ La pipeline assegna automaticamente un ruolo a ogni file in base al tipo:
 | **CARNE** | `.mp3` `.wav` `.mp4` `.mkv` ecc. | Spiegazione orale del professore |
 | **SUPPORTO** | `.pdf` `.docx` senza audio | Materiale di approfondimento |
 | **CONTORNO** | `.txt` `.md` `.rtf` | Note informali, peso minore |
+
+### Cosa riceve Claude
+
+La chiamata API è **multimodale**: testo + immagini nella stessa richiesta.
+
+| Blocco | Contenuto | Limite |
+|--------|-----------|--------|
+| System | 19 regole LaTeX accademiche (cachato da Anthropic) | — |
+| Immagini | PNG slide PPTX in ordine (max 20) | solo se c'è PPTX |
+| SCHELETRO | LaTeX skeleton dalle slide / testo estratto da PDF e DOCX | 160.000 char |
+| CARNE | Trascrizione Whisper completa con timestamp (o allineamento slide↔audio) | 200.000 char |
+| SUPPORTO | Testo da PDF/DOCX di riferimento | 80.000 char |
+| CONTORNO | Note informali, testi liberi | 40.000 char |
+| Istruzioni | Regole di sintesi adattive per la lezione | — |
+
+Le immagini PNG delle **pagine PDF** vengono allegate solo se non c'è audio (la trascrizione già copre il contenuto testuale). Se ci sono più di 20 immagini, vengono prese le prime 20 per slide in ordine.
 
 ---
 
@@ -225,7 +244,7 @@ PDF > 20 pagine senza audio vengono suddivisi automaticamente in chunk da 10 pag
 ### Singola lezione
 
 ```bash
-# Standard: Whisper + Claude
+# Standard: Whisper + Claude (con immagini slide)
 python pipeline.py ./lezione_01/ --title "Reti di Calcolatori"
 
 # Con materia esplicita (altrimenti auto-detect)
@@ -281,8 +300,12 @@ Apri `http://localhost:8000`. Il frontend permette di:
 - Scegliere la materia tra 7 profili disciplinari (o auto-detect)
 - Impostare titolo, Claude on/off, OCR, modello Whisper, contesto corso
 - Monitorare lo stato in tempo reale con percentuale di avanzamento
-- Scaricare lo `.zip` con il risultato
-- Vedere la history dei job con accesso diretto a ZIP e continuazione
+- Scaricare lo `.zip` con il risultato e/o il PDF compilato
+- Vedere la history dei job con accesso diretto a ZIP, PDF e anteprima
+- **Editor LaTeX integrato** — pannello split: editor a sinistra, PDF viewer a destra
+  - Tab per selezionare e modificare qualsiasi file `.tex` del job
+  - Salvataggio separato da ricompilazione (💾 Salva / ⚙ Ricompila)
+  - Pannello immagini sotto l'editor con tutte le PNG della cartella `images/`
 - Controllare lo stato dei tool di sistema (API key, ffmpeg, pdflatex) in tempo reale
 - Impostare l'API key Claude direttamente dall'interfaccia (persiste su `settings.json`)
 - Alternare tema chiaro/scuro
@@ -314,10 +337,16 @@ Dopo il login con lo stesso account, il server è raggiungibile via Tailscale IP
 | `/run-pipeline` | POST | Avvia pipeline, ritorna `job_id` |
 | `/job/{job_id}` | GET | Stato job + progress, step, detail, pdf_errors |
 | `/job/{job_id}` | DELETE | Elimina job (`?full=true` rimuove anche ZIP e output) |
-| `/download/{job_id}` | GET | Scarica `.zip` output |
-| `/preview/{job_id}` | GET | Contenuto `main.tex` in JSON |
 | `/job/{job_id}/stream` | GET | Server-Sent Events: log pipeline in tempo reale |
 | `/jobs` | GET | Lista tutti i job |
+| `/download/{job_id}` | GET | Scarica `.zip` output |
+| `/pdf/{job_id}` | GET | Visualizza PDF compilato inline nel browser |
+| `/tex/{job_id}/{filename}` | GET | Contenuto di un file `.tex` del job |
+| `/save/{job_id}` | POST | Salva un file `.tex` su disco (senza ricompilare) |
+| `/recompile/{job_id}` | POST | Salva + ricompila con pdflatex, ritorna errori |
+| `/preview/{job_id}` | GET | Contenuto `main.tex` + lista file `.tex` + stato PDF |
+| `/images/{job_id}` | GET | Lista PNG nella cartella `images/` del job |
+| `/image/{job_id}/{filename}` | GET | Serve una singola immagine PNG |
 | `/health` | GET | Stato tool di sistema: `api_key`, `ffmpeg`, `pdflatex`, `whisper` |
 | `/settings` | GET | Configurazione corrente |
 | `/settings` | POST | Salva `api_key`, `ttl_days` (1–365), `ffmpeg_timeout`, `pipeline_timeout`, `max_concurrent_jobs` (1–10) |
@@ -334,11 +363,15 @@ output/
 ├── lezione_02.tex             # capitolo 2
 ├── corso_context.json         # memoria corso (concetti, simboli, ultimo argomento)
 ├── state.json                 # stato pipeline (prossimo numero lezione)
-└── images/
-    ├── nome_slide_001.png     # screenshot slide 1 ({stem}_slide_NNN.png)
-    ├── dispense_pag_001.png   # screenshot pagina 1 PDF ({stem}_pag_NNN.png)
-    ├── slide001_abc123.png    # immagine embedded estratta dal PPTX
-    └── formula_def456.png     # immagine formula → pix2tex
+├── images/
+│   ├── nome_slide_001.png     # screenshot slide 1 ({stem}_slide_NNN.png)
+│   ├── dispense_pag_001.png   # screenshot pagina 1 PDF ({stem}_pag_NNN.png)
+│   ├── slide001_abc123.png    # immagine embedded estratta dal PPTX
+│   └── formula_def456.png     # immagine formula → pix2tex
+└── debug/
+    ├── prompt_lezione_01.txt      # SYSTEM + USER prompt inviati a Claude
+    ├── images_lezione_01/         # symlink alle PNG allegate (ordinate 01_, 02_, ...)
+    └── riepilogo_lezione_01.txt   # classificazione sorgenti con char count
 ```
 
 `main.tex` include un preambolo LaTeX completo con `amsmath`, `amssymb`, `amsthm`, `graphicx`, `hyperref`, `fancyhdr`, `babel` (lingua dinamica), ambienti `theorem`, `definition`, `example`, `lemma`, `corollary`, `remark`, e `listings` per blocchi codice.
@@ -351,12 +384,16 @@ Con Claude Sonnet (modello di default):
 
 | | Token tipici | Costo |
 |--|-------------|-------|
-| Input (trascrizione + slide + istruzioni) | ~40.000 | ~$0.12 |
+| Input testo (trascrizione + slide + istruzioni) | ~40.000 | ~$0.12 |
+| Input immagini (10 slide PNG a ~1920px) | ~15.000 | ~$0.05 |
 | Output (capitolo LaTeX) | ~10.000 | ~$0.15 |
-| **Per lezione** | ~50.000 | **~$0.27** |
-| **Corso da 30 lezioni** | ~1.500.000 | **~$8** |
+| **Per lezione con slide** | ~65.000 | **~$0.32** |
+| **Per lezione solo testo** | ~50.000 | **~$0.27** |
+| **Corso da 30 lezioni** | ~1.950.000 | **~$9.60** |
 
 Il system prompt (~600 token) è cacheato con `cache_control: ephemeral` — dalla seconda lezione in poi costa ~10% del normale. Il log mostra `cache=hit` o `cache=miss` per ogni chiamata.
+
+Le immagini vengono allegate **solo per PPTX** (contenuto visivo non riducibile a testo). Se non ci sono slide, la chiamata è solo testo e rimane nel costo inferiore.
 
 ---
 
@@ -391,26 +428,28 @@ Si disabilita con `--no-context`. Pruning automatico: oltre le ultime 10 lezioni
 | File | Ruolo |
 |------|-------|
 | `pipeline.py` | Orchestratore principale |
-| `server.py` | Backend FastAPI |
-| `index.htm` | Frontend web |
+| `server.py` | Backend FastAPI + editor LaTeX integrato |
+| `index.htm` | Frontend web (upload, editor split, PDF viewer, history) |
 | `schema.htm` | Diagramma architettura interattivo |
 | `preprocessor.py` | Normalizza e comprime testo; rileva materia; allinea trascrizione↔slide; gestisce contesto corso |
 | `extractor.py` | Parsing approfondito `.pptx` (testo, immagini, tabelle, formule OMML) |
 | `slide_renderer.py` | Ogni slide PPTX → PNG |
-| `pdf_renderer.py` | Ogni pagina PDF → PNG |
+| `pdf_renderer.py` | Ogni pagina PDF → PNG + LaTeX skeleton |
 | `omml2latex.py` | Formule OMML (PowerPoint) → LaTeX |
 | `formula_detector.py` | Riconosce immagini-formula (aspect ratio, luminosità, saturazione) |
 | `ocr_math.py` | OCR immagini-formula: pix2tex → latex-ocr → tesseract → euristico |
-| `builder.py` | Assembla il file `.tex` finale |
+| `builder.py` | Assembla il file `.tex` finale; escape unicode → LaTeX (150+ caratteri: greche, operatori, subscript…) |
 | `TeamsHack.py` | Scarica video Microsoft Teams via ffmpeg (anche standalone) |
 | `requirements.txt` | Dipendenze Python |
-| `tests/test_core.py` | 54 test sui moduli core |
+| `tests/test_core.py` | Test sui moduli core |
 
 ---
 
 ## Note pratiche
 
 **Whisper su CPU:** `base` impiega ~1 minuto per 10 minuti di audio. Per test usa `--whisper-model tiny` (4× più veloce). La trascrizione viene salvata in cache `.transcript.txt` — esecuzioni successive la riusano.
+
+**`--skip-ai` salva comunque il prompt:** anche con `--skip-ai` il prompt completo (testo + lista immagini) viene scritto in `debug/prompt_lezione_NN.txt` e i symlink alle immagini in `debug/images_lezione_NN/`. Utile per verificare cosa verrebbe inviato prima di consumare crediti API.
 
 **`--skip-ai` non salta Whisper:** `--skip-ai` disattiva solo Claude. Whisper gira sempre (è locale). Il contesto corso non viene aggiornato se Claude non viene chiamato.
 
@@ -419,6 +458,8 @@ Si disabilita con `--no-context`. Pruning automatico: oltre le ultime 10 lezioni
 **PDF scansionati:** pytesseract viene applicato automaticamente sulle pagine senza testo digitale. Copre sia PDF 100% scansionati sia PDF misti. La lingua OCR segue `WHISPER_LANG`; senza variabile usa `ita+eng`.
 
 **Formule PowerPoint:** le formule scritte con l'editor equazioni di Office (OMML) vengono convertite direttamente da `omml2latex.py` senza OCR. Le formule come immagini (screenshot, foto di lavagna) vengono rilevate da `formula_detector.py` e passate a pix2tex.
+
+**Unicode nel testo:** `builder.py` gestisce automaticamente 150+ caratteri Unicode comuni nei PDF/DOCX/PPTX — subscript (₂→`$_{2}$`), lettere greche (α→`$\alpha$`), operatori (≤→`$\leq$`), simboli testo (€→`\texteuro{}`). Caratteri non mappati passano attraverso ed eventualmente causano errori LaTeX visibili in `main.log`.
 
 **WHISPER_LANG:** imposta la lingua per Whisper, OCR e LaTeX babel.
 ```bash
@@ -437,13 +478,16 @@ curl -X POST http://localhost:8000/settings \
 **Concorrenza job:** default 2 job contemporanei. HTTP 429 se si supera il limite. Configurabile via `max_concurrent_jobs` in `/settings`.
 
 **Debug:** ogni job scrive in `output/{job_id}/{nome}/debug/`:
-- `prompt_lezione_NN.txt` — prompt completo inviato a Claude
+- `prompt_lezione_NN.txt` — SYSTEM + USER prompt completo + lista immagini allegate
+- `images_lezione_NN/` — symlink ordinati (01_, 02_, …) alle PNG esatte inviate a Claude
 - `riepilogo_lezione_NN.txt` — classificazione sorgenti con char count
+
+**Sicurezza `settings.json`:** il file contiene la API key in chiaro. I permessi vengono impostati a `600` (solo proprietario) al salvataggio. Per ambienti condivisi preferire la variabile d'ambiente `ANTHROPIC_API_KEY`.
 
 **Test suite:**
 ```bash
 source venv/bin/activate
-python -m pytest tests/ -v   # 54 test, ~1 secondo
+python -m pytest tests/ -v
 ```
 
 ---
@@ -460,6 +504,7 @@ python -m pytest tests/ -v   # 54 test, ~1 secondo
 | Claude non risponde | API key mancante o errata | `echo $ANTHROPIC_API_KEY` per verificare |
 | Più `lezione_NN.tex` generati | Batch o PDF > 20 pag senza audio | Comportamento atteso — vedi *PDF grandi* |
 | `pdflatex` fallisce | Pacchetti LaTeX mancanti | `sudo apt install texlive-latex-extra texlive-lang-italian texlive-fonts-recommended` |
+| Errore Unicode nel PDF | Carattere non mappato in builder.py | Cerca il carattere nel `main.log`; se comune, aprire issue |
 | Frontend non raggiungibile da remoto | Server non su `0.0.0.0` | Avvia con `--host 0.0.0.0`; usa IP del server o Tailscale IP |
 | pix2tex non trovato (`['heuristic']`) | Venv non nei path standard | Installa in `~/pix2tex_venv` (path cercato per primo) |
 | `NNPACK: Unsupported hardware` in stderr | CPU senza istruzioni NNPACK | Warning innocuo — pix2tex funziona ugualmente |
@@ -467,9 +512,10 @@ python -m pytest tests/ -v   # 54 test, ~1 secondo
 | Raccordo inter-lezione non attivo | Contesto corso assente | Usa il campo "Continua da job" nel frontend |
 | PDF non compilato — badge rosso | Errori LaTeX nel sorgente | Clicca sul badge per vedere gli errori; scarica lo ZIP per `main.log` |
 | HTTP 429 su `/run-pipeline` | Troppi job contemporanei | Attendi o aumenta `max_concurrent_jobs` via `/settings` |
-| `settings.json` — warning permessi | File leggibile da altri utenti | Il server imposta `chmod 600` al salvataggio; esegui manualmente se il warning persiste |
 | Pipeline killata dopo 1 ora | `pipeline_timeout` default 3600s | `POST /settings {"pipeline_timeout": 7200}` |
 | Download Teams fallisce su video > 2h | `ffmpeg_timeout` default 7200s | `POST /settings {"ffmpeg_timeout": 14400}` |
 | `RuntimeError: fp16 is not supported on CPU` | Whisper su CPU senza CUDA | Fix già incluso — `fp16=False` automatico su CPU |
 | Tabelle PPTX assenti nel LaTeX | Tabella come immagine, non oggetto nativo | Le tabelle embedded come screenshot non sono estraibili |
 | Allineamento slide↔audio spostato | Pause lunghe distorcevano la distribuzione | Fix già applicato: pause > 45s vengono cappate |
+| Immagini non allegate a Claude | Nessun PPTX nella lezione | Le PNG PDF vengono allegate solo senza audio; quelle PPTX sempre |
+| Debug `images_lezione_NN/` vuoto | Nessuna immagine trovata in `images/` | Verifica che slide_renderer abbia prodotto i PNG (log: `✓ Renderizzate N/N slide`) |

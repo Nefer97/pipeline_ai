@@ -629,7 +629,8 @@ def generate_with_claude(lesson_number: int, title: str,
                           sources: dict,
                           subject_hint: str = None,
                           course_context_path: str = None,
-                          _progress_output_dir: Path = None) -> str | None:
+                          _progress_output_dir: Path = None,
+                          skip_ai: bool = False) -> str | None:
     """
     Genera LaTeX da Claude con prompt strutturato e gerarchia semantica.
 
@@ -877,26 +878,112 @@ REGOLE OBBLIGATORIE:
     user_prompt = "\n\n".join(parts)
 
     # ─────────────────────────────────────────
-    # DEBUG — salva prompt su disco (per-job, sotto output_dir)
+    # IMMAGINI — raccolta path + base64
+    # (prima del debug così il salvataggio include tutto)
     # ─────────────────────────────────────────
-    debug_dir  = (_progress_output_dir / "debug") if _progress_output_dir else Path("debug")
+    import base64, os as _os
+    _MAX_IMAGES = 20   # limite API Claude per chiamata
+
+    images_dir   = (_progress_output_dir / "images") if _progress_output_dir else None
+    image_paths: list[Path] = []   # per debug
+    image_blocks: list[dict] = []  # per API
+
+    if images_dir and images_dir.exists():
+        # 1. Slide PPTX — priorità massima (contenuto visivo irriducibile a testo)
+        for entry in sources["scheletro"]:
+            if not entry["filename"].lower().endswith(".pptx"):
+                continue
+            for slide_num in sorted((entry.get("slide_images") or {}).keys()):
+                if len(image_blocks) >= _MAX_IMAGES:
+                    break
+                img_path = images_dir / entry["slide_images"][slide_num]
+                if img_path.exists():
+                    data = base64.b64encode(img_path.read_bytes()).decode()
+                    image_paths.append(img_path)
+                    image_blocks.append({
+                        "type":   "image",
+                        "source": {"type": "base64", "media_type": "image/png", "data": data},
+                    })
+
+        # 2. Pagine PDF — solo se non c'è audio e slot liberi
+        if not sources["carne"]:
+            for entry in sources["scheletro"]:
+                if not entry["filename"].lower().endswith(".pdf"):
+                    continue
+                for page_num in sorted((entry.get("page_images") or {}).keys()):
+                    if len(image_blocks) >= _MAX_IMAGES:
+                        break
+                    img_path = images_dir / entry["page_images"][page_num]
+                    if img_path.exists():
+                        data = base64.b64encode(img_path.read_bytes()).decode()
+                        image_paths.append(img_path)
+                        image_blocks.append({
+                            "type":   "image",
+                            "source": {"type": "base64", "media_type": "image/png", "data": data},
+                        })
+
+    # ─────────────────────────────────────────
+    # DEBUG — salva TUTTO ciò che andrebbe a Claude
+    # ─────────────────────────────────────────
+    debug_dir = (_progress_output_dir / "debug") if _progress_output_dir else Path("debug")
     debug_dir.mkdir(parents=True, exist_ok=True)
+
+    # 1. Testo: system + user prompt
     debug_path = debug_dir / f"prompt_lezione_{lesson_number:02d}.txt"
+    img_section = ""
+    if image_paths:
+        img_lines = "\n".join(f"  [{i+1:02d}] {p.name}" for i, p in enumerate(image_paths))
+        img_section = f"\n\n=== IMMAGINI ALLEGATE ({len(image_paths)}) ===\n{img_lines}"
     debug_path.write_text(
-        f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_prompt}",
+        f"=== SYSTEM ===\n{system_prompt}\n\n=== USER ===\n{user_prompt}{img_section}",
         encoding="utf-8"
     )
+
+    # 2. Immagini: symlink ordinati in debug/images_lezione_NN/
+    if image_paths:
+        dbg_img_dir = debug_dir / f"images_lezione_{lesson_number:02d}"
+        dbg_img_dir.mkdir(exist_ok=True)
+        # Rimuovi symlink precedenti (riesecuzione)
+        for old in dbg_img_dir.iterdir():
+            if old.is_symlink():
+                old.unlink()
+        for i, src in enumerate(image_paths, 1):
+            link = dbg_img_dir / f"{i:02d}_{src.name}"
+            try:
+                link.symlink_to(src.resolve())
+            except Exception:
+                pass  # filesystem senza symlink: ignora
+
     est_tokens = (len(system_prompt) + len(user_prompt)) // 4
     print(f"\n  [DEBUG] Prompt → {debug_path.resolve()}")
-    print(f"  [DEBUG] ~{est_tokens:,} token stimati")
+    if image_paths:
+        print(f"  [DEBUG] Immagini → {debug_dir / f'images_lezione_{lesson_number:02d}'}/ ({len(image_paths)} file)")
+    print(f"  [DEBUG] ~{est_tokens:,} token stimati (testo) + {len(image_paths)} immagini")
     print(f"  [DEBUG] Fonti: scheletro={len(sources['scheletro'])} "
           f"carne={len(sources['carne'])} "
           f"supporto={len(sources['supporto'])} "
           f"contorno={len(sources['contorno'])}")
 
+    if skip_ai:
+        print("  [SKIP] --skip-ai: prompt salvato, chiamata API saltata")
+        return None
+
     if not api_key:
         print("  [SKIP] ANTHROPIC_API_KEY non impostata")
         return None
+
+    # ─────────────────────────────────────────
+    # Assembla content multimodale
+    # ─────────────────────────────────────────
+    if image_blocks:
+        print(f"  [VISION] {len(image_blocks)} immagini allegate alla chiamata API")
+        user_content = [
+            {"type": "text", "text": f"Hai a disposizione {len(image_blocks)} immagini delle slide/pagine della lezione, nell'ordine in cui appaiono nel prompt seguente.\n"},
+            *image_blocks,
+            {"type": "text", "text": user_prompt},
+        ]
+    else:
+        user_content = user_prompt
 
     # ─────────────────────────────────────────
     # CHIAMATA API
@@ -913,7 +1000,7 @@ REGOLE OBBLIGATORIE:
                 "cache_control": {"type": "ephemeral"},
             }
         ],
-        "messages": [{"role": "user", "content": user_prompt}],
+        "messages": [{"role": "user", "content": user_content}],
     }).encode("utf-8")
 
     req = urllib.request.Request(
@@ -944,7 +1031,10 @@ REGOLE OBBLIGATORIE:
         try:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 data  = json.loads(resp.read())
-                latex = data["content"][0]["text"]
+                content_blocks = data.get("content") or []
+                if not content_blocks:
+                    raise ValueError(f"Risposta Claude vuota o malformata: {str(data)[:200]}")
+                latex = content_blocks[0].get("text", "")
                 usage = data.get("usage", {})
                 cache_hit  = usage.get("cache_read_input_tokens", 0)
                 cache_miss = usage.get("cache_creation_input_tokens", 0)
@@ -1870,24 +1960,23 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         )
 
     print()
-    if skip_ai:
-        print("  [--skip-ai] LaTeX strutturato senza Claude")
-        _report_progress(output_dir, 70, "Generazione LaTeX (skip-ai)", "")
-        content = _latex_from_skeleton(sources, lesson_number, title, pptx_slides)
-    else:
-        _report_progress(output_dir, 60, "Claude — Costruzione prompt", "")
-        content = generate_with_claude(
-            lesson_number       = lesson_number,
-            title               = title,
-            sources             = sources,
-            subject_hint        = subject_hint,
-            course_context_path = course_context_path,
-            _progress_output_dir = output_dir,
-        )
-        if not content:
+    _report_progress(output_dir, 60, "Claude — Costruzione prompt", "")
+    content = generate_with_claude(
+        lesson_number        = lesson_number,
+        title                = title,
+        sources              = sources,
+        subject_hint         = subject_hint,
+        course_context_path  = course_context_path,
+        _progress_output_dir = output_dir,
+        skip_ai              = skip_ai,
+    )
+    if not content:
+        if skip_ai:
+            print("  [--skip-ai] LaTeX strutturato senza Claude")
+        else:
             print("  [fallback] Claude non raggiunto, uso scheletro")
-            _report_progress(output_dir, 80, "Fallback — Claude non raggiunto", "")
-            content = _latex_from_skeleton(sources, lesson_number, title, pptx_slides)
+        _report_progress(output_dir, 80, "Generazione LaTeX (fallback scheletro)", "")
+        content = _latex_from_skeleton(sources, lesson_number, title, pptx_slides)
 
     _report_progress(output_dir, 90, "Scrittura file LaTeX", out_tex.name)
     write_lesson_tex(lesson_number, title, content, source_names, out_tex)
