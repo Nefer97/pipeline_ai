@@ -324,13 +324,19 @@ def _recover_orphan_jobs() -> int:
             except Exception:
                 pass
         zip_exists = (OUTPUT_DIR / f"{jid}.zip").exists()
+        # Trova la sottocartella di output (es. outputs/{jid}/pe3/)
+        output_subdirs = [d for d in out_dir.iterdir() if d.is_dir() and d.name != "debug"]
+        output_dir_str = str(output_subdirs[0]) if output_subdirs else str(out_dir)
+        has_pdf = any(out_dir.rglob("main.pdf"))
         with _jobs_lock:
             jobs[jid] = {
                 "status":     "done",
                 "title":      title,
                 "files":      [],
                 "created_at": created_at,
-                "has_pdf":    False,
+                "has_pdf":    has_pdf,
+                "output_dir": output_dir_str,
+                "zip_path":   str(OUTPUT_DIR / f"{jid}.zip") if zip_exists else None,
                 "stdout":     "",
                 "stderr":     "[recuperato da disco dopo perdita jobs.json]",
             }
