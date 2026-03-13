@@ -239,6 +239,20 @@
       </div>
     </div>
 
+    <!-- ── LEZIONI PRECEDENTI ────────────────────────────────── -->
+    <div id="historyPanel" class="panel panel-history" style="display:none;">
+      <div class="panel-header" onclick="toggleHistory()">
+        <span class="panel-title">// lezioni precedenti</span>
+        <div class="panel-meta">
+          <span id="historyCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+          <span id="historyArrow" class="panel-arrow">▲</span>
+        </div>
+      </div>
+      <div id="historyBody" class="panel-body" style="display:block;">
+        <div id="historyList" style="display:flex;flex-direction:column;gap:5px;"></div>
+      </div>
+    </div>
+
     <!-- ── LOG PIPELINE ──────────────────────────────────────── -->
     <div id="logPanel" class="panel panel-log" style="display:none;">
       <div class="panel-header" onclick="toggleLogPanel()">
@@ -260,20 +274,6 @@
       <a id="downloadLink" href="#" class="job-btn job-btn-dl">⬇ Scarica ZIP</a>
       <button onclick="copyJobId()" class="job-btn job-btn-cont">📋 Usa per lezione successiva</button>
       <button onclick="resetForNextLesson()" class="job-btn job-btn-new">↺ Nuova pipeline</button>
-    </div>
-
-    <!-- ── LEZIONI PRECEDENTI ────────────────────────────────── -->
-    <div id="historyPanel" class="panel panel-history" style="display:none;">
-      <div class="panel-header" onclick="toggleHistory()">
-        <span class="panel-title">// lezioni precedenti</span>
-        <div class="panel-meta">
-          <span id="historyCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
-          <span id="historyArrow" class="panel-arrow">▼</span>
-        </div>
-      </div>
-      <div id="historyBody" class="panel-body" style="display:none;">
-        <div id="historyList" style="display:flex;flex-direction:column;gap:5px;"></div>
-      </div>
     </div>
 
     <!-- ── SPLIT EDITOR: LaTeX (sx) + PDF viewer (dx) ────────── -->
@@ -747,18 +747,23 @@ async function _loadHistory(){
     const panel=document.getElementById('historyPanel');
     const listEl=document.getElementById('historyList');
     const countEl=document.getElementById('historyCount');
-    if(!list.length){panel.style.display='none';return;}
     panel.style.display='block';
+    if(!list.length){
+      countEl.textContent='';
+      listEl.innerHTML='<div style="font-family:\'JetBrains Mono\',monospace;font-size:.65rem;color:var(--muted);padding:8px 0;text-align:center;opacity:.6;">nessuna lezione precedente</div>';
+      return;
+    }
     countEl.textContent=`${list.length} lezioni`;
-    listEl.innerHTML=list.slice(0,12).map(j=>{
+    const shown=list.slice(0,15);
+    listEl.innerHTML=shown.map(j=>{
       const done=j.status==='done';
       const dotColor=done?'#10b981':'#ef4444';
       const files=(j.files||[]).slice(0,2).join(', ')+(j.files?.length>2?` +${j.files.length-2}`:'');
       return`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:color-mix(in srgb,${dotColor} 5%,transparent);border:1px solid color-mix(in srgb,${dotColor} 12%,transparent);">
         <span style="width:6px;height:6px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:#e2e8f0;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${j.title||''}">${j.title||'—'}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--text);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${j.title||''}">${j.title||'—'}</span>
         ${files?`<span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${files}">${files}</span>`:''}
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;">${_timeAgo(j.created_at)}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;" title="${j.created_at?new Date(j.created_at).toLocaleString('it-IT'):''}">${_timeAgo(j.created_at)}</span>
         <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;">${j.id}</span>
         ${done&&j.has_zip?`<a href="${API}/download/${j.id}" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 35%,transparent);color:#10b981;text-decoration:none;flex-shrink:0;">⬇ ZIP</a>`:''}
         ${done?`<button onclick="previewFromHistory('${j.id}')" title="Anteprima main.tex" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#818cf8 15%,transparent);border:1px solid color-mix(in srgb,#818cf8 35%,transparent);color:#818cf8;cursor:pointer;">👁 .tex</button>`:''}
@@ -766,6 +771,7 @@ async function _loadHistory(){
         <button onclick="deleteJobFromHistory('${j.id}')" title="Elimina job e output" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:none;border:1px solid color-mix(in srgb,#ef4444 25%,transparent);color:#ef4444;cursor:pointer;opacity:.55;transition:opacity .15s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.55'">✕</button>
       </div>`;
     }).join('');
+    if(list.length>15)listEl.innerHTML+=`<div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);text-align:center;padding:6px 0;opacity:.6;">… e altre ${list.length-15} lezioni</div>`;
   }catch(_){}
 }
 
@@ -811,7 +817,7 @@ function copyJobId(){
 
 function setUIRunning(isRunning){
   const inputs = document.querySelectorAll('input, select, textarea, button');
-  const skipIds = new Set(['runBtn','cancelBtn','musicToggle','themeToggle']);
+  const skipIds = new Set(['runBtn','cancelBtn','musicToggle','themeToggle','advancedToggle','infoToggleBtn']);
   inputs.forEach(el=>{
     if(!skipIds.has(el.id)) el.disabled = isRunning;
   });
@@ -1243,6 +1249,11 @@ updateConfigStatus(false);
 _checkHealth();
 _loadHistory();
 document.getElementById('latexPreviewCode').addEventListener('input',_autosaveSchedule);
+// Auto-focus sul titolo se non ci sono file caricati
+setTimeout(()=>{
+  const t=document.getElementById('titleInput');
+  if(t&&!t.value) t.focus();
+},300);
 
 // RUN PIPELINE
 const runBtn = document.getElementById('runBtn');
@@ -1371,6 +1382,10 @@ runBtn.addEventListener('click',async()=>{
           clearInterval(fakeInterval);
           clearInterval(poll);
           setUIRunning(false);
+          // Auto-apri il log panel così l'utente vede il motivo dell'errore
+          document.getElementById('logPanel').style.display='block';
+          document.getElementById('logPanelBody').style.display='block';
+          document.getElementById('logToggleArrow').textContent='▲';
           if(_logEs){_logEs.close();_logEs=null;}
           const errMsg=s.stderr||'errore sconosciuto';
           const continueId=document.getElementById('opt-continue').value.trim();
@@ -1384,7 +1399,7 @@ runBtn.addEventListener('click',async()=>{
           setTimeout(_loadHistory, 500);
         }
       }catch(_){}
-    },3000);
+    },2000);
   }catch(err){
     Object.keys(fileState).forEach(type=>document.getElementById(`card-${type}`)?.classList.remove('uploading'));
     btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
