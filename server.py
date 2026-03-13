@@ -450,6 +450,24 @@ def _run_pipeline_job(job_id: str, lesson_dir: Path, output_dir: Path,
                 if src.exists():
                     shutil.copy2(src, output_dir / fname)
                     log.info("[continue] copiato %s da %s", fname, prev_out)
+            # Copia tutti i file .tex delle lezioni/run precedenti
+            for tex in prev_out.glob("lezione_*.tex"):
+                shutil.copy2(tex, output_dir / tex.name)
+                log.info("[continue] copiato %s da %s", tex.name, prev_out)
+            for tex in prev_out.glob("run_*.tex"):
+                shutil.copy2(tex, output_dir / tex.name)
+                log.info("[continue] copiato %s da %s", tex.name, prev_out)
+            # Copia la cartella images/ (immagini lezioni precedenti)
+            prev_images = prev_out / "images"
+            new_images  = output_dir / "images"
+            if prev_images.is_dir():
+                new_images.mkdir(exist_ok=True)
+                for img in prev_images.iterdir():
+                    if img.is_file():
+                        dest = new_images / img.name
+                        if not dest.exists():  # non sovrascrivere se già copiata
+                            shutil.copy2(img, dest)
+                log.info("[continue] copiata images/ da %s (%d file)", prev_out, len(list(prev_images.iterdir())))
         else:
             log.warning("[continue] job %s non trovato in memoria né su disco — ignoro", continue_from)
 

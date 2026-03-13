@@ -813,7 +813,8 @@ def generate_with_claude(lesson_number: int, title: str,
                           subject_hint: str = None,
                           course_context_path: str = None,
                           _progress_output_dir: Path = None,
-                          skip_ai: bool = False) -> str | None:
+                          skip_ai: bool = False,
+                          prev_chapter_content: str = "") -> str | None:
     """
     Genera LaTeX da Claude con prompt strutturato e gerarchia semantica.
 
@@ -856,6 +857,18 @@ REGOLE OBBLIGATORIE:
 17. Usa la lingua della trascrizione/slide per i contenuti (non forzare l'italiano se le fonti sono in un'altra lingua)
 18. LIMITE ORALE — REGOLA ASSOLUTA: la lezione termina dove termina la spiegazione verbale del professore nella trascrizione. Se le slide contengono argomenti non ancora spiegati oralmente, NON includerli. Scrivere contenuto non detto dal professore è un errore grave
 19. RACCORDO INTER-LEZIONE: se il CONTESTO CORSO indica "ultimo argomento trattato verbalmente", inizia da quel punto con un raccordo fluido di 1-2 righe. Non ripetere la spiegazione già svolta nella lezione precedente"""
+
+    # Inietta il contenuto dell'ultimo capitolo precedente come contesto
+    if prev_chapter_content:
+        # Tronca a ~6000 caratteri per non esaurire il context window
+        _ctx = prev_chapter_content.strip()
+        if len(_ctx) > 6000:
+            _ctx = _ctx[:6000] + "\n% ... [troncato per brevità] ..."
+        system_prompt += f"""
+
+--- ULTIMO CAPITOLO DEL CORSO (solo per contesto — NON ripetere questo contenuto) ---
+{_ctx}
+--- FINE CONTESTO PRECEDENTE ---"""
 
     # ─────────────────────────────────────────
     # PREPROCESSOR — pulizia e contesto corso
@@ -1547,10 +1560,13 @@ def load_state(output_dir: Path) -> dict:
     if path.exists():
         try:
             import json as _json
-            return _json.loads(path.read_text(encoding="utf-8"))
+            s = _json.loads(path.read_text(encoding="utf-8"))
+            s.setdefault("next_run", 1)
+            s.setdefault("runs", [])
+            return s
         except Exception:
             pass
-    return {"course_title": "", "subject": None, "next_lesson": 1, "lessons": []}
+    return {"course_title": "", "subject": None, "next_lesson": 1, "lessons": [], "next_run": 1, "runs": []}
 
 
 def save_state(output_dir: Path, state: dict):
@@ -1762,9 +1778,14 @@ def _latex_escape_title(t: str) -> str:
 
 
 def generate_main_tex(title: str, lesson_files: list, output_dir: Path,
-                      lang: str = "italian") -> Path:
+                      lang: str = "italian", run_files: list | None = None) -> Path:
     title_tex = _latex_escape_title(title)
-    includes = "\n".join(f"\\include{{{f.stem}}}" for f in sorted(lesson_files))
+    if run_files:
+        includes = "\n".join(f"\\include{{{f.stem}}}" for f in sorted(run_files, key=lambda f: f.stem))
+        count_label = f"{len(run_files)} run, {len(lesson_files)} lezioni totali"
+    else:
+        includes = "\n".join(f"\\include{{{f.stem}}}" for f in sorted(lesson_files))
+        count_label = f"{len(lesson_files)} lezioni"
     # Seleziona lingua principale in base alla lingua rilevata del corso
     _babel_lang = {
         "it": "italian", "en": "english", "fr": "french",
@@ -1781,8 +1802,27 @@ def generate_main_tex(title: str, lesson_files: list, output_dir: Path,
     )
     main_path = output_dir / "main.tex"
     main_path.write_text(content, encoding="utf-8")
-    print(f"  ✓ main.tex  ({len(lesson_files)} lezioni incluse)")
+    print(f"  ✓ main.tex  ({count_label})")
     return main_path
+
+
+def write_run_tex(run_number: int, title: str, date_str: str,
+                  lesson_nums: list, output_dir: Path) -> Path:
+    """Genera run_NN.tex: \\part{...} + \\input{lezione_NN} per ogni lezione della run."""
+    lines = [
+        f"% {'='*58}",
+        f"%  RUN {run_number:02d} — {title}",
+        f"%  {date_str}",
+        f"% {'='*58}",
+        f"\\part{{{title} — {date_str}}}",
+        "",
+    ]
+    for n in sorted(lesson_nums):
+        lines.append(f"\\input{{lezione_{n:02d}}}")
+    path = output_dir / f"run_{run_number:02d}.tex"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  ✓ run_{run_number:02d}.tex  ({len(lesson_nums)} lezioni: {sorted(lesson_nums)})")
+    return path
 
 
 # ─────────────────────────────────────────────
@@ -2019,7 +2059,8 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
                    whisper_model: str = "base",
                    subject_hint: str = None,
                    course_context_path: str = None,
-                   title: str = None):
+                   title: str = None,
+                   prev_chapter_content: str = ""):
 
     print(f"\n{'─'*58}")
     print(f"  LEZIONE {lesson_number:02d}  ←  {source_dir.name}")
@@ -2176,6 +2217,7 @@ def process_lesson(source_dir: Path, lesson_number: int, output_dir: Path,
         course_context_path  = course_context_path,
         _progress_output_dir = output_dir,
         skip_ai              = skip_ai,
+        prev_chapter_content = prev_chapter_content,
     )
     if not content:
         if skip_ai:
@@ -2257,6 +2299,20 @@ def main():
     if args.subject:
         state["subject"] = args.subject
 
+    # ── Contesto capitolo precedente (per continuità inter-run) ─────────────
+    prev_chapter_content = ""
+    if state.get("runs"):
+        last_run = max(state["runs"], key=lambda r: r["number"])
+        if last_run.get("lesson_numbers"):
+            last_lesson_num = max(last_run["lesson_numbers"])
+            last_lesson_path = output_dir / f"lezione_{last_lesson_num:02d}.tex"
+            if last_lesson_path.exists():
+                try:
+                    prev_chapter_content = last_lesson_path.read_text(encoding="utf-8")
+                    print(f"  Contesto prev: lezione_{last_lesson_num:02d}.tex (run {last_run['number']})")
+                except Exception:
+                    pass
+
     # Determina da quale numero partire
     if args.start_from is not None:
         # Override esplicito → rispetta sempre (utile per correzioni)
@@ -2310,14 +2366,16 @@ def main():
             try:
                 result = process_lesson(
                     subdir, lesson_num, output_dir,
-                    skip_ai             = args.skip_ai,
-                    skip_ocr            = args.skip_ocr,
-                    whisper_model       = args.whisper_model,
-                    subject_hint        = args.subject,
-                    course_context_path = course_context_path,
-                    # In batch ogni sottocartella ha nome semantico → fallback al nome cartella
-                    title               = None,
+                    skip_ai              = args.skip_ai,
+                    skip_ocr             = args.skip_ocr,
+                    whisper_model        = args.whisper_model,
+                    subject_hint         = args.subject,
+                    course_context_path  = course_context_path,
+                    title                = None,
+                    prev_chapter_content = prev_chapter_content,
                 )
+                # Passa il contesto solo alla prima lezione della run
+                prev_chapter_content = ""
                 collect(result, subdir.name)
             except Exception as exc:
                 if args.continue_on_error:
@@ -2329,14 +2387,37 @@ def main():
     else:
         result = process_lesson(
             source_path, next_lesson, output_dir,
-            skip_ai             = args.skip_ai,
-            skip_ocr            = args.skip_ocr,
-            whisper_model       = args.whisper_model,
-            subject_hint        = args.subject,
-            course_context_path = course_context_path,
-            title               = args.title if args.title != "Appunti del Corso" else None,
+            skip_ai              = args.skip_ai,
+            skip_ocr             = args.skip_ocr,
+            whisper_model        = args.whisper_model,
+            subject_hint         = args.subject,
+            course_context_path  = course_context_path,
+            title                = args.title if args.title != "Appunti del Corso" else None,
+            prev_chapter_content = prev_chapter_content,
         )
+        # Passa il contesto solo alla prima lezione della run (le successive già si vedono)
+        prev_chapter_content = ""
         collect(result, source_path.name)
+
+    # ── Genera run_NN.tex per questa run e aggiorna state ────────────────────
+    this_run_lesson_nums = [int(p.stem.split("_")[-1]) for p in lesson_files]
+    if this_run_lesson_nums:
+        run_number = state.get("next_run", 1)
+        run_date   = datetime.now().strftime("%d %B %Y")
+        run_title  = state["course_title"] or args.title
+        run_path   = write_run_tex(run_number, run_title, run_date,
+                                   this_run_lesson_nums, output_dir)
+        # Aggiorna state con info run
+        state.setdefault("runs", [])
+        state["runs"] = [r for r in state["runs"] if r["number"] != run_number]
+        state["runs"].append({
+            "number":         run_number,
+            "title":          run_title,
+            "date":           datetime.now().isoformat(timespec="seconds"),
+            "lesson_numbers": this_run_lesson_nums,
+        })
+        state["next_run"] = run_number + 1
+        save_state(output_dir, state)
 
     # ── main.tex: include TUTTE le lezioni dello stato, non solo quella corrente
     all_tex_files = []
@@ -2348,11 +2429,18 @@ def main():
     if all_tex_files:
         _report_progress(output_dir, 95, "Generazione main.tex",
                          f"{len(all_tex_files)} lezioni")
+        # Raccogli tutti i run files presenti su disco (include run precedenti copiati)
+        all_run_files = []
+        for run_entry in sorted(state.get("runs", []), key=lambda r: r["number"]):
+            rp = output_dir / f"run_{run_entry['number']:02d}.tex"
+            if rp.exists():
+                all_run_files.append(rp)
         generate_main_tex(
             state["course_title"] or args.title,
             all_tex_files,
             output_dir,
-            lang = os.environ.get("WHISPER_LANG") or state.get("subject_lang") or "en",
+            lang      = os.environ.get("WHISPER_LANG") or state.get("subject_lang") or "en",
+            run_files = all_run_files if all_run_files else None,
         )
         # Salva errori batch se --continue-on-error era attivo
         if batch_errors:
