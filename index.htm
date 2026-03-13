@@ -105,9 +105,6 @@
           <input type="text" id="titleInput" placeholder="es. Analisi Matematica 1 — Lezione 03" required>
         </div>
 
-        <!-- Stato sistema (API key, ffmpeg, pdflatex) -->
-        <div class="health-strip" id="healthBadges"></div>
-
         <div class="config-grid">
           <!-- Moduli AI -->
           <div class="config-group">
@@ -139,6 +136,8 @@
                 <input type="checkbox" id="opt-context" checked><label for="opt-context"></label>
               </div>
             </div>
+            <!-- Stato sistema (API key, ffmpeg, pdflatex) -->
+            <div class="health-strip" id="healthBadges"></div>
           </div>
 
           <!-- Trascrizione & Output -->
@@ -211,21 +210,20 @@
           <span class="config-tag active" id="tag-output" style="--tag-color:#64748b">out:./output</span>
           <span class="config-tag active" id="tag-start" style="--tag-color:#64748b">start:0</span>
           <span class="config-tag" id="tag-continue" style="--tag-color:#f59e0b;display:none">continue:—</span>
+          <!-- ── RUN ───────────────────────────────────────────────── -->
+          <div class="run-section">
+            <button class="run-btn" id="runBtn" title="Carica almeno un file e inserisci un titolo">▶ AVVIA PIPELINE</button>
+            <button id="cancelBtn" title="Interrompi job in corso" onclick="cancelCurrentJob()">✕ Annulla</button>
+            <div id="run-hint" class="run-hint"></div>
+          </div>
         </div>
-
       </div>
+
     </div>
 
     <!-- ── PRE-FLIGHT (titolo + file pronti) ─────────────────── -->
     <div class="preflight-row" id="preflightRow" style="display:none;">
       <span class="pf-label">↳</span>
-    </div>
-
-    <!-- ── RUN ───────────────────────────────────────────────── -->
-    <div class="run-section">
-      <button class="run-btn" id="runBtn" title="Carica almeno un file e inserisci un titolo">▶ AVVIA PIPELINE</button>
-      <button id="cancelBtn" title="Interrompi job in corso" onclick="cancelCurrentJob()">✕ Annulla</button>
-      <div id="run-hint" class="run-hint"></div>
     </div>
 
     <!-- ── LIVE STATUS (nascosto a riposo) ───────────────────── -->
@@ -1366,8 +1364,6 @@ runBtn.addEventListener('click',async()=>{
             .then(r=>r.ok?r.json():null)
             .then(data=>{if(!data)return;_showPdfAndLatex(j.job_id,data.has_pdf||false,data.content||'',j.pdf_errors||[],data.tex_files||['main.tex']);})
             .catch(()=>{});
-          // Cleanup uploads dopo 5s — l'output (tex + immagini) rimane in outputs/
-          setTimeout(()=>fetch(`${API}/job/${j.job_id}`,{method:'DELETE'}).catch(()=>{}),5000);
           // Aggiorna history
           setTimeout(_loadHistory, 500);
         }
