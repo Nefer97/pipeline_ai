@@ -72,7 +72,7 @@ sudo apt install tesseract-ocr tesseract-ocr-ita tesseract-ocr-eng
 brew install tesseract
 ```
 
-Senza pytesseract i PDF scansionati vengono saltati — la pipeline continua con le altre fonti.
+Senza il binario `tesseract` i PDF scansionati vengono saltati — la pipeline continua con le altre fonti. Con tesseract installato, `ocr_math.py` lo usa anche come secondo backend per OCR formule (dopo pix2tex).
 
 ### 5. (Opzionale) pix2tex — OCR formule matematiche
 
@@ -87,7 +87,7 @@ pip install pix2tex
 python -c "from pix2tex.cli import LatexOCR; m = LatexOCR(); print('OK')"
 ```
 
-`ocr_math.py` cerca automaticamente pix2tex nei path standard (`~/pix2tex_venv`, `~/venv`, `~/.venv`, `/opt/pix2tex_venv`). Se non trovato, le immagini-formula vengono saltate senza errori — le formule scritte con l'editor equazioni PowerPoint (OMML) vengono comunque convertite correttamente tramite `omml2latex.py`.
+`ocr_math.py` cerca automaticamente pix2tex nei path standard (`~/pix2tex_venv`, `~/venv`, `~/Scrivania/venv`, `~/.venv`, `/opt/pix2tex_venv`). Se non trovato, le immagini-formula vengono saltate senza errori — le formule scritte con l'editor equazioni PowerPoint (OMML) vengono comunque convertite correttamente tramite `omml2latex.py`.
 
 ### 6. API key Claude
 
@@ -112,10 +112,12 @@ python -c "import fastapi, uvicorn; print('server OK')"
 python -c "import anthropic; print('anthropic OK')"
 python pipeline.py --help
 
-# Backend opzionali
+# Backend OCR formule
 python -c "from ocr_math import get_available_backends; print(get_available_backends())"
-# ['pix2tex (subprocess)', 'heuristic']  ← pix2tex trovato
-# ['heuristic']                          ← pix2tex assente (funziona uguale)
+# ['pix2tex (subprocess)', 'tesseract', 'heuristic']  ← tutto attivo
+# ['pix2tex (subprocess)', 'heuristic']               ← tesseract mancante
+# ['tesseract', 'heuristic']                          ← pix2tex mancante
+# ['heuristic']                                       ← solo fallback euristico
 ```
 
 ---
