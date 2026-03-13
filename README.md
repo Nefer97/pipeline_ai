@@ -182,7 +182,8 @@ fonti grezze (audio / video / pptx / pdf / docx / txt)
         ├── ocr_math.py           → pix2tex / tesseract: immagine formula → LaTeX
         ├── slide_renderer.py     → ogni slide PPTX → PNG (LibreOffice+pymupdf se disponibile, altrimenti Pillow)
         │
-        ├── pdfplumber            → estrae testo da PDF
+        ├── pdfplumber + pymupdf  → estrazione duale per pagina (qualità comparata)
+        ├── _clean_extracted_text → fix doubled chars, collassa spazi, rimuove padding
         ├── pytesseract           → OCR fallback per PDF scansionati
         ├── pdf_renderer.py       → ogni pagina PDF → PNG
         │
@@ -315,7 +316,11 @@ La pagina `http://localhost:8000/schema.htm` mostra il diagramma interattivo del
 
 ### Continuità tra lezioni
 
-Il campo **Continua da job** accetta il `job_id` di una sessione precedente. Il server copia automaticamente `state.json` e `corso_context.json` — la numerazione e la memoria del corso proseguono da dove ci si era fermati.
+Il campo **Continua da job** accetta il `job_id` di una sessione precedente. Il server copia automaticamente `state.json`, `corso_context.json`, `lezione_*.tex`, `run_*.tex` e la cartella `images/` — la numerazione, i file già generati e la memoria del corso proseguono esattamente da dove ci si era fermati.
+
+Claude riceve anche il contenuto dell'**ultimo capitolo generato** (fino a 6000 caratteri) come contesto nel system prompt: sa cosa è stato spiegato nella sessione precedente e può riallacciarsi senza ripetizioni.
+
+Il log di pipeline appare in tempo reale via Server-Sent Events (`/job/{id}/stream`) anche per le sessioni "continua", non solo per quelle nuove.
 
 ### Accesso remoto
 
@@ -359,11 +364,13 @@ Dopo il login con lo stesso account, il server è raggiungibile via Tailscale IP
 
 ```
 output/
-├── main.tex                   # documento principale — include tutti i capitoli
+├── main.tex                   # documento principale — include run_01, run_02, ...
+├── run_01.tex                 # \part{Titolo — data} + \input{lezione_01} ...
+├── run_02.tex                 # \part{Titolo — data} + \input{lezione_03} ...
 ├── lezione_01.tex             # capitolo 1
 ├── lezione_02.tex             # capitolo 2
 ├── corso_context.json         # memoria corso (concetti, simboli, ultimo argomento)
-├── state.json                 # stato pipeline (prossimo numero lezione)
+├── state.json                 # stato pipeline: next_lesson, lessons, next_run, runs
 ├── images/
 │   ├── nome_slide_001.png     # screenshot slide 1 ({stem}_slide_NNN.png)
 │   ├── dispense_pag_001.png   # screenshot pagina 1 PDF ({stem}_pag_NNN.png)
@@ -376,6 +383,21 @@ output/
 ```
 
 `main.tex` include un preambolo LaTeX completo con `amsmath`, `amssymb`, `amsthm`, `graphicx`, `hyperref`, `fancyhdr`, `babel` (lingua dinamica), ambienti `theorem`, `definition`, `example`, `lemma`, `corollary`, `remark`, e `listings` per blocchi codice.
+
+### Aggregazione multi-run
+
+Ogni invocazione della pipeline (ogni "sessione" dal browser o da CLI) genera un **run** numerato. Il `main.tex` compilato ha struttura:
+
+```
+main.tex
+  └── \part{Lezione 1 — 2025-06-10}    ← run_01.tex
+        \input{lezione_01}
+        \input{lezione_02}
+  └── \part{Lezione 3 — 2025-06-17}    ← run_02.tex
+        \input{lezione_03}
+```
+
+`state.json` persiste `next_run` e la lista `runs` oltre a `next_lesson` e `lessons`. Quando si usa "Continua da job", il server copia `lezione_*.tex`, `run_*.tex` e `images/` dal job precedente, garantendo che il PDF finale raccolga tutto il corso in un unico documento.
 
 ---
 
@@ -456,6 +478,8 @@ Si disabilita con `--no-context`. Pruning automatico: oltre le ultime 10 lezioni
 
 **PDF grandi (chunking automatico):** PDF > 20 pagine senza audio → suddiviso in chunk da 10 pagine, ognuno elaborato da Claude separatamente. Con audio associato il PDF viene usato come scheletro strutturale senza chunking.
 
+**Estrazione PDF duale:** ogni pagina viene estratta sia con pdfplumber sia con PyMuPDF. Vince quella con la densità testuale più alta (`caratteri non-spazio / totale`). `pdfplumber` usa `layout=False` per evitare il padding spaziale artificiale. Un post-processing rimuove automaticamente i caratteri raddoppiati (artefatto frequente in alcuni PDF: `ffiilliippppoo` → `filippo`) se più del 40% dei caratteri è una coppia duplicata.
+
 **PDF scansionati:** pytesseract viene applicato automaticamente sulle pagine senza testo digitale. Copre sia PDF 100% scansionati sia PDF misti. La lingua OCR segue `WHISPER_LANG`; senza variabile usa `eng+ita` (inglese prioritario).
 
 **Formule PowerPoint:** le formule scritte con l'editor equazioni di Office (OMML) vengono convertite direttamente da `omml2latex.py` senza OCR. Le formule come immagini (screenshot, foto di lavagna) vengono rilevate da `formula_detector.py` e passate a pix2tex.
@@ -515,6 +539,9 @@ python -m pytest tests/ -v
 | `NNPACK: Unsupported hardware` in stderr | CPU senza istruzioni NNPACK | Warning innocuo — pix2tex funziona ugualmente |
 | pix2tex lento (30-60s per formula) | Modello ML su CPU | Normale; la cache `.ocr_cache.json` evita rielaborazioni |
 | Raccordo inter-lezione non attivo | Contesto corso assente | Usa il campo "Continua da job" nel frontend |
+| Job non compaiono nella history | Era un bug: il frontend cancellava i job 5s dopo il completamento | Fix già applicato — i job ora persistono in `jobs.json` |
+| PDF con testo raddoppiato (`ffiilliippppoo`) | Artefatto di alcuni PDF | Fix automatico: se >40% coppie duplicate, deduplicazione via regex |
+| Testo PDF con eccessivo whitespace | pdfplumber `layout=True` generava padding spaziale | Fix: `layout=False` + estrazione duale con PyMuPDF |
 | PDF non compilato — badge rosso | Errori LaTeX nel sorgente | Clicca sul badge per vedere gli errori; scarica lo ZIP per `main.log` |
 | HTTP 429 su `/run-pipeline` | Troppi job contemporanei | Attendi o aumenta `max_concurrent_jobs` via `/settings` |
 | Pipeline killata dopo 1 ora | `pipeline_timeout` default 3600s | `POST /settings {"pipeline_timeout": 7200}` |
