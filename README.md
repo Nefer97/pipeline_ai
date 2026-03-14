@@ -306,10 +306,16 @@ Apri `http://localhost:8000`. Il frontend permette di:
 - Monitorare lo stato in tempo reale con percentuale di avanzamento
 - Scaricare lo `.zip` con il risultato e/o il PDF compilato
 - Vedere la history dei job con accesso diretto a ZIP, PDF e anteprima
-- **Editor LaTeX integrato** — pannello split: editor a sinistra, PDF viewer a destra
+- **Editor LaTeX integrato** — si apre cliccando "👁 .tex" nella history; pannello split: editor a sinistra, PDF viewer a destra
+  - CodeMirror 5 con syntax highlighting LaTeX completo, numeri di riga, indentazione Tab/Shift-Tab
+  - Tema editor segue il tema dell'interfaccia (darcula in dark, default in light)
   - Tab per selezionare e modificare qualsiasi file `.tex` del job
   - Salvataggio separato da ricompilazione (💾 Salva / ⚙ Ricompila)
+  - Auto-save in `localStorage` ogni 2s — bozza ripristinata se si riapre il job prima di salvare
   - Pannello immagini sotto l'editor con tutte le PNG della cartella `images/`
+- **Visualizzatore prompt Claude** — bottone "📄 Prompt" nella history: mostra il prompt SYSTEM+USER completo inviato a Claude; se la lezione ha più capitoli, tab per navigare tra essi
+- **Validazione file upload** — ogni file nella lista mostra un badge: ✓ verde (ok), ⚠ giallo (file molto grande), ✗ rosso (formato non supportato per quel tipo di slot)
+- **Dialog di conferma custom** — elimina job e annulla pipeline usano un modal stilizzato invece del `confirm()` del browser
 - Controllare lo stato dei tool di sistema (API key, ffmpeg, pdflatex) in tempo reale
 - Impostare l'API key Claude direttamente dall'interfaccia (persiste su `settings.json`)
 - Alternare tema chiaro/scuro
@@ -353,6 +359,7 @@ Dopo il login con lo stesso account, il server è raggiungibile via Tailscale IP
 | `/save/{job_id}` | POST | Salva un file `.tex` su disco (senza ricompilare) |
 | `/recompile/{job_id}` | POST | Salva + ricompila con pdflatex, ritorna errori |
 | `/preview/{job_id}` | GET | Contenuto `main.tex` + lista file `.tex` + stato PDF |
+| `/prompt/{job_id}` | GET | Prompt SYSTEM+USER inviati a Claude (file `debug/prompt_lezione_NN.txt`) |
 | `/images/{job_id}` | GET | Lista PNG nella cartella `images/` del job |
 | `/image/{job_id}/{filename}` | GET | Serve una singola immagine PNG |
 | `/health` | GET | Stato tool di sistema: `api_key`, `ffmpeg`, `pdflatex`, `whisper` |
@@ -537,7 +544,7 @@ python -m pytest tests/ -v
 | `pdflatex` fallisce | Pacchetti LaTeX mancanti | `sudo apt install texlive-latex-extra texlive-lang-italian texlive-fonts-recommended` |
 | Errore Unicode nel PDF | Carattere non mappato in builder.py | Cerca il carattere nel `main.log`; se comune, aprire issue |
 | Frontend non raggiungibile da remoto | Server non su `0.0.0.0` | Avvia con `--host 0.0.0.0`; usa IP del server o Tailscale IP |
-| pix2tex non trovato (`['heuristic']`) | Venv non nei path standard | Installa in `~/pix2tex_venv` (path cercato per primo) |
+| pix2tex non trovato (`['heuristic']`) | Venv non nei path standard | Installa in `~/pix2tex_venv` o `~/Scrivania/venv` (entrambi cercati automaticamente) |
 | `NNPACK: Unsupported hardware` in stderr | CPU senza istruzioni NNPACK | Warning innocuo — pix2tex funziona ugualmente |
 | pix2tex lento (30-60s per formula) | Modello ML su CPU | Normale; la cache `.ocr_cache.json` evita rielaborazioni |
 | Raccordo inter-lezione non attivo | Contesto corso assente | Usa il campo "Continua da job" nel frontend |
