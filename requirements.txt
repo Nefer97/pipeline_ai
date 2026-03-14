@@ -17,6 +17,9 @@ Pillow>=9.0.0
 # ── Parsing XML (formule OMML PowerPoint) ─────────────────────
 lxml>=4.9.0
 
+# ── Formato RTF (.txt/.rtf con contenuto RTF) ─────────────────
+striprtf>=0.0.26
+
 # ── Calcolo numerico ───────────────────────────────────────────
 numpy>=1.24.0
 
