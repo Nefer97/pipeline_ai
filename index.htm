@@ -19,7 +19,6 @@
   <span class="nav-logo">Appunti AI</span>
   <div class="nav-links">
     <a class="nav-link active" href=""><span class="nd"></span>Pipeline</a>
-    <a class="nav-link" href="schema.htm"><span class="nd"></span>Schema</a>
   </div>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambia tema"></button>
   <button class="theme-toggle" id="musicToggle" onclick="toggleMusic()" title="Musica ambiente: OFF" style="margin-left:6px;font-size:.72rem;opacity:.45;">♫</button>
@@ -177,7 +176,7 @@
               <input type="number" id="opt-startfrom" value="0" min="0" style="border-left-color:var(--c2)">
             </div>
             <div class="config-field" style="gap:6px">
-              <label>Lezione precedente <span style="opacity:.6;font-size:.85em">(Job ID — continua corso)</span></label>
+              <label>Continua corso <span style="opacity:.6;font-size:.85em">(Job ID della sessione precedente)</span></label>
               <input type="text" id="opt-continue" list="jobids-datalist" placeholder="es. 8ccdc0a7 — lascia vuoto per nuovo corso" style="border-left-color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.72rem;" autocomplete="off">
               <datalist id="jobids-datalist"></datalist>
               <span id="continue-hint" class="continue-hint" style="display:none"></span>
@@ -382,7 +381,7 @@
       </div>
       <div class="step" style="--sc:#a78bfa">
         <div class="step-num">P2</div>
-        <div><div class="step-title">Allineamento temporale trascrizione ↔ slide</div><div class="step-desc">Timestamp <strong>[MM:SS]</strong> + marker slide → ogni slide abbinata alla spiegazione orale del prof</div></div>
+        <div><div class="step-title">Compressione adattiva del prompt</div><div class="step-desc">Stima token → <strong>RAW_CLEAN</strong> (&lt;80k) · <strong>DENSE</strong> (80–180k) · <strong>OUTLINE</strong> (&gt;180k) — Claude riceve la trascrizione con timestamp <strong>[MM:SS]</strong> per seguire l'evoluzione della lezione</div></div>
         <div class="step-badge">preprocessor.py</div>
       </div>
       <div class="step" style="--sc:#a78bfa">
@@ -413,7 +412,7 @@
     <div class="steps" style="margin-top:0">
       <div class="step" style="--sc:#10b981">
         <div class="step-num">07</div>
-        <div><div class="step-title">builder · Assemblaggio file .tex</div><div class="step-desc">Un <strong>lezione_NN.tex</strong> per lezione + <strong>main.tex</strong> con \include — Preambolo: tcolorbox, tikz, amsmath, hyperref, fancyhdr, enumitem, pifont</div></div>
+        <div><div class="step-title">builder · Assemblaggio file .tex</div><div class="step-desc"><strong>lezione_NN.tex</strong> per lezione · <strong>run_NN.tex</strong> con \part{sessione} · <strong>main.tex</strong> con \input — Preambolo: amsmath, amssymb, amsthm, graphicx, hyperref, fancyhdr, babel, listings</div></div>
         <div class="step-badge">builder.py</div>
       </div>
     </div>
@@ -421,11 +420,12 @@
     <div class="arrow-down"><div class="chevron"></div></div>
 
     <div class="section-label">// 07 · output</div>
-    <div class="output-row" style="grid-template-columns:repeat(4,1fr)">
-      <div class="output-card"><div class="icon">📘</div><div class="name">main.tex</div><div class="desc">Documento principale<br>\include tutte le lezioni<br>Compila con pdflatex</div></div>
-      <div class="output-card"><div class="icon">📝</div><div class="name">lezione_NN.tex</div><div class="desc">Un file per lezione<br>sezioni + formule + immagini</div></div>
+    <div class="output-row" style="grid-template-columns:repeat(5,1fr)">
+      <div class="output-card"><div class="icon">📘</div><div class="name">main.tex</div><div class="desc">Documento principale<br>\input tutti i run<br>Compila con pdflatex</div></div>
+      <div class="output-card"><div class="icon">📂</div><div class="name">run_NN.tex</div><div class="desc">\part{Titolo — data}<br>raggruppa le lezioni<br>di ogni sessione</div></div>
+      <div class="output-card"><div class="icon">📝</div><div class="name">lezione_NN.tex</div><div class="desc">Un file per lezione<br>\chapter{} + sezioni<br>formule + immagini</div></div>
       <div class="output-card"><div class="icon">🧠</div><div class="name">corso_context.json</div><div class="desc">Memoria del corso<br>concetti, definizioni, simboli<br>aggiornata ad ogni lezione</div></div>
-      <div class="output-card"><div class="icon">💾</div><div class="name">state.json</div><div class="desc">Numerazione lezioni persistente<br>resume automatico batch<br>aggiornato dopo ogni lezione</div></div>
+      <div class="output-card"><div class="icon">💾</div><div class="name">state.json</div><div class="desc">next_lesson · next_run<br>numerazione persistente<br>aggiornato dopo ogni sessione</div></div>
     </div>
 
     <div class="legend">
