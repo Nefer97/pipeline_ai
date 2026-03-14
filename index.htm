@@ -1426,10 +1426,15 @@ runBtn.addEventListener('click',async()=>{
           // Tenta auto-download (può essere bloccato da popup blocker)
           const a=document.createElement('a');
           a.href=dlLink.href;a.download=dlLink.download;a.click();
-          // Fetch LaTeX preview
+          // Pre-carica dati LaTeX senza mostrare l'editor (si apre solo col bottone 👁 .tex)
           fetch(`${API}/preview/${j.job_id}`)
             .then(r=>r.ok?r.json():null)
-            .then(data=>{if(!data)return;_showPdfAndLatex(j.job_id,data.has_pdf||false,data.content||'',j.pdf_errors||[],data.tex_files||['main.tex']);})
+            .then(data=>{
+              if(!data)return;
+              _currentPreviewJobId=j.job_id;
+              _currentTexFile='main.tex';
+              _texFiles=data.tex_files||['main.tex'];
+            })
             .catch(()=>{});
           // Aggiorna history
           setTimeout(_loadHistory, 500);

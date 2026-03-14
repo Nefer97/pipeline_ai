@@ -886,7 +886,7 @@ button.running{opacity:.6;cursor:not-allowed;transform:none !important;}
 
 /* ── CODEMIRROR OVERRIDES ─────────────────────────────────── */
 .CodeMirror {
-  height: 100%;
+  height: 600px!important;
   font-family: 'JetBrains Mono', monospace;
   font-size: .78rem;
   line-height: 1.6;
