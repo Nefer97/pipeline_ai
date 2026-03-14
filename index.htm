@@ -21,7 +21,7 @@
     <a class="nav-link active" href=""><span class="nd"></span>Pipeline</a>
   </div>
   <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Cambia tema"></button>
-  <button class="theme-toggle" id="musicToggle" onclick="toggleMusic()" title="Musica ambiente: OFF" style="margin-left:6px;font-size:.72rem;opacity:.45;">♫</button>
+  <button class="theme-toggle btn-music" id="musicToggle" onclick="toggleMusic()" title="Musica ambiente: OFF">♫</button>
 </nav>
 <div class="container">
   <header>
@@ -35,7 +35,7 @@
     <div class="section-label">// 01 · fonti</div>
     <div class="input-row">
       <div class="upload-col">
-        <div class="upload-card" style="--cc:#00e5ff" id="card-audio">
+        <div class="upload-card card-audio" id="card-audio">
           <input type="file" accept=".mp3,.wav,.m4a,.ogg,.flac" multiple id="input-audio">
           <div class="upload-status" id="status-audio">0</div>
           <div class="progress-bar" id="progress-audio"></div>
@@ -43,10 +43,10 @@
           <div class="exts">.mp3 · .wav · .m4a</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
-        <div class="file-list" id="files-audio" style="--cc:#00e5ff"></div>
+        <div class="file-list file-list-audio" id="files-audio"></div>
       </div>
       <div class="upload-col">
-        <div class="upload-card" style="--cc:#7c3aed" id="card-video">
+        <div class="upload-card card-video" id="card-video">
           <input type="file" accept=".mp4,.mkv,.avi,.mov,.webm" multiple id="input-video">
           <div class="upload-status" id="status-video">0</div>
           <div class="progress-bar" id="progress-video"></div>
@@ -54,10 +54,10 @@
           <div class="exts">.mp4 · .mkv · .webm</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
-        <div class="file-list" id="files-video" style="--cc:#7c3aed"></div>
+        <div class="file-list file-list-video" id="files-video"></div>
       </div>
       <div class="upload-col">
-        <div class="upload-card" style="--cc:#f59e0b" id="card-slide">
+        <div class="upload-card card-slide" id="card-slide">
           <input type="file" accept=".pptx" multiple id="input-slide">
           <div class="upload-status" id="status-slide">0</div>
           <div class="progress-bar" id="progress-slide"></div>
@@ -65,10 +65,10 @@
           <div class="exts">.pptx</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
-        <div class="file-list" id="files-slide" style="--cc:#f59e0b"></div>
+        <div class="file-list file-list-slide" id="files-slide"></div>
       </div>
       <div class="upload-col">
-        <div class="upload-card" style="--cc:#10b981" id="card-doc">
+        <div class="upload-card card-doc" id="card-doc">
           <input type="file" accept=".docx,.pdf,.txt,.md,.rtf" multiple id="input-doc">
           <div class="upload-status" id="status-doc">0</div>
           <div class="progress-bar" id="progress-doc"></div>
@@ -76,17 +76,17 @@
           <div class="exts">.docx · .pdf · .txt · .rtf</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
-        <div class="file-list" id="files-doc" style="--cc:#10b981"></div>
+        <div class="file-list file-list-doc" id="files-doc"></div>
       </div>
       <div class="upload-col">
-        <div class="upload-card" style="--cc:#ef4444" id="card-teams">
+        <div class="upload-card card-teams" id="card-teams">
           <div class="upload-status" id="status-teams">0</div>
           <div class="icon">🌐</div><div class="name">TEAMS</div>
           <div class="exts">manifest · URL</div>
           <div class="upload-hint">✎ incolla URL</div>
         </div>
-        <div class="file-list" id="files-teams" style="--cc:#ef4444"></div>
-        <div id="teams-url-area" style="display:none;margin-top:8px;">
+        <div class="file-list file-list-teams" id="files-teams"></div>
+        <div id="teams-url-area" class="field-hidden teams-url-area">
           <input type="text" id="teams-url-input" class="teams-url-input" placeholder="Incolla URL Teams…">
           <div class="teams-url-hint">↵ Invio per aggiungere · Esc per chiudere</div>
         </div>
@@ -94,13 +94,13 @@
     </div>
 
     <!-- ── 02 · CONFIGURAZIONE ────────────────────────────────── -->
-    <div style="margin-top:24px;">
+    <div class="config-section">
       <div class="section-label">// 02 · configurazione</div>
       <div class="config-panel">
 
         <!-- Titolo lezione -->
         <div class="config-field">
-          <label>Titolo corso / lezione <span style="color:var(--c5);font-size:.7em">*</span></label>
+          <label>Titolo corso / lezione <span class="label-required">*</span></label>
           <input type="text" id="titleInput" placeholder="es. Analisi Matematica 1 — Lezione 03" required>
         </div>
 
@@ -113,7 +113,7 @@
                 <span class="t-name">Claude AI</span>
                 <span class="t-desc">Genera LaTeX semantico dalle fonti<br>Richiede ANTHROPIC_API_KEY</span>
               </div>
-              <div class="toggle-wrap" style="--tc:#00e5ff">
+              <div class="toggle-wrap toggle-claude">
                 <input type="checkbox" id="opt-claude" checked><label for="opt-claude"></label>
               </div>
             </div>
@@ -122,7 +122,7 @@
                 <span class="t-name">OCR formule (pix2tex)</span>
                 <span class="t-desc">Riconosce formule nelle immagini<br>Lento, richiede venv dedicato</span>
               </div>
-              <div class="toggle-wrap" style="--tc:#f59e0b">
+              <div class="toggle-wrap toggle-ocr">
                 <input type="checkbox" id="opt-ocr"><label for="opt-ocr"></label>
               </div>
             </div>
@@ -131,7 +131,7 @@
                 <span class="t-name">Contesto corso</span>
                 <span class="t-desc">Legge/aggiorna corso_context.json<br>Evita ri-spiegare concetti già noti</span>
               </div>
-              <div class="toggle-wrap" style="--tc:#10b981">
+              <div class="toggle-wrap toggle-context">
                 <input type="checkbox" id="opt-context" checked><label for="opt-context"></label>
               </div>
             </div>
@@ -142,7 +142,7 @@
           <!-- Trascrizione & Output -->
           <div class="config-group">
             <div class="config-group-label">Trascrizione &amp; Output</div>
-            <div class="config-field" style="gap:6px">
+            <div class="config-field config-field-sm">
               <label>Modello Whisper</label>
               <div class="whisper-row">
                 <select class="config-select" id="opt-whisper">
@@ -156,30 +156,30 @@
               </div>
               <div id="whisperEstimate" class="whisper-est"></div>
             </div>
-            <div class="config-field" style="gap:6px">
-              <label>Cartella output <span style="color:var(--muted);font-size:.85em">(da titolo)</span></label>
-              <input type="text" id="opt-output" readonly placeholder="generato dal titolo…" style="border-left-color:var(--c3);opacity:.7;cursor:default">
+            <div class="config-field config-field-sm">
+              <label>Cartella output <span class="label-muted">(da titolo)</span></label>
+              <input type="text" id="opt-output" readonly placeholder="generato dal titolo…" class="input-output">
             </div>
-            <div style="margin:2px 0 -2px;">
+            <div class="adv-toggle-wrap">
               <button type="button" id="advancedToggle" onclick="toggleAdvanced()" class="adv-toggle-btn">▸ opzioni avanzate</button>
             </div>
-            <div class="config-field" style="gap:6px;display:none;" id="ttl-field">
-              <label>Retention output <span style="opacity:.6">(giorni, poi cancellazione automatica)</span></label>
-              <div style="display:flex;gap:8px;align-items:center;">
-                <input type="number" id="opt-ttl" min="1" max="365" value="7" style="border-left-color:var(--c3);width:90px;" oninput="saveTtl()">
-                <span style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);">giorni</span>
-                <span id="ttlSaved" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--c3);display:none;">✓ salvato</span>
+            <div class="config-field config-field-sm field-hidden" id="ttl-field">
+              <label>Retention output <span class="label-faint">(giorni, poi cancellazione automatica)</span></label>
+              <div class="ttl-row">
+                <input type="number" id="opt-ttl" min="1" max="365" value="7" class="input-ttl" oninput="saveTtl()">
+                <span class="ttl-unit">giorni</span>
+                <span id="ttlSaved" class="ttl-saved">✓ salvato</span>
               </div>
             </div>
-            <div class="config-field" style="gap:6px;display:none;" id="startfrom-field">
-              <label>Start-from <span style="opacity:.6">(0 = auto da state.json)</span></label>
-              <input type="number" id="opt-startfrom" value="0" min="0" style="border-left-color:var(--c2)">
+            <div class="config-field config-field-sm field-hidden" id="startfrom-field">
+              <label>Start-from <span class="label-faint">(0 = auto da state.json)</span></label>
+              <input type="number" id="opt-startfrom" value="0" min="0" class="input-startfrom">
             </div>
-            <div class="config-field" style="gap:6px">
-              <label>Continua corso <span style="opacity:.6;font-size:.85em">(Job ID della sessione precedente)</span></label>
-              <input type="text" id="opt-continue" list="jobids-datalist" placeholder="es. 8ccdc0a7 — lascia vuoto per nuovo corso" style="border-left-color:var(--c4);font-family:'JetBrains Mono',monospace;font-size:.72rem;" autocomplete="off">
+            <div class="config-field config-field-sm">
+              <label>Continua corso <span class="label-faint label-muted">(Job ID della sessione precedente)</span></label>
+              <input type="text" id="opt-continue" list="jobids-datalist" placeholder="es. 8ccdc0a7 — lascia vuoto per nuovo corso" class="input-continue" autocomplete="off">
               <datalist id="jobids-datalist"></datalist>
-              <span id="continue-hint" class="continue-hint" style="display:none"></span>
+              <span id="continue-hint" class="continue-hint field-hidden"></span>
             </div>
           </div>
         </div>
@@ -201,14 +201,15 @@
 
         <!-- Config status tags (aggiornati via JS, visibili come riepilogo impostazioni) -->
         <div class="config-status">
-          <span class="config-tag active" id="tag-claude" style="--tag-color:#00e5ff">claude ON</span>
-          <span class="config-tag" id="tag-ocr" style="--tag-color:#f59e0b">ocr OFF</span>
-          <span class="config-tag active" id="tag-context" style="--tag-color:#10b981">context ON</span>
-          <span class="config-tag active" id="tag-whisper" style="--tag-color:#7c3aed">whisper:base</span>
-          <span class="config-tag active" id="tag-subject" style="--tag-color:#f59e0b">subject:auto</span>
-          <span class="config-tag active" id="tag-output" style="--tag-color:#64748b">out:./output</span>
-          <span class="config-tag active" id="tag-start" style="--tag-color:#64748b">start:0</span>
-          <span class="config-tag" id="tag-continue" style="--tag-color:#f59e0b;display:none">continue:—</span>
+          <span class="config-tag active tag-claude" id="tag-claude">claude ON</span>
+          <span class="config-tag tag-ocr" id="tag-ocr">ocr OFF</span>
+          <span class="config-tag active tag-context" id="tag-context">context ON</span>
+          <span class="config-tag active tag-whisper" id="tag-whisper">whisper:base</span>
+          <span class="config-tag active tag-subject" id="tag-subject">subject:auto</span>
+          <span class="config-tag active tag-output" id="tag-output">out:./output</span>
+          <span class="config-tag active tag-start" id="tag-start">start:0</span>
+          <!-- style="display:none" rimane: il JS gestisce il toggle con style.display (non può usare classList per compatibilità con logica esistente) -->
+          <span class="config-tag tag-continue" id="tag-continue" style="display:none">continue:—</span>
           <!-- ── RUN ───────────────────────────────────────────────── -->
           <div class="run-section">
             <button class="run-btn" id="runBtn" title="Carica almeno un file e inserisci un titolo">▶ AVVIA PIPELINE</button>
@@ -221,12 +222,12 @@
     </div>
 
     <!-- ── PRE-FLIGHT (titolo + file pronti) ─────────────────── -->
-    <div class="preflight-row" id="preflightRow" style="display:none;">
+    <div class="preflight-row field-hidden" id="preflightRow">
       <span class="pf-label">↳</span>
     </div>
 
     <!-- ── LIVE STATUS (nascosto a riposo) ───────────────────── -->
-    <div class="live-status" id="liveStatus" style="display:none;">
+    <div class="live-status field-hidden" id="liveStatus">
       <div class="live-header">
         <div class="live-dot"></div>
         <div class="live-phase" id="livePhase">In attesa…</div>
@@ -239,29 +240,29 @@
     </div>
 
     <!-- ── LEZIONI PRECEDENTI ────────────────────────────────── -->
-    <div id="historyPanel" class="panel panel-history" style="display:none;">
+    <div id="historyPanel" class="panel panel-history field-hidden">
       <div class="panel-header" onclick="toggleHistory()">
         <span class="panel-title">// lezioni precedenti</span>
         <div class="panel-meta">
-          <span id="historyCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+          <span id="historyCount" class="panel-count"></span>
           <span id="historyArrow" class="panel-arrow">▲</span>
         </div>
       </div>
-      <div id="historyBody" class="panel-body" style="display:block;">
-        <div id="historyList" style="display:flex;flex-direction:column;gap:5px;"></div>
+      <div id="historyBody" class="panel-body panel-body-open">
+        <div id="historyList" class="history-list-inner"></div>
       </div>
     </div>
 
     <!-- ── LOG PIPELINE ──────────────────────────────────────── -->
-    <div id="logPanel" class="panel panel-log" style="display:none;">
+    <div id="logPanel" class="panel panel-log field-hidden">
       <div class="panel-header" onclick="toggleLogPanel()">
         <span class="panel-title">// log pipeline</span>
         <div class="panel-meta">
-          <span id="logLineCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+          <span id="logLineCount" class="panel-count"></span>
           <span id="logToggleArrow" class="panel-arrow">▼</span>
         </div>
       </div>
-      <div id="logPanelBody" class="panel-body" style="display:none;">
+      <div id="logPanelBody" class="panel-body field-hidden">
         <pre id="logOutput" class="log-pre"></pre>
       </div>
     </div>
@@ -276,14 +277,14 @@
     </div>
 
     <!-- ── SPLIT EDITOR: LaTeX (sx) + PDF viewer (dx) ────────── -->
-    <div id="splitEditorWrapper" style="display:none;">
+    <div id="splitEditorWrapper" class="field-hidden">
 
-      <div id="latexPreviewPanel" class="panel panel-latex" style="display:none;">
+      <div id="latexPreviewPanel" class="panel panel-latex field-hidden">
         <div class="panel-header" onclick="toggleLatexPreview()">
           <span class="panel-title">// <span id="latexCurrentFile">main.tex</span></span>
           <div class="panel-meta">
-            <button id="saveTexBtn" onclick="event.stopPropagation();saveTexFile()" class="job-btn" style="color:#10b981;background:color-mix(in srgb,#10b981 12%,transparent);border-color:color-mix(in srgb,#10b981 35%,transparent);">💾 Salva</button>
-            <button id="recompileBtn" onclick="event.stopPropagation();recompileLatex()" class="job-btn" style="color:var(--c4);background:color-mix(in srgb,var(--c4) 12%,transparent);border-color:color-mix(in srgb,var(--c4) 35%,transparent);">⚙ Ricompila</button>
+            <button id="saveTexBtn" onclick="event.stopPropagation();saveTexFile()" class="job-btn btn-save-tex">💾 Salva</button>
+            <button id="recompileBtn" onclick="event.stopPropagation();recompileLatex()" class="job-btn btn-recompile">⚙ Ricompila</button>
             <span id="noPdfBadge" class="pdf-badge pdf-badge-err" onclick="togglePdfErrors()">✗ PDF non compilato ▾</span>
             <span id="previewToggleArrow" class="panel-arrow">▲</span>
           </div>
@@ -292,35 +293,35 @@
           <div id="texFileTabs"></div>
           <textarea id="latexPreviewCode" spellcheck="false"></textarea>
         </div>
-        <div id="pdfErrorsBody" class="panel-body" style="display:none;flex-shrink:0;">
-          <pre id="pdfErrorsCode" style="margin:0;padding:12px;background:color-mix(in srgb,#ef4444 8%,var(--bg));border:1px solid color-mix(in srgb,#ef4444 25%,transparent);border-radius:8px;font-family:'JetBrains Mono',monospace;font-size:.6rem;overflow-x:auto;max-height:220px;overflow-y:auto;white-space:pre-wrap;"></pre>
+        <div id="pdfErrorsBody" class="panel-body field-hidden">
+          <pre id="pdfErrorsCode" class="pdf-errors-pre"></pre>
         </div>
       </div>
 
-      <div id="pdfViewerPanel" class="panel" style="display:none;background:var(--surface2);">
+      <div id="pdfViewerPanel" class="panel panel-pdf field-hidden">
         <div class="panel-header">
-          <span class="panel-title" style="color:var(--c1);">// PDF compilato</span>
+          <span class="panel-title panel-title-c1">// PDF compilato</span>
           <div class="panel-meta">
-            <span id="pdfJobLabel" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+            <span id="pdfJobLabel" class="pdf-job-label"></span>
           </div>
         </div>
         <div class="panel-body">
-          <iframe id="pdfFrame" src="" style="width:100%;border:none;background:#fff;"></iframe>
+          <iframe id="pdfFrame" src="" class="pdf-frame"></iframe>
         </div>
       </div>
 
     </div>
 
     <!-- Pannello immagini -->
-    <div id="imagesPanel" style="display:none;" class="panel">
+    <div id="imagesPanel" class="panel field-hidden">
       <div class="panel-header">
         <span class="panel-title">// images/</span>
         <div class="panel-meta">
-          <span id="imagesCount" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);"></span>
+          <span id="imagesCount" class="images-count"></span>
         </div>
       </div>
       <div class="panel-body">
-        <div id="imagesThumbnails" style="display:flex;flex-wrap:wrap;gap:8px;padding:8px 0;"></div>
+        <div id="imagesThumbnails" class="images-thumbnails"></div>
       </div>
     </div>
 
@@ -328,21 +329,21 @@
     <div class="info-toggle">
       <button class="info-toggle-btn" id="infoToggleBtn" onclick="toggleInfoSection()">// come funziona la pipeline ▸</button>
     </div>
-    <div id="infoSection" style="display:none;">
+    <div id="infoSection" class="field-hidden">
     <div class="arrow-down"><div class="chevron"></div></div>
     <div class="section-label">// 03 · preprocessing</div>
     <div class="steps">
-      <div class="step" style="--sc:#ef4444">
+      <div class="step step-teams">
         <div class="step-num">01</div>
         <div><div class="step-title">TeamsHack · Download video</div><div class="step-desc"><strong>ffmpeg</strong> scarica il videomanifest da Teams → .mkv + audio .mp3 mono</div></div>
         <div class="step-badge">TeamsHack.py</div>
       </div>
-      <div class="step" style="--sc:#7c3aed">
+      <div class="step step-pipeline">
         <div class="step-num">02</div>
         <div><div class="step-title">ffmpeg · Estrazione audio da video</div><div class="step-desc">Qualsiasi <strong>.mp4/.mkv</strong> → audio <strong>.mp3 mono</strong> — Cache automatica</div></div>
         <div class="step-badge">pipeline.py</div>
       </div>
-      <div class="step" style="--sc:#00e5ff">
+      <div class="step step-whisper">
         <div class="step-num">03</div>
         <div><div class="step-title">Whisper · Trascrizione audio</div><div class="step-desc"><strong>openai-whisper</strong> locale — output: testo con timestamp <strong>[MM:SS]</strong> → cache .transcript.txt</div></div>
         <div class="step-badge">whisper</div>
@@ -353,17 +354,17 @@
 
     <div class="section-label">// 04 · elaborazione slide</div>
     <div class="steps">
-      <div class="step" style="--sc:#f59e0b">
+      <div class="step step-slide">
         <div class="step-num">04</div>
         <div><div class="step-title">extractor · Parsing .pptx</div><div class="step-desc">Ogni shape → <strong>testo</strong> / <strong>immagine</strong> / <strong>formula OMML</strong> — ordinati per posizione Y · slide_renderer genera le anteprime PNG delle slide</div></div>
         <div class="step-badge">extractor.py</div>
       </div>
-      <div class="step" style="--sc:#f59e0b">
+      <div class="step step-slide">
         <div class="step-num">05</div>
         <div><div class="step-title">omml2latex · Formule native PowerPoint</div><div class="step-desc">XML <strong>OMML</strong> → conversione <strong>LaTeX</strong> diretta senza OCR</div></div>
         <div class="step-badge">omml2latex.py</div>
       </div>
-      <div class="step" style="--sc:#f59e0b">
+      <div class="step step-slide">
         <div class="step-num">06</div>
         <div><div class="step-title">formula_detector + pix2tex · OCR immagini</div><div class="step-desc">Euristiche aspect ratio + saturazione → se formula: <strong>pix2tex</strong> → LaTeX via OCR</div></div>
         <div class="step-badge">pix2tex</div>
@@ -374,17 +375,17 @@
 
     <div class="section-label">// 05 · preprocessor — ottimizzazione prompt</div>
     <div class="steps">
-      <div class="step" style="--sc:#a78bfa">
+      <div class="step step-preprocessor">
         <div class="step-num">P1</div>
         <div><div class="step-title">Rilevamento materia + prompt specializzato</div><div class="step-desc">Analisi keyword → profilo <strong>ingegneria / matematica / fisica / medicina / economia / diritto</strong> → istruzioni LaTeX specifiche iniettate nel prompt</div></div>
         <div class="step-badge">preprocessor.py</div>
       </div>
-      <div class="step" style="--sc:#a78bfa">
+      <div class="step step-preprocessor">
         <div class="step-num">P2</div>
         <div><div class="step-title">Compressione adattiva del prompt</div><div class="step-desc">Stima token → <strong>RAW_CLEAN</strong> (&lt;80k) · <strong>DENSE</strong> (80–180k) · <strong>OUTLINE</strong> (&gt;180k) — Claude riceve la trascrizione con timestamp <strong>[MM:SS]</strong> per seguire l'evoluzione della lezione</div></div>
         <div class="step-badge">preprocessor.py</div>
       </div>
-      <div class="step" style="--sc:#a78bfa">
+      <div class="step step-preprocessor">
         <div class="step-num">P3</div>
         <div><div class="step-title">Contesto corso — corso_context.json</div><div class="step-desc">Legge lezioni precedenti → Claude non ri-spiega concetti già noti — aggiornato automaticamente</div></div>
         <div class="step-badge">preprocessor.py</div>
@@ -395,12 +396,12 @@
 
     <div class="section-label">// 06 · generazione LaTeX</div>
     <div class="branch-row">
-      <div class="branch-card" style="--bc:#7c3aed">
+      <div class="branch-card branch-skipai">
         <div class="branch-tag">skip-ai attivo</div>
         <h4>Struttura automatica</h4>
         <p>Usa direttamente extractor:<br>ogni slide → <strong>\subsection{}</strong><br>OMML / pix2tex → <strong>\begin{equation}</strong><br>immagini → <strong>\includegraphics</strong><br><br><strong>Veloce, offline, nessuna API</strong></p>
       </div>
-      <div class="branch-card" style="--bc:#00e5ff">
+      <div class="branch-card branch-claude">
         <div class="branch-tag">Claude API attivo</div>
         <h4>Generazione intelligente</h4>
         <p>Prompt arricchito: tipo materia + contesto corso + slide allineate alle spiegazioni orali<br><br>Output: <strong>\section / \subsection</strong> semantici, definizioni, teoremi, esempi<br><br><strong>Qualità massima, richiede API key</strong></p>
@@ -409,8 +410,8 @@
 
     <div class="arrow-down"><div class="chevron"></div></div>
 
-    <div class="steps" style="margin-top:0">
-      <div class="step" style="--sc:#10b981">
+    <div class="steps steps-flush">
+      <div class="step step-output">
         <div class="step-num">07</div>
         <div><div class="step-title">builder · Assemblaggio file .tex</div><div class="step-desc"><strong>lezione_NN.tex</strong> per lezione · <strong>run_NN.tex</strong> con \part{sessione} · <strong>main.tex</strong> con \input — Preambolo: amsmath, amssymb, amsthm, graphicx, hyperref, fancyhdr, babel, listings</div></div>
         <div class="step-badge">builder.py</div>
@@ -420,7 +421,7 @@
     <div class="arrow-down"><div class="chevron"></div></div>
 
     <div class="section-label">// 07 · output</div>
-    <div class="output-row" style="grid-template-columns:repeat(5,1fr)">
+    <div class="output-row output-row-5">
       <div class="output-card"><div class="icon">📘</div><div class="name">main.tex</div><div class="desc">Documento principale<br>\input tutti i run<br>Compila con pdflatex</div></div>
       <div class="output-card"><div class="icon">📂</div><div class="name">run_NN.tex</div><div class="desc">\part{Titolo — data}<br>raggruppa le lezioni<br>di ogni sessione</div></div>
       <div class="output-card"><div class="icon">📝</div><div class="name">lezione_NN.tex</div><div class="desc">Un file per lezione<br>\chapter{} + sezioni<br>formule + immagini</div></div>
@@ -429,12 +430,12 @@
     </div>
 
     <div class="legend">
-      <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>TeamsHack.py</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#7c3aed"></div>pipeline.py</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#00e5ff"></div>Whisper</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#f59e0b"></div>moduli pptx</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#a78bfa"></div>preprocessor.py</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#10b981"></div>output LaTeX</div>
+      <div class="legend-item"><div class="legend-dot dot-teams"></div>TeamsHack.py</div>
+      <div class="legend-item"><div class="legend-dot dot-pipeline"></div>pipeline.py</div>
+      <div class="legend-item"><div class="legend-dot dot-whisper"></div>Whisper</div>
+      <div class="legend-item"><div class="legend-dot dot-pptx"></div>moduli pptx</div>
+      <div class="legend-item"><div class="legend-dot dot-pre"></div>preprocessor.py</div>
+      <div class="legend-item"><div class="legend-dot dot-output"></div>output LaTeX</div>
     </div>
     </div><!-- /infoSection -->
 
@@ -465,15 +466,15 @@ async function _checkHealth(){
     const h=await(await fetch(`${API}/health`)).json();
     const container=document.getElementById('healthBadges');
     if(!container)return;
-    const sysOk=(ok,label)=>`<span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,${ok?'#10b981':'#ef4444'} 12%,transparent);border:1px solid color-mix(in srgb,${ok?'#10b981':'#ef4444'} 35%,transparent);color:${ok?'#10b981':'#ef4444'};">${label}</span>`;
+    const sysOk=(ok,label)=>`<span class="health-badge ${ok?'health-badge-ok':'health-badge-err'}">${label}</span>`;
     let html='';
     if(h.api_key){
-      html+=`<span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#10b981 12%,transparent);border:1px solid color-mix(in srgb,#10b981 35%,transparent);color:#10b981;">✓ API key</span>`;
-      html+=`<button onclick="_removeApiKey()" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#ef4444 10%,transparent);border:1px solid color-mix(in srgb,#ef4444 25%,transparent);color:#ef4444;cursor:pointer;">× rimuovi</button>`;
+      html+=`<span class="health-badge health-badge-ok">✓ API key</span>`;
+      html+=`<button onclick="_removeApiKey()" class="health-btn-remove">× rimuovi</button>`;
     } else {
-      html+=`<span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:#f59e0b;">⚠ API key mancante</span>`;
-      html+=`<input id="apiKeyInput" type="password" placeholder="sk-ant-…" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,#f59e0b 8%,#11151c);border:1px solid color-mix(in srgb,#f59e0b 30%,transparent);color:#e2e8f0;outline:none;width:200px;">`;
-      html+=`<button onclick="_saveApiKey()" style="font-family:'JetBrains Mono',monospace;font-size:.58rem;padding:2px 8px;border-radius:4px;background:color-mix(in srgb,#f59e0b 15%,transparent);border:1px solid color-mix(in srgb,#f59e0b 40%,transparent);color:#f59e0b;cursor:pointer;">Salva</button>`;
+      html+=`<span class="health-badge-warn">⚠ API key mancante</span>`;
+      html+=`<input id="apiKeyInput" type="password" placeholder="sk-ant-…" class="health-input-apikey">`;
+      html+=`<button onclick="_saveApiKey()" class="health-btn-save">Salva</button>`;
     }
     html+=sysOk(h.ffmpeg,   h.ffmpeg   ?'✓ ffmpeg'  :'✗ ffmpeg mancante');
     html+=sysOk(h.pdflatex, h.pdflatex ?'✓ pdflatex':'✗ pdflatex mancante');
@@ -650,16 +651,16 @@ async function _loadImages(id){
     count.textContent=`${imgs.length} file`;
     imgs.forEach(name=>{
       const wrap=document.createElement('div');
-      wrap.style.cssText='display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;';
+      wrap.className='img-thumb-wrap';
       const img=document.createElement('img');
       img.src=`${API}/image/${id}/${encodeURIComponent(name)}`;
       img.alt=name;
       img.title=name;
-      img.style.cssText='width:100px;height:80px;object-fit:contain;border-radius:6px;border:1px solid var(--border2);background:var(--surface2);padding:2px;';
+      img.className='img-thumb';
       img.onclick=()=>window.open(img.src,'_blank');
       const lbl=document.createElement('span');
       lbl.textContent=name;
-      lbl.style.cssText='font-family:"JetBrains Mono",monospace;font-size:.5rem;color:var(--muted);max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:center;';
+      lbl.className='img-thumb-label';
       wrap.appendChild(img);wrap.appendChild(lbl);
       grid.appendChild(wrap);
     });
@@ -750,29 +751,30 @@ async function _loadHistory(){
     panel.style.display='block';
     if(!list.length){
       countEl.textContent='';
-      listEl.innerHTML='<div style="font-family:\'JetBrains Mono\',monospace;font-size:.65rem;color:var(--muted);padding:8px 0;text-align:center;opacity:.6;">nessuna lezione precedente</div>';
+      listEl.innerHTML='<div class="history-empty">nessuna lezione precedente</div>';
       return;
     }
     countEl.textContent=`${list.length} lezioni`;
     const shown=list.slice(0,15);
     listEl.innerHTML=shown.map(j=>{
       const done=j.status==='done';
-      const dotColor=done?'#10b981':'#ef4444';
+      const itemClass=done?'history-item-done':'history-item-err';
+      const dotClass=done?'history-dot-done':'history-dot-err';
       const files=(j.files||[]).slice(0,2).join(', ')+(j.files?.length>2?` +${j.files.length-2}`:'');
-      return`<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;background:color-mix(in srgb,${dotColor} 5%,transparent);border:1px solid color-mix(in srgb,${dotColor} 12%,transparent);">
-        <span style="width:6px;height:6px;border-radius:50%;background:${dotColor};flex-shrink:0;"></span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--text);font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${j.title||''}">${j.title||'—'}</span>
-        ${files?`<span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${files}">${files}</span>`:''}
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;" title="${j.created_at?new Date(j.created_at).toLocaleString('it-IT'):''}">${_timeAgo(j.created_at)}</span>
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.58rem;color:var(--muted);flex-shrink:0;">${j.id}</span>
-        ${done&&j.has_zip?`<a href="${API}/download/${j.id}" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#10b981 15%,transparent);border:1px solid color-mix(in srgb,#10b981 35%,transparent);color:#10b981;text-decoration:none;flex-shrink:0;">⬇ ZIP</a>`:''}
-        ${done?`<button onclick="previewFromHistory('${j.id}')" title="Anteprima main.tex" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#818cf8 15%,transparent);border:1px solid color-mix(in srgb,#818cf8 35%,transparent);color:#818cf8;cursor:pointer;">👁 .tex</button>`:''}
-        ${done?`<button onclick="showPrompt('${j.id}')" title="Mostra prompt inviato a Claude" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,#f59e0b 15%,transparent);border:1px solid color-mix(in srgb,#f59e0b 35%,transparent);color:#f59e0b;cursor:pointer;">📄 Prompt</button>`:''}
-        ${done?`<button onclick="useJobId('${j.id}')" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:color-mix(in srgb,var(--c4) 15%,transparent);border:1px solid color-mix(in srgb,var(--c4) 35%,transparent);color:var(--c4);cursor:pointer;">▶ Continua</button>`:''}
-        <button onclick="deleteJobFromHistory('${j.id}')" title="Elimina job e output" style="font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:2px 7px;border-radius:4px;background:none;border:1px solid color-mix(in srgb,#ef4444 25%,transparent);color:#ef4444;cursor:pointer;opacity:.55;transition:opacity .15s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='.55'">✕</button>
+      return`<div class="history-item ${itemClass}">
+        <span class="history-dot ${dotClass}"></span>
+        <span class="history-title" title="${j.title||''}">${j.title||'—'}</span>
+        ${files?`<span class="history-files" title="${files}">${files}</span>`:''}
+        <span class="history-time" title="${j.created_at?new Date(j.created_at).toLocaleString('it-IT'):''}">${_timeAgo(j.created_at)}</span>
+        <span class="history-id">${j.id}</span>
+        ${done&&j.has_zip?`<a href="${API}/download/${j.id}" class="btn-history btn-zip">⬇ ZIP</a>`:''}
+        ${done?`<button onclick="previewFromHistory('${j.id}')" title="Anteprima main.tex" class="btn-history btn-tex">👁 .tex</button>`:''}
+        ${done?`<button onclick="showPrompt('${j.id}')" title="Mostra prompt inviato a Claude" class="btn-history btn-prompt">📄 Prompt</button>`:''}
+        ${done?`<button onclick="useJobId('${j.id}')" class="btn-history btn-continue-job">▶ Continua</button>`:''}
+        <button onclick="deleteJobFromHistory('${j.id}')" title="Elimina job e output" class="btn-history btn-delete-job">✕</button>
       </div>`;
     }).join('');
-    if(list.length>15)listEl.innerHTML+=`<div style="font-family:'JetBrains Mono',monospace;font-size:.6rem;color:var(--muted);text-align:center;padding:6px 0;opacity:.6;">… e altre ${list.length-15} lezioni</div>`;
+    if(list.length>15)listEl.innerHTML+=`<div class="history-more">… e altre ${list.length-15} lezioni</div>`;
   }catch(_){}
 }
 
@@ -1029,6 +1031,7 @@ function updatePreflightRow(){
   const colorMap={audio:'#00e5ff',video:'#7c3aed',slide:'#f59e0b',doc:'#10b981',teams:'#ef4444'};
   const iconMap={audio:'🎵',video:'🎬',slide:'📊',doc:'📄',teams:'🌐'};
   let html='<span class="pf-label">↳</span>';
+  // style="--cc:X" rimane inline: colore calcolato dinamicamente da colorMap[t] a runtime
   Object.entries(fileState).forEach(([t,files])=>{
     if(!files.length)return;
     const totalSize=files.reduce((s,f)=>s+(f.size||0),0);
@@ -1036,6 +1039,7 @@ function updatePreflightRow(){
     html+=`<span class="pf-chip hi" style="--cc:${colorMap[t]}">${iconMap[t]} ${files.length} ${t}${sizeStr}</span>`;
   });
   const claude=document.getElementById('opt-claude').checked;
+  // style="--cc:X" rimane inline: colore dipende dallo stato runtime del toggle Claude
   html+=`<span class="pf-chip hi" style="--cc:${claude?'#00e5ff':'#64748b'}">${claude?'✦ Claude':'⚡ skip-ai'}</span>`;
   const ocr=document.getElementById('opt-ocr').checked;
   if(ocr)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">🔬 OCR</span>`;
@@ -1413,15 +1417,15 @@ function _buildPromptModal(){
   if(document.getElementById('promptModal')) return;
   const el=document.createElement('div');
   el.id='promptModal';
-  el.style.cssText='display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.75);backdrop-filter:blur(3px);justify-content:center;align-items:center;';
+  el.className='prompt-modal';
   el.innerHTML=`
-    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;width:min(900px,95vw);max-height:88vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.5);">
-      <div style="display:flex;align-items:center;gap:10px;padding:14px 18px;border-bottom:1px solid var(--border);flex-shrink:0;">
-        <span style="font-family:'JetBrains Mono',monospace;font-size:.8rem;font-weight:700;color:var(--text);flex:1;">📄 Prompt inviato a Claude</span>
-        <div id="promptTabs" style="display:flex;gap:6px;"></div>
-        <button onclick="document.getElementById('promptModal').style.display='none'" style="background:none;border:none;color:var(--muted);font-size:1.1rem;cursor:pointer;padding:2px 6px;border-radius:4px;" title="Chiudi">✕</button>
+    <div class="prompt-modal-inner">
+      <div class="prompt-modal-header">
+        <span class="prompt-modal-title">📄 Prompt inviato a Claude</span>
+        <div id="promptTabs" class="prompt-modal-tabs"></div>
+        <button onclick="document.getElementById('promptModal').style.display='none'" class="prompt-modal-close" title="Chiudi">✕</button>
       </div>
-      <pre id="promptContent" style="margin:0;padding:18px;overflow-y:auto;font-family:'JetBrains Mono',monospace;font-size:.68rem;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;tab-size:2;flex:1;"></pre>
+      <pre id="promptContent" class="prompt-content"></pre>
     </div>`;
   el.addEventListener('click',e=>{ if(e.target===el) el.style.display='none'; });
   document.body.appendChild(el);
@@ -1439,12 +1443,12 @@ async function showPrompt(jobId){
     const data=await(await fetch(`${API}/prompt/${jobId}`)).json();
     if(!Array.isArray(data)||!data.length){ content.textContent='Nessun prompt trovato.'; return; }
     let active=0;
-    const show=i=>{ active=i; content.textContent=data[i].content; tabs.querySelectorAll('button').forEach((b,bi)=>{ b.style.fontWeight=bi===i?'700':'400'; b.style.background=bi===i?'color-mix(in srgb,var(--accent) 18%,transparent)':'none'; }); };
+    const show=i=>{ active=i; content.textContent=data[i].content; tabs.querySelectorAll('button').forEach((b,bi)=>{ b.classList.toggle('active',bi===i); }); };
     if(data.length>1){
       data.forEach((p,i)=>{
         const b=document.createElement('button');
         b.textContent=p.filename.replace('prompt_','').replace('.txt','');
-        b.style.cssText='font-family:\'JetBrains Mono\',monospace;font-size:.6rem;padding:2px 8px;border-radius:4px;border:1px solid var(--border);color:var(--text);cursor:pointer;background:none;';
+        b.className='prompt-tab';
         b.onclick=()=>show(i);
         tabs.appendChild(b);
       });
