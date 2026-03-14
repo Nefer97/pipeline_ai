@@ -1217,6 +1217,12 @@ async def serve_schema():
     index_path = Path(__file__).parent / "schema.htm"
     return FileResponse(str(index_path), media_type="text/html")
 
+@app.get("/docs.htm")
+async def serve_docs():
+    """Serve la documentazione (docs.htm)."""
+    index_path = Path(__file__).parent / "docs.htm"
+    return FileResponse(str(index_path), media_type="text/html")
+
 
 @app.get("/health")
 async def health():

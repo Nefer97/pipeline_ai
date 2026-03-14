@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Appunti AI — Documentazione</title>
+<meta name="description" content="Documentazione completa di Appunti AI: installazione, pipeline, architettura, endpoint API e troubleshooting.">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/favicon_io/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon_io/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon_io/favicon-16x16.png">
+<link rel="manifest" href="assets/favicon_io/site.webmanifest">
+<link rel="stylesheet" href="assets/css/shared.css">
+<style>
+/* ── LAYOUT ── */
+.docs-layout {
+  display: flex;
+  padding-top: 48px;
+  min-height: 100vh;
+  position: relative;
+  z-index: 1;
+}
+
+/* ── SIDEBAR ── */
+.docs-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 48px;
+  height: calc(100vh - 48px);
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface) 60%, transparent);
+  backdrop-filter: blur(8px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  padding: 24px 0 40px;
+  transition: background .25s, border-color .25s;
+}
+
+.sidebar-section {
+  margin-bottom: 4px;
+}
+
+.sidebar-section-label {
+  font-size: .56rem;
+  letter-spacing: .22em;
+  color: var(--muted);
+  text-transform: uppercase;
+  padding: 16px 20px 6px;
+  display: block;
+  opacity: .7;
+}
+
+.sidebar-item {
+  display: block;
+  font-size: .7rem;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 7px 20px 7px 18px;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+  letter-spacing: .02em;
+  line-height: 1.3;
+  user-select: none;
+}
+.sidebar-item:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--item-color, var(--c1)) 6%, transparent);
+}
+.sidebar-item.active {
+  color: var(--item-color, var(--c1));
+  background: color-mix(in srgb, var(--item-color, var(--c1)) 10%, transparent);
+  border-left: 2px solid var(--item-color, var(--c1));
+  font-weight: 600;
+}
+
+/* ── MAIN CONTENT ── */
+.docs-main {
+  flex: 1;
+  min-width: 0;
+  padding: 48px 56px 80px;
+}
+
+.docs-content {
+  width: auto;
+}
+
+/* Content typography */
+.doc-h2 {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: -.03em;
+  color: var(--item-color, var(--text));
+  margin-bottom: 6px;
+  line-height: 1.2;
+}
+
+.doc-sub {
+  font-size: .72rem;
+  color: var(--muted);
+  letter-spacing: .08em;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.doc-body {
+  font-size: .78rem;
+  color: var(--muted2);
+  line-height: 1.9;
+}
+
+.doc-body p {
+  margin-bottom: 16px;
+  color: var(--muted2);
+  line-height: 1.9;
+}
+.doc-body p:last-child { margin-bottom: 0; }
+
+.doc-body strong {
+  color: var(--item-color, var(--text));
+  font-weight: 600;
+}
+
+.doc-body .dp-item {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+  align-items: flex-start;
+}
+.doc-body .dp-item::before {
+  content: '→';
+  color: var(--item-color, var(--muted));
+  flex-shrink: 0;
+  margin-top: 1px;
+  font-weight: 600;
+}
+
+.doc-body .dp-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 24px 0;
+}
+
+.doc-body .dp-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin-bottom: 8px;
+  font-size: .74rem;
+  padding: 6px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
+}
+.doc-body .dp-row:last-of-type { border-bottom: none; }
+.doc-body .dp-row .dp-key {
+  color: var(--item-color, var(--text));
+  font-weight: 600;
+  flex-shrink: 0;
+  max-width: 50%;
+}
+.doc-body .dp-row .dp-val {
+  color: var(--muted);
+  text-align: right;
+}
+
+.doc-body code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .7rem;
+  background: color-mix(in srgb, var(--item-color, var(--border)) 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--item-color, var(--border)) 20%, transparent);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--item-color, var(--text));
+}
+
+.doc-body pre {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: .7rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--item-color, var(--border));
+  padding: 14px 16px;
+  border-radius: 8px;
+  margin: 12px 0 16px;
+  overflow-x: auto;
+  line-height: 1.75;
+  color: var(--text);
+  white-space: pre;
+  position: relative;
+  max-width: 40%;
+}
+.pre-copy {
+  position: absolute;
+  top: 7px; right: 8px;
+  background: color-mix(in srgb, var(--surface2) 80%, transparent);
+  border: 1px solid var(--border2);
+  border-radius: 5px;
+  padding: 4px 6px;
+  line-height: 0;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.pre-copy:hover {
+  color: var(--text);
+  background: color-mix(in srgb, var(--c1) 10%, var(--surface2));
+  border-color: var(--c1);
+}
+.pre-copy.copied {
+  color: var(--c3);
+  border-color: var(--c3);
+}
+
+.doc-body .section-header {
+  font-family: 'Syne', sans-serif;
+  font-size: .8rem;
+  font-weight: 700;
+  color: var(--item-color, var(--text));
+  margin: 24px 0 10px;
+  letter-spacing: .04em;
+}
+
+/* ── MOBILE NAV ── */
+.docs-mobile-nav { display: none; }
+.sidebar-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.55);
+  z-index: 250;
+  backdrop-filter: blur(2px);
+  transition: opacity .25s;
+}
+.sidebar-backdrop.open { display: block; }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 900px) {
+  .docs-sidebar {
+    position: fixed;
+    top: 0; left: 0; bottom: 0;
+    z-index: 300;
+    width: 260px;
+    padding-top: 48px;
+    transform: translateX(-100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+    box-shadow: none;
+  }
+  .docs-sidebar.open {
+    transform: translateX(0);
+    box-shadow: 8px 0 32px rgba(0,0,0,.4);
+  }
+  .docs-mobile-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px 0 24px;
+    height: 44px;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in srgb, var(--surface) 85%, transparent);
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 48px;
+    z-index: 100;
+  }
+  .mobile-section-label {
+    font-size: .68rem;
+    color: var(--muted2);
+    letter-spacing: .04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .burger-btn {
+    background: none;
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 5px 10px;
+    cursor: pointer;
+    color: var(--muted);
+    font-size: .9rem;
+    line-height: 1;
+    flex-shrink: 0;
+    margin-left: 12px;
+    transition: color .2s, border-color .2s, background .2s;
+  }
+  .burger-btn:hover {
+    color: var(--text);
+    border-color: var(--c1);
+    background: color-mix(in srgb, var(--c1) 8%, transparent);
+  }
+  .docs-main {
+    padding: 32px 24px 60px;
+  }
+}
+@media (max-width: 600px) {
+  .docs-main {
+    padding: 24px 16px 60px;
+  }
+  .doc-h2 {
+    font-size: 1.2rem;
+  }
+}
+</style>
+</head>
+<body>
+<script>
+(function(){
+  var t=localStorage.getItem('theme')||
+    (window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
+  if(t==='light') document.documentElement.setAttribute('data-theme','light');
+})();
+</script>
+
+<nav class="navbar">
+  <span class="nav-logo">Appunti AI</span>
+  <div class="nav-links">
+    <a class="nav-link" href="/"><span class="nd"></span>Pipeline</a>
+    <a class="nav-link" href="schema.htm"><span class="nd"></span>Schema</a>
+    <a class="nav-link active" href="docs.htm"><span class="nd"></span>Docs</a>
+  </div>
+  <button class="theme-toggle" onclick="toggleTheme()" title="Cambia tema"></button>
+</nav>
+
+<div class="docs-layout">
+
+  <!-- SIDEBAR -->
+  <aside class="docs-sidebar">
+
+    <div class="sidebar-section">
+      <span class="sidebar-section-label">Panoramica</span>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c1)" data-id="intro" onclick="showDoc('intro')">Cos'è</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c1)" data-id="piattaforme" onclick="showDoc('piattaforme')">Piattaforme</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c1)" data-id="fonti" onclick="showDoc('fonti')">Fonti supportate</a>
+    </div>
+
+    <div class="sidebar-section">
+      <span class="sidebar-section-label">Installazione</span>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c2)" data-id="requisiti" onclick="showDoc('requisiti')">Requisiti sistema</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c2)" data-id="installazione" onclick="showDoc('installazione')">Installazione</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c2)" data-id="ocr" onclick="showDoc('ocr')">OCR opzionale</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c2)" data-id="apikey" onclick="showDoc('apikey')">API key Claude</a>
+    </div>
+
+    <div class="sidebar-section">
+      <span class="sidebar-section-label">Utilizzo</span>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c4)" data-id="quickstart" onclick="showDoc('quickstart')">Quick Start</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c4)" data-id="browser" onclick="showDoc('browser')">Uso via browser</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c4)" data-id="cli" onclick="showDoc('cli')">Riga di comando</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c4)" data-id="continua" onclick="showDoc('continua')">Continua da job</a>
+    </div>
+
+    <div class="sidebar-section">
+      <span class="sidebar-section-label">Architettura</span>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c6)" data-id="pipeline" onclick="showDoc('pipeline')">Pipeline</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c6)" data-id="gerarchia" onclick="showDoc('gerarchia')">Gerarchia fonti</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c6)" data-id="claude-input" onclick="showDoc('claude-input')">Cosa riceve Claude</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c6)" data-id="preprocessor" onclick="showDoc('preprocessor')">Preprocessor</a>
+    </div>
+
+    <div class="sidebar-section">
+      <span class="sidebar-section-label">Output e Costi</span>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c7)" data-id="output" onclick="showDoc('output')">Struttura output</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c7)" data-id="multirun" onclick="showDoc('multirun')">Multi-run e batch</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c3)" data-id="costi" onclick="showDoc('costi')">Costi API</a>
+    </div>
+
+    <div class="sidebar-section">
+      <span class="sidebar-section-label">Riferimento</span>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c5)" data-id="endpoints" onclick="showDoc('endpoints')">Endpoint API</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c5)" data-id="note" onclick="showDoc('note')">Note pratiche</a>
+      <a class="sidebar-item" tabindex="0" style="--item-color:var(--c5)" data-id="troubleshooting" onclick="showDoc('troubleshooting')">Troubleshooting</a>
+    </div>
+
+  </aside>
+
+  <!-- MOBILE NAV -->
+  <div class="docs-mobile-nav">
+    <span class="mobile-section-label" id="mobileSectionLabel">Documentazione</span>
+    <button class="burger-btn" onclick="toggleSidebar()" aria-label="Apri menu">&#9776;</button>
+  </div>
+  <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebar()"></div>
+
+  <!-- MAIN CONTENT -->
+  <main class="docs-main">
+    <div class="docs-content" id="docsContent">
+      <!-- populated by JS -->
+    </div>
+  </main>
+
+</div>
+
+<script>
+const docs = {
+  intro: {
+    title: "Cos'è Appunti AI",
+    sub: "Trascrizione + sintesi → LaTeX strutturato",
+    color: "var(--c1)",
+    html: `
+      <p>Appunti AI è un sistema di trascrizione e sintesi che trasforma le fonti miste di una lezione universitaria — audio, video, slide, PDF, documenti — in un libro LaTeX strutturato e compilabile, pronto per pdflatex.</p>
+      <p>Il principio di design è semplice: <strong>ogni strumento fa una sola cosa</strong>. Whisper (locale, senza API esterna) trascrive l'audio con timestamp [MM:SS]. Claude viene chiamato una sola volta per lezione, per l'unica cosa che richiede intelligenza semantica: sintetizzare la spiegazione orale del professore con le slide in prosa accademica LaTeX. Tutto il resto — trascrizione, OCR, rendering delle slide, compilazione — gira in locale.</p>
+      <p>La chiamata a Claude è <strong>multimodale</strong>: testo e immagini PNG delle slide nella stessa richiesta. Claude vede grafici, schemi e diagrammi che la sola trascrizione testuale non può descrivere. Il risultato è un capitolo che integra sia il contenuto verbale sia quello visivo.</p>
+      <p>Con <code>--skip-ai</code> la pipeline funziona completamente <strong>offline e gratuita</strong>: produce LaTeX strutturato solo dalle slide, senza nessuna chiamata API.</p>
+    `
+  },
+  piattaforme: {
+    title: "Piattaforme supportate",
+    sub: "Sviluppato e testato su Ubuntu 22.04 LTS",
+    color: "var(--c1)",
+    html: `
+      <p>Appunti AI è sviluppato e testato principalmente su <strong>Ubuntu 22.04 LTS</strong>. Lo stack — ffmpeg, pdflatex, LibreOffice, Python — è disponibile su qualsiasi distribuzione Linux senza modifiche significative.</p>
+      <div class="dp-row"><span class="dp-key">Ubuntu 22.04 / Debian</span><span class="dp-val">✅ testato — piattaforma di riferimento</span></div>
+      <div class="dp-row"><span class="dp-key">Linux (altre distro)</span><span class="dp-val">✅ dovrebbe funzionare — stesso stack</span></div>
+      <div class="dp-row"><span class="dp-key">macOS</span><span class="dp-val">⚠ parziale — ffmpeg/pdflatex via brew</span></div>
+      <div class="dp-row"><span class="dp-key">Windows</span><span class="dp-val">⚠ non testato — subprocess POSIX</span></div>
+      <div class="dp-sep"></div>
+      <p>Su <strong>macOS</strong>, ffmpeg e pdflatex si installano via Homebrew, ma il path di LibreOffice va verificato manualmente in <code>slide_renderer.py</code>. pix2tex su Apple Silicon richiede una build PyTorch per ARM.</p>
+      <p>Su <strong>Windows</strong>, ffmpeg e pdflatex sono disponibili come pacchetti standalone, ma LibreOffice non è nel PATH di sistema per default e alcune chiamate subprocess con semantica POSIX potrebbero richiedere adattamenti.</p>
+    `
+  },
+  fonti: {
+    title: "Fonti supportate",
+    sub: "Tutti i formati accettati dalla pipeline",
+    color: "var(--c1)",
+    html: `
+      <p>La pipeline accetta qualsiasi combinazione di sorgenti. Non è necessario fornirle tutte: l'algoritmo adatta il comportamento in base ai file disponibili e al ruolo che ciascuno svolge nella gerarchia.</p>
+      <div class="dp-row"><span class="dp-key">Audio</span><span class="dp-val">.mp3 .wav .m4a .ogg .flac</span></div>
+      <div class="dp-row"><span class="dp-key">Video</span><span class="dp-val">.mp4 .mkv .avi .mov .webm</span></div>
+      <div class="dp-row"><span class="dp-key">Teams URL</span><span class="dp-val">URL manifest → ffmpeg → .mp3</span></div>
+      <div class="dp-row"><span class="dp-key">Slide</span><span class="dp-val">.pptx</span></div>
+      <div class="dp-row"><span class="dp-key">Word</span><span class="dp-val">.docx</span></div>
+      <div class="dp-row"><span class="dp-key">PDF</span><span class="dp-val">.pdf — testo digitale + OCR fallback scansionati</span></div>
+      <div class="dp-row"><span class="dp-key">Testo</span><span class="dp-val">.txt .md .rtf (RTF strip automatico)</span></div>
+      <div class="dp-sep"></div>
+      <p>I <strong>PDF lunghi</strong> — oltre 20 pagine, senza audio associato — vengono suddivisi automaticamente in chunk da 10 pagine. Ogni chunk produce un file <code>lezione_NN.tex</code> separato, consentendo di processare anche dispense molto estese senza superare il context window del modello.</p>
+    `
+  },
+  requisiti: {
+    title: "Requisiti di sistema",
+    sub: "Dipendenze obbligatorie e opzionali",
+    color: "var(--c2)",
+    html: `
+      <p>Il sistema richiede Python 3.10 o superiore. Le dipendenze di sistema — ffmpeg, pdflatex e le relative estensioni LaTeX — si installano con un unico comando apt.</p>
+      <div class="dp-row"><span class="dp-key">Python</span><span class="dp-val">≥ 3.10 — obbligatorio</span></div>
+      <div class="dp-row"><span class="dp-key">ffmpeg</span><span class="dp-val">qualsiasi versione — audio/video e Teams</span></div>
+      <div class="dp-row"><span class="dp-key">pdflatex</span><span class="dp-val">per compilare il PDF finale</span></div>
+      <div class="dp-row"><span class="dp-key">Claude API key</span><span class="dp-val">opzionale — senza: --skip-ai</span></div>
+      <div class="dp-sep"></div>
+      <div class="section-header">Installazione dipendenze sistema</div>
+      <pre>sudo apt install ffmpeg \
+
+  texlive-latex-base texlive-latex-recommended \
+
+    texlive-latex-extra texlive-fonts-recommended \
+
+      texlive-lang-italian</pre>
+      <p>Per lezioni in altre lingue, <code>texlive-lang-european</code> copre francese, tedesco, spagnolo e olandese. La lingua viene rilevata automaticamente da Whisper — non è necessario specificarla manualmente (eccetto per l'italiano, vedi Note pratiche).</p>
+    `
+  },
+  installazione: {
+    title: "Installazione",
+    sub: "Clone repo · venv · dipendenze Python",
+    color: "var(--c2)",
+    html: `
+      <p>Dopo aver installato le dipendenze di sistema, clona il repository e crea un ambiente virtuale Python isolato per tenere separato lo stack del progetto dal Python di sistema.</p>
+      <pre>git clone &lt;repo_url&gt; ~/appunti_ai
+cd ~/appunti_ai
+
+python3 -m venv venv
+source venv/bin/activate
+
+pip install -r requirements.txt</pre>
+      <p>Per verificare che tutto sia installato correttamente prima di usare la pipeline per la prima volta, esegui questi controlli rapidi:</p>
+      <pre>python -c "import fitz; print('pymupdf OK')"
+python -c "import whisper; print('whisper OK')"
+python -c "import fastapi; print('server OK')"
+python -c "import anthropic; print('claude OK')"
+python pipeline.py --help</pre>
+    `
+  },
+  ocr: {
+    title: "OCR opzionale",
+    sub: "tesseract per PDF scansionati · pix2tex per formule matematiche",
+    color: "var(--c2)",
+    html: `
+      <p>L'OCR è completamente opzionale. La pipeline funziona senza, ma due strumenti aggiuntivi estendono la copertura ai PDF scansionati e alle formule matematiche nelle immagini.</p>
+      <div class="section-header">tesseract — PDF scansionati</div>
+      <pre>pip install pytesseract
+  sudo apt install tesseract-ocr 
+    tesseract-ocr-ita tesseract-ocr-eng</pre>
+      <p>Senza tesseract, le pagine PDF prive di testo digitale (scansioni) vengono semplicemente saltate. La pipeline continua normalmente con tutte le altre fonti disponibili.</p>
+      <div class="dp-sep"></div>
+      <div class="section-header">pix2tex — formule matematiche</div>
+      <pre>python3 -m venv ~/pix2tex_venv
+  source ~/pix2tex_venv/bin/activate
+    pip install pix2tex</pre>
+      <p>pix2tex porta con sé dipendenze pesanti (PyTorch, circa 2 GB) ed è consigliato installarlo in un virtual environment separato per non appesantire quello principale. Il sistema lo cerca automaticamente in diversi percorsi standard: <code>~/pix2tex_venv</code>, <code>~/venv</code>, <code>~/Scrivania/venv</code>, <code>~/.venv</code>, <code>/opt/pix2tex_venv</code>. Se non viene trovato, le immagini-formula vengono saltate senza bloccare il processo. Le formule direttamente incorporate nei file PowerPoint come OMML vengono comunque convertite correttamente, senza OCR.</p>
+      <div class="dp-sep"></div>
+      <div class="section-header">Verifica backend attivi</div>
+      <pre>python -c
+  "from ocr_math import get_available_backends;
+    print(get_available_backends())"</pre>
+    `
+  },
+  apikey: {
+    title: "API key Claude",
+    sub: "Variabile d'ambiente o interfaccia web",
+    color: "var(--c2)",
+    html: `
+      <p>La chiave API Claude va impostata come variabile d'ambiente prima di avviare il server. Per renderla disponibile in tutte le sessioni future aggiungila al file di configurazione della shell.</p>
+      <pre>export ANTHROPIC_API_KEY='sk-ant-...'
+
+# Per renderla permanente (Linux):
+echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc</pre>
+      <p>In alternativa, puoi impostarla direttamente dall'interfaccia web nella sezione di configurazione in cima alla pagina. La chiave viene salvata in <code>settings.json</code> con permessi <code>600</code>, accessibile solo dal proprietario del file.</p>
+      <p>Se non si dispone di una API key, o si vuole verificare il prompt prima di consumare crediti, la pipeline funziona ugualmente con il flag 
+<code>--skip-ai</code>: produce LaTeX strutturato solo dalle slide e salva comunque il prompt completo in <code>debug/</code>.</p>
+    `
+  },
+  quickstart: {
+    title: "Quick Start",
+    sub: "Primo utilizzo in 5 minuti",
+    color: "var(--c4)",
+    html: `
+      <div class="section-header">Opzione A — browser (consigliata)</div>
+      <pre>source venv/bin/activate
+uvicorn server:app --host 0.0.0.0 --port 8000</pre>
+      <p>Apri <code>http://localhost:8000</code>, trascina i file nelle rispettive zone di upload, inserisci un titolo e clicca <strong>Start</strong>. Il log in tempo reale mostra l'avanzamento fase per fase.</p>
+      <div class="dp-sep"></div>
+      <div class="section-header">Opzione B — riga di comando</div>
+      <pre># Con audio + slide
+python pipeline.py ./lezione_01/
+    --title "Analisi Matematica 1"
+
+# Offline, senza Claude
+python pipeline.py ./lezione_01/
+    --skip-ai --title "Fisica 1"
+
+# Intero corso in batch
+python pipeline.py --batch ./corso/
+    --title "Digital Control"</pre>
+      <div class="dp-sep"></div>
+      <p>L'output viene generato nella cartella <code>./output/</code>. Per produrre il PDF finale esegui pdflatex due volte: la seconda passata risolve i riferimenti incrociati e la table of contents.</p>
+      <pre>output/
+├── main.tex
+├── lezione_01.tex
+└── images/</pre>
+      <pre>cd output/
+pdflatex main.tex && pdflatex main.tex</pre>
+    `
+  },
+  browser: {
+    title: "Uso via browser",
+    sub: "Tutte le funzionalità del frontend",
+    color: "var(--c4)",
+    html: `
+      <p>L'interfaccia web è il modo consigliato per usare Appunti AI. Trascina i file audio, video, slide e documenti nelle rispettive zone di upload, oppure incolla direttamente un URL manifest Microsoft Teams — viene scaricato automaticamente via ffmpeg e convertito in .mp3 mono.</p>
+      <p>Prima di avviare puoi scegliere tra 7 profili disciplinari o lasciare l'auto-detect, attivare o disattivare Claude e OCR, selezionare il modello Whisper e aggiungere il contesto del corso per orientare la sintesi. Il progresso viene mostrato in tempo reale con percentuale e fase corrente.</p>
+      <div class="dp-sep"></div>
+      <div class="section-header">Editor LaTeX integrato</div>
+      <p>Cliccando "👁 .tex" nella cronologia si apre l'editor split: il pannello sinistro è un editor CodeMirror con syntax highlighting LaTeX, quello destro mostra il PDF compilato in un iframe. La larghezza dei due pannelli è liberamente regolabile trascinando il divisore centrale.</p>
+      <p><strong>Salva</strong> scrive il file su disco senza ricompilare. <strong>Ricompila</strong> esegue pdflatex e aggiorna il PDF — eventuali errori di compilazione vengono mostrati inline. L'auto-save su localStorage ogni 2 secondi preserva la bozza anche se si chiude accidentalmente la finestra prima di salvare.</p>
+      <div class="dp-sep"></div>
+      <div class="section-header">Altre funzionalità</div>
+      <p>Il <strong>prompt viewer</strong> ("📄 Prompt") mostra il prompt SYSTEM+USER completo inviato a Claude, con un tab separato per ogni capitolo — utile per capire esattamente cosa ha visto il modello durante la generazione. I badge di upload forniscono feedback immediato: verde per file accettati, giallo per file molto grandi, rosso per formati non supportati.</p>
+      <p>L'interfaccia è raggiungibile da qualsiasi dispositivo nella rete locale via indirizzo IP del server. Per l'accesso da reti esterne è consigliato <strong>Tailscale</strong> (avvia con <code>--host 0.0.0.0</code>).</p>
+    `
+  },
+  cli: {
+    title: "Riga di comando",
+    sub: "Tutte le opzioni disponibili",
+    color: "var(--c4)",
+    html: `
+      <p>La pipeline può essere usata interamente da riga di comando, senza avviare il server FastAPI. È sufficiente indicare la cartella contenente i file della lezione e un titolo.</p>
+      <div class="dp-row"><span class="dp-key">--title</span><span class="dp-val">Titolo per main.tex (obbligatorio)</span></div>
+      <div class="dp-row"><span class="dp-key">--output</span><span class="dp-val">Cartella output (default: ./output)</span></div>
+      <div class="dp-row"><span class="dp-key">--subject</span><span class="dp-val">ingegneria · matematica · fisica · medicina · economia · giurisprudenza · generico</span></div>
+      <div class="dp-row"><span class="dp-key">--skip-ai</span><span class="dp-val">Non chiamare Claude — struttura automatica</span></div>
+      <div class="dp-row"><span class="dp-key">--skip-ocr</span><span class="dp-val">Non usare pix2tex (più veloce)</span></div>
+      <div class="dp-row"><span class="dp-key">--no-context</span><span class="dp-val">Non usare/aggiornare corso_context.json</span></div>
+      <div class="dp-row"><span class="dp-key">--whisper-model</span><span class="dp-val">tiny · base · small · medium · large</span></div>
+      <div class="dp-row"><span class="dp-key">--batch</span><span class="dp-val">Ogni sottocartella = una lezione</span></div>
+      <div class="dp-row"><span class="dp-key">--start-from</span><span class="dp-val">Numero iniziale lezione (auto da state.json)</span></div>
+      <div class="dp-row"><span class="dp-key">--continue-on-error</span><span class="dp-val">In batch: salta lezioni che falliscono</span></div>
+      <div class="dp-sep"></div>
+      <pre>python pipeline.py --batch ./corso/
+    --title "Analisi Matematica 1"
+      --subject matematica
+        --whisper-model small</pre>
+    `
+  },
+  continua: {
+    title: "Continua da job",
+    sub: "Proseguire un corso da una sessione precedente",
+    color: "var(--c4)",
+    html: `
+      <p>La funzione "Continua da job" permette di aggiungere nuove lezioni a un corso già avviato in una sessione precedente, senza perdere nessuno dei file già generati. Il campo accetta il <code>job_id</code> del run originale.</p>
+      <p>Il server copia automaticamente tutto il necessario: <code>state.json</code> (con la numerazione corrente), <code>corso_context.json</code> (la memoria accumulata del corso), i file <code>lezione_*.tex</code> e <code>run_*.tex</code> già generati, e l'intera cartella <code>images/</code>. La numerazione e il contesto proseguono esattamente da dove ci si era fermati — le nuove lezioni ricevono i numeri successivi a quelli esistenti.</p>
+      <p>Claude riceve anche il contenuto dell'<strong>ultimo capitolo generato</strong> (fino a 6000 caratteri) nel system prompt. In questo modo sa cosa è stato spiegato nell'ultima lezione e può riprendere il filo con coerenza, senza ripetizioni né salti tematici.</p>
+      <p>Il log in tempo reale via SSE (<code>/job/{id}/stream</code>) funziona normalmente anche nelle sessioni di continuazione.</p>
+    `
+  },
+  pipeline: {
+    title: "Pipeline",
+    sub: "Flusso completo da fonti grezze a .tex",
+    color: "var(--c6)",
+    html: `
+      <p>Ogni run esegue una sequenza di fasi specializzate, ognuna con responsabilità precisa e ben separata dalle altre. Di seguito il flusso completo dall'input grezzo al file <code>.tex</code> finale.</p>
+      <div class="dp-item"><strong>ffmpeg</strong> — estrae l'audio dai file video; trasforma i manifest Microsoft Teams in .mp3 mono</div>
+      <div class="dp-item"><strong>Whisper</strong> (locale) — trascrive l'audio in testo con timestamp [MM:SS]; il risultato è salvato come <code>.transcript.txt</code> — le esecuzioni successive lo riusano senza rielaborare</div>
+      <div class="dp-item"><strong>extractor.py</strong> — parsing PPTX: estrae testo, immagini, tabelle e formule OMML da ogni slide</div>
+      <div class="dp-item"><strong>omml2latex.py</strong> — converte le formule PowerPoint (OMML) in LaTeX senza passare per OCR</div>
+      <div class="dp-item"><strong>formula_detector.py</strong> — riconosce le immagini-formula tramite aspect ratio e saturazione cromatica</div>
+      <div class="dp-item"><strong>ocr_math.py</strong> — applica pix2tex o tesseract per convertire le immagini-formula in LaTeX</div>
+      <div class="dp-item"><strong>slide_renderer.py</strong> — converte ogni slide in PNG (LibreOffice+pymupdf se disponibile, altrimenti Pillow)</div>
+      <div class="dp-item"><strong>pdfplumber + pymupdf</strong> — estrazione duale per ogni pagina PDF: viene usata la versione con la densità testuale più alta</div>
+      <div class="dp-item"><strong>pytesseract</strong> — OCR fallback per le pagine PDF scansionate, processate pagina per pagina</div>
+      <div class="dp-item"><strong>preprocessor.py</strong> — pulisce, comprime e allinea il materiale slide↔audio prima di inviarlo a Claude</div>
+      <div class="dp-item"><strong>Claude API</strong> — riceve testo e PNG slide nella stessa richiesta multimodale, genera LaTeX strutturato</div>
+      <div class="dp-item"><strong>_clean_claude_output</strong> — rimuove code fence, prefissi spurii e artefatti prima di scrivere il <code>.tex</code></div>
+      <div class="dp-item"><strong>builder.py</strong> — assembla i <code>.tex</code> finali con escape unicode completo (150+ caratteri)</div>
+    `
+  },
+  gerarchia: {
+    title: "Gerarchia delle fonti",
+    sub: "Ruolo assegnato automaticamente a ogni file",
+    color: "var(--c6)",
+    html: `
+      <p>Il preprocessor assegna automaticamente un ruolo a ogni file fornito, in base al tipo e alla presenza di audio. Questa gerarchia definisce il peso che Claude attribuisce a ciascuna sorgente durante la sintesi.</p>
+      <div class="dp-row"><span class="dp-key">SCHELETRO</span><span class="dp-val">.pptx sempre; .pdf/.docx se c'è audio — struttura ufficiale</span></div>
+      <div class="dp-row"><span class="dp-key">CARNE</span><span class="dp-val">.mp3 .wav .mp4 .mkv ecc. — spiegazione orale del professore</span></div>
+      <div class="dp-row"><span class="dp-key">SUPPORTO</span><span class="dp-val">.pdf .docx senza audio — materiale di approfondimento</span></div>
+      <div class="dp-row"><span class="dp-key">CONTORNO</span><span class="dp-val">.txt .md .rtf — note informali, peso minore</span></div>
+      <div class="dp-sep"></div>
+      <p>Il preprocessor allinea la trascrizione Whisper (<strong>CARNE</strong>) con le slide (<strong>SCHELETRO</strong>) usando i timestamp [MM:SS]. Claude riceve un documento dove è esplicito quale slide era proiettata in ogni momento della spiegazione — questo è il nucleo dell'allineamento slide↔audio che rende la sintesi coerente con il flusso reale della lezione.</p>
+    `
+  },
+  'claude-input': {
+    title: "Cosa riceve Claude",
+    sub: "Struttura della chiamata API multimodale",
+    color: "var(--c6)",
+    html: `
+      <p>La chiamata a Claude è costruita per massimizzare la coerenza tra spiegazione orale e contenuto visivo delle slide. Ogni componente ha un limite di caratteri calibrato sul suo ruolo nella gerarchia.</p>
+      <div class="dp-row"><span class="dp-key">System</span><span class="dp-val">19 regole LaTeX accademiche (cachato da Anthropic)</span></div>
+      <div class="dp-row"><span class="dp-key">Immagini</span><span class="dp-val">PNG slide PPTX in ordine — max 20</span></div>
+      <div class="dp-row"><span class="dp-key">SCHELETRO</span><span class="dp-val">LaTeX skeleton / testo PDF+DOCX — max 160.000 char</span></div>
+      <div class="dp-row"><span class="dp-key">CARNE</span><span class="dp-val">Trascrizione Whisper con timestamp — max 200.000 char</span></div>
+      <div class="dp-row"><span class="dp-key">SUPPORTO</span><span class="dp-val">Testo PDF/DOCX di riferimento — max 80.000 char</span></div>
+      <div class="dp-row"><span class="dp-key">CONTORNO</span><span class="dp-val">Note informali — max 40.000 char</span></div>
+      <div class="dp-sep"></div>
+      <p>Le PNG delle <strong>pagine PDF</strong> vengono allegate solo se non c'è audio; le PNG <strong>PPTX</strong> vengono sempre allegate (fino a 20). Il system prompt (~600 token) è cacheato con <code>cache_control: ephemeral</code>: dalla seconda lezione in poi costa circa il 10% del normale. Il log mostra <code>cache=hit</code> o <code>cache=miss</code> per ogni chiamata. Il modello usato è <code>claude-sonnet-4-6</code> con <code>max_tokens: 32.000</code>.</p>
+    `
+  },
+  preprocessor: {
+    title: "Preprocessor",
+    sub: "preprocessor.py — 4 fasi automatiche",
+    color: "var(--c6)",
+    html: `
+      <p>Il preprocessor è la fase che prepara il materiale prima di inviarlo a Claude. Lavora in quattro passate sequenziali, ognuna con uno scopo ben definito.</p>
+      <p><strong>Pulizia</strong> — rimuove header ripetuti, numeri di pagina, timestamp visibili nel PDF, frasi riempitive frequenti nelle trascrizioni orali. Deduplica i blocchi di testo identici tramite hash MD5, problema comune quando più slide riportano lo stesso titolo o footer di sezione.</p>
+      <p><strong>Rilevamento materia</strong> — attraverso keyword matching identifica il profilo disciplinare: <code>ingegneria</code>, <code>matematica</code>, <code>fisica</code>, <code>medicina</code>, <code>economia</code>, <code>giurisprudenza</code>, <code>generico</code>. Ogni profilo inietta nel prompt istruzioni LaTeX specifiche — il profilo matematica attiva, ad esempio, ambienti come <code>\begin{proof}</code>, <code>\begin{theorem}</code> e <code>\begin{lemma}</code>.</p>
+      <p><strong>Compressione adattiva</strong> — stima il numero di token e sceglie il livello di compressione: <code>RAW_CLEAN</code> sotto gli 80k token (testo quasi integrale), <code>DENSE</code> tra 80k e 180k (rimozione esempi ridondanti e ripetizioni), <code>OUTLINE</code> oltre i 180k (solo struttura gerarchica). Questo garantisce che la chiamata non superi mai il context window del modello, indipendentemente dalla lunghezza del materiale.</p>
+      <p><strong>Contesto corso</strong> — dopo ogni lezione, <code>corso_context.json</code> viene aggiornato con i concetti chiave, le definizioni, i simboli e il <code>last_verbal_topic</code>. Dalla lezione successiva il prompt include un blocco <em>RACCORDO CON LEZIONE PRECEDENTE</em>, così Claude sa dove si era arrivati e può proseguire con coerenza. Si disabilita con <code>--no-context</code>. Oltre le ultime 10 lezioni, le più vecchie vengono compresse automaticamente per evitare che il file cresca indefinitamente.</p>
+    `
+  },
+  output: {
+    title: "Struttura output",
+    sub: "File generati nella cartella output/",
+    color: "var(--c7)",
+    html: `
+      <p>Ogni run genera una cartella <code>output/</code> con la struttura seguente. I file <code>lezione_NN.tex</code> contengono i capitoli sintetizzati da Claude; <code>main.tex</code> li include tutti con un preambolo LaTeX completo e configurato.</p>
+      <pre>output/
+├── main.tex                   # documento principale
+├── run_01.tex                 # \part{Titolo — data}
+├── lezione_01.tex             # capitolo 1
+├── corso_context.json         # memoria corso
+├── state.json                 # stato pipeline
+├── images/
+│   ├── stem_slide_001.png     # screenshot slide
+│   ├── stem_pag_001.png       # screenshot pagina PDF
+│   └── formula_abc.png        # immagine formula
+└── debug/
+    ├── prompt_lezione_01.txt  # SYSTEM+USER prompt completo
+    ├── images_lezione_01/     # symlink PNG ordinate
+    └── riepilogo_lezione_01.txt</pre>
+      <p><code>main.tex</code> include un preambolo completo con i pacchetti amsmath, amssymb, amsthm, graphicx, hyperref, fancyhdr, babel (lingua rilevata automaticamente da Whisper), e tutti gli ambienti matematici: <code>theorem</code>, <code>definition</code>, <code>example</code>, <code>lemma</code>, <code>corollary</code>, <code>remark</code>.</p>
+    `
+  },
+  multirun: {
+    title: "Multi-run e batch",
+    sub: "Aggregazione di più sessioni in un unico documento",
+    color: "var(--c7)",
+    html: `
+      <p>Ogni invocazione della pipeline genera un <strong>run</strong> numerato. Il <code>main.tex</code> organizza i run come parti separate del documento LaTeX, in modo da poter accumulare tutte le lezioni di un corso in un unico PDF finale senza sovrascrivere nulla.</p>
+      <pre>main.tex
+  └── \part{Lezione 1 — 2025-06-10}   ← run_01.tex
+        \input{lezione_01}
+        \input{lezione_02}
+  └── \part{Lezione 3 — 2025-06-17}   ← run_02.tex
+        \input{lezione_03}</pre>
+      <p>Lo stato della pipeline viene persistito in <code>state.json</code> tramite i campi <code>next_run</code>, <code>runs</code>, <code>next_lesson</code> e <code>lessons</code>. Se la pipeline viene interrotta, riprende automaticamente dal punto esatto in cui si era fermata.</p>
+      <p>Con la funzione "Continua da job" il server copia automaticamente tutti i <code>lezione_*.tex</code>, <code>run_*.tex</code> e la cartella <code>images/</code> nella nuova sessione. Il PDF compilato raccoglierà l'intero corso, dalla prima all'ultima lezione, in un documento continuo e indicizzato.</p>
+      <p>La <strong>batch mode</strong> (<code>--batch ./corso/</code>) tratta ogni sottocartella come una lezione distinta e le processa in sequenza. Con <code>--continue-on-error</code> le lezioni che falliscono vengono saltate invece di interrompere l'intero batch — utile per corsi con alcune registrazioni problematiche.</p>
+    `
+  },
+  costi: {
+    title: "Costi API Claude",
+    sub: "Stime con Claude Sonnet — modello di default",
+    color: "var(--c3)",
+    html: `
+      <p>I costi sono stimati con il modello di default <strong>Claude Sonnet</strong> e variano principalmente in base alla lunghezza della trascrizione e al numero di slide allegate come immagini.</p>
+      <div class="dp-row"><span class="dp-key">Input testo (trascrizione + slide)</span><span class="dp-val">~40k tok · ~$0.12</span></div>
+      <div class="dp-row"><span class="dp-key">Input immagini (10 slide PNG)</span><span class="dp-val">~15k tok · ~$0.05</span></div>
+      <div class="dp-row"><span class="dp-key">Output (capitolo LaTeX)</span><span class="dp-val">~10k tok · ~$0.15</span></div>
+      <div class="dp-row"><span class="dp-key">Per lezione con slide</span><span class="dp-val"><strong>~$0.32</strong></span></div>
+      <div class="dp-row"><span class="dp-key">Per lezione solo testo</span><span class="dp-val"><strong>~$0.27</strong></span></div>
+      <div class="dp-row"><span class="dp-key">Corso da 30 lezioni</span><span class="dp-val"><strong>~$9.60</strong></span></div>
+      <div class="dp-sep"></div>
+      <p>Il system prompt (~600 token) è cacheato con <code>cache_control: ephemeral</code>. Dalla seconda lezione dello stesso corso il costo di quel blocco scende a circa il 10% del normale — il log segnala <code>cache=hit</code> quando il cache è attivo. Le immagini vengono allegate solo per le lezioni con slide PPTX: una lezione puramente testuale ha un costo inferiore di circa $0.05.</p>
+    `
+  },
+  endpoints: {
+    title: "Endpoint API",
+    sub: "server.py — FastAPI su porta 8000",
+    color: "var(--c5)",
+    html: `
+      <p>Il server FastAPI espone i seguenti endpoint sulla porta 8000. Tutti i payload JSON usano <code>Content-Type: application/json</code>.</p>
+      <div class="dp-row"><span class="dp-key">GET /</span><span class="dp-val">Frontend index.htm</span></div>
+      <div class="dp-row"><span class="dp-key">POST /run-pipeline</span><span class="dp-val">Avvia pipeline → job_id</span></div>
+      <div class="dp-row"><span class="dp-key">GET /job/{id}</span><span class="dp-val">Stato + progress, step, detail</span></div>
+      <div class="dp-row"><span class="dp-key">DELETE /job/{id}</span><span class="dp-val">Elimina job (?full=true rimuove output)</span></div>
+      <div class="dp-row"><span class="dp-key">GET /job/{id}/stream</span><span class="dp-val">Server-Sent Events: log in tempo reale</span></div>
+      <div class="dp-row"><span class="dp-key">GET /jobs</span><span class="dp-val">Lista tutti i job</span></div>
+      <div class="dp-row"><span class="dp-key">GET /download/{id}</span><span class="dp-val">Scarica ZIP output</span></div>
+      <div class="dp-row"><span class="dp-key">GET /pdf/{id}</span><span class="dp-val">PDF compilato inline nel browser</span></div>
+      <div class="dp-row"><span class="dp-key">GET /tex/{id}/{file}</span><span class="dp-val">Contenuto file .tex</span></div>
+      <div class="dp-row"><span class="dp-key">POST /save/{id}</span><span class="dp-val">Salva .tex su disco (senza ricompilare)</span></div>
+      <div class="dp-row"><span class="dp-key">POST /recompile/{id}</span><span class="dp-val">Salva + pdflatex, ritorna errori</span></div>
+      <div class="dp-row"><span class="dp-key">GET /preview/{id}</span><span class="dp-val">main.tex + lista .tex + stato PDF</span></div>
+      <div class="dp-row"><span class="dp-key">GET /prompt/{id}</span><span class="dp-val">Prompt SYSTEM+USER (debug)</span></div>
+      <div class="dp-row"><span class="dp-key">GET /images/{id}</span><span class="dp-val">Lista PNG cartella images/</span></div>
+      <div class="dp-row"><span class="dp-key">GET /image/{id}/{file}</span><span class="dp-val">Serve singola immagine PNG</span></div>
+      <div class="dp-row"><span class="dp-key">GET /health</span><span class="dp-val">api_key · ffmpeg · pdflatex · whisper</span></div>
+      <div class="dp-row"><span class="dp-key">GET /settings</span><span class="dp-val">Configurazione corrente</span></div>
+      <div class="dp-row"><span class="dp-key">POST /settings</span><span class="dp-val">Salva api_key, ttl_days, timeout, concorrenza</span></div>
+    `
+  },
+  note: {
+    title: "Note pratiche",
+    sub: "Comportamenti da conoscere",
+    color: "var(--c5)",
+    html: `
+      <p><strong>Whisper su CPU</strong> — il modello <code>base</code> impiega circa 1 minuto per ogni 10 minuti di audio. Per test veloci usa <code>--whisper-model tiny</code>. La trascrizione viene salvata in cache come <code>.transcript.txt</code> accanto al file audio: le esecuzioni successive la riusano senza rielaborare l'audio.</p>
+      <p><strong>Rendering slide</strong> — se LibreOffice è installato, le slide vengono convertite a PDF e renderizzate con pymupdf a 200 DPI, con la massima fedeltà al layout originale. Senza LibreOffice si usa python-pptx + Pillow, che gestisce bene la maggior parte dei template standard.</p>
+      <p><strong>Estrazione PDF duale</strong> — ogni pagina viene estratta sia con pdfplumber sia con PyMuPDF; viene usata la versione con la densità testuale più alta. Se più del 40% delle coppie di token risulta duplicata, viene applicato un fix automatico per eliminare il testo raddoppiato, problema frequente con certi PDF generati da Word.</p>
+      <p><strong>Unicode e LaTeX</strong> — <code>builder.py</code> gestisce oltre 150 caratteri Unicode: subscript, lettere greche, operatori matematici, simboli speciali. La conversione avviene prima della scrittura del <code>.tex</code> per evitare errori di compilazione.</p>
+      <p><strong>Lingua Whisper</strong> — il sistema supporta <code>en</code> e <code>it</code>. Per le lezioni in italiano imposta <code>export WHISPER_LANG=it</code> prima di avviare il server; altrimenti Whisper potrebbe trascrivere in inglese.</p>
+      <div class="dp-sep"></div>
+      <div class="section-header">Timeout configurabili senza riavviare</div>
+      <pre>curl -X POST http://localhost:8000/settings \
+  -H "Content-Type: application/json" \
+  -d '{"ffmpeg_timeout":14400,"pipeline_timeout":7200}'</pre>
+      <p><strong>Concorrenza</strong> — per default girano al massimo 2 job contemporanei. Oltre questo limite il server risponde con HTTP 429. Il limite è configurabile via <code>max_concurrent_jobs</code> in <code>POST /settings</code> senza riavviare il server. Con <code>--skip-ai</code> il prompt viene comunque salvato in <code>debug/prompt_lezione_NN.txt</code> — utile per verificare cosa riceverebbe Claude prima di consumare crediti API.</p>
+    `
+  },
+  troubleshooting: {
+    title: "Troubleshooting",
+    sub: "Problemi comuni e soluzioni",
+    color: "var(--c5)",
+    html: `
+      <p>Soluzioni ai problemi più frequenti. Per ogni errore sono indicati la causa probabile e il comando da eseguire.</p>
+      <div class="dp-row"><span class="dp-key">ModuleNotFoundError: fitz</span><span class="dp-val">pip install pymupdf nel venv attivo</span></div>
+      <div class="dp-row"><span class="dp-key">images/ vuota</span><span class="dp-val">pymupdf non trovato nel venv</span></div>
+      <div class="dp-row"><span class="dp-key">PDF scansionato senza testo</span><span class="dp-val">pip install pytesseract + apt install tesseract-ocr</span></div>
+      <div class="dp-row"><span class="dp-key">Claude non risponde</span><span class="dp-val">echo $ANTHROPIC_API_KEY per verificare</span></div>
+      <div class="dp-row"><span class="dp-key">pdflatex fallisce</span><span class="dp-val">apt install texlive-latex-extra texlive-lang-italian</span></div>
+      <div class="dp-row"><span class="dp-key">pix2tex non trovato</span><span class="dp-val">installa in ~/pix2tex_venv o ~/Scrivania/venv</span></div>
+      <div class="dp-row"><span class="dp-key">NNPACK: Unsupported hardware</span><span class="dp-val">warning innocuo — pix2tex funziona ugualmente</span></div>
+      <div class="dp-row"><span class="dp-key">HTTP 429 su /run-pipeline</span><span class="dp-val">troppi job — aumenta max_concurrent_jobs</span></div>
+      <div class="dp-row"><span class="dp-key">Pipeline killata dopo 1h</span><span class="dp-val">POST /settings {"pipeline_timeout": 7200}</span></div>
+      <div class="dp-row"><span class="dp-key">Claude risponde in inglese</span><span class="dp-val">export WHISPER_LANG=it prima del server</span></div>
+      <div class="dp-row"><span class="dp-key">Badge rosso PDF non compilato</span><span class="dp-val">clicca sul badge per vedere gli errori LaTeX</span></div>
+      <div class="dp-row"><span class="dp-key">Slide con font sbagliati</span><span class="dp-val">sudo apt install libreoffice</span></div>
+      <div class="dp-row"><span class="dp-key">Frontend non raggiungibile da remoto</span><span class="dp-val">--host 0.0.0.0; usa Tailscale per reti esterne</span></div>
+      <div class="dp-row"><span class="dp-key">RuntimeError: fp16 not supported</span><span class="dp-val">fix già incluso (fp16=False automatico su CPU)</span></div>
+      <div class="dp-row"><span class="dp-key">Allineamento slide↔audio spostato</span><span class="dp-val">fix già applicato (pause &gt;45s cappate)</span></div>
+      <div class="dp-row"><span class="dp-key">.tex con testo prima di \\section</span><span class="dp-val">_clean_claude_output lo rimuove; se persiste controlla main.log</span></div>
+    `
+  }
+};
+
+function showDoc(id) {
+  const d = docs[id];
+  if (!d) return;
+
+  // update sidebar active state
+  document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+  const activeItem = document.querySelector(`.sidebar-item[data-id="${id}"]`);
+  if (activeItem) activeItem.classList.add('active');
+
+  // update mobile label + close drawer if open
+  const lbl = document.getElementById('mobileSectionLabel');
+  if (lbl) lbl.textContent = d.title;
+  closeSidebar();
+
+  // update URL hash (replaceState: no back-button clutter)
+  history.replaceState(null, '', '#' + id);
+
+  // render content
+  const content = document.getElementById('docsContent');
+  content.style.setProperty('--item-color', d.color);
+  content.innerHTML = `
+    <h2 class="doc-h2">${d.title}</h2>
+    <div class="doc-sub">${d.sub}</div>
+    <div class="doc-body">${d.html}</div>
+  `;
+
+  // add copy buttons to code blocks
+  const _iconCopy = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="4" rx="1"/><path d="M17 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="3" y="8" width="18" height="14" rx="2"/></svg>`;
+  const _iconOk   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+  content.querySelectorAll('.doc-body pre').forEach(pre => {
+    const code = pre.textContent.trim();
+    const btn = document.createElement('button');
+    btn.className = 'pre-copy';
+    btn.innerHTML = _iconCopy;
+    btn.title = 'Copia';
+    btn.onclick = () => {
+      function _write() {
+        if (navigator.clipboard) return navigator.clipboard.writeText(code);
+        const ta = document.createElement('textarea');
+        ta.value = code;
+        ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+        document.body.appendChild(ta);
+        ta.focus(); ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        return Promise.resolve();
+      }
+      _write().then(() => {
+        btn.innerHTML = _iconOk;
+        btn.classList.add('copied');
+        setTimeout(() => { btn.innerHTML = _iconCopy; btn.classList.remove('copied'); }, 1800);
+      }).catch(() => {});
+    };
+    pre.appendChild(btn);
+  });
+
+  // scroll main to top
+  document.querySelector('.docs-main').scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function toggleTheme(){
+  const html = document.documentElement;
+  const isLight = html.getAttribute('data-theme') === 'light';
+  html.setAttribute('data-theme', isLight ? 'dark' : 'light');
+  localStorage.setItem('theme', isLight ? 'dark' : 'light');
+}
+
+// burger menu
+function toggleSidebar() {
+  const sidebar = document.querySelector('.docs-sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  const isOpen = sidebar.classList.toggle('open');
+  backdrop.classList.toggle('open', isOpen);
+}
+function closeSidebar() {
+  document.querySelector('.docs-sidebar').classList.remove('open');
+  document.getElementById('sidebarBackdrop').classList.remove('open');
+}
+// close on Escape
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeSidebar();
+});
+
+// keyboard navigation in sidebar
+document.addEventListener('keydown', e => {
+  const focused = document.activeElement;
+  if (!focused || !focused.classList.contains('sidebar-item')) return;
+  const items = Array.from(document.querySelectorAll('.sidebar-item'));
+  const idx = items.indexOf(focused);
+  if (e.key === 'ArrowDown' && idx < items.length - 1) {
+    e.preventDefault(); items[idx + 1].focus();
+  } else if (e.key === 'ArrowUp' && idx > 0) {
+    e.preventDefault(); items[idx - 1].focus();
+  } else if (e.key === 'Enter') {
+    focused.click();
+  }
+});
+
+// show section from URL hash or default
+const _startId = location.hash.slice(1);
+showDoc(docs[_startId] ? _startId : 'intro');
+</script>
+</body>
+</html>

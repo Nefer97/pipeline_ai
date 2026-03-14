@@ -4,78 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Appunti AI — Architettura Sistema</title>
+<meta name="description" content="Schema interattivo dell'architettura di Appunti AI: pipeline di trascrizione, OCR, preprocessor e generazione LaTeX con Claude.">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/favicon_io/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/favicon_io/favicon-32x32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/favicon_io/favicon-16x16.png">
+<link rel="manifest" href="assets/favicon_io/site.webmanifest">
+<link rel="stylesheet" href="assets/css/shared.css">
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@700;800&display=swap');
-
-:root {
-  --bg:      #080a0f;
-  --surface: #0f1319;
-  --surface2:#141920;
-  --border:  #1a2030;
-  --c1: #00e5ff;
-  --c2: #7c3aed;
-  --c3: #10b981;
-  --c4: #f59e0b;
-  --c5: #ef4444;
-  --c6: #a78bfa;
-  --c7: #f472b6;
-  --text:  #e2e8f0;
-  --muted: #4a5568;
-  --theme-icon: '🌙';
-}
-[data-theme="light"] {
-  --bg:      #f8fafc;
-  --surface: #ffffff;
-  --surface2:#f1f5f9;
-  --border:  #e2e8f0;
-  --c1: #0284c7;
-  --c2: #7c3aed;
-  --c3: #059669;
-  --c4: #d97706;
-  --c5: #dc2626;
-  --c6: #7c3aed;
-  --c7: #db2777;
-  --text:  #0f172a;
-  --muted: #64748b;
-  --theme-icon: '☀';
-}
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  background: var(--bg);
-  color: var(--text);
-  font-family: 'JetBrains Mono', monospace;
-  min-height: 100vh;
-  overflow-x: hidden;
-}
-
-/* grid bg */
-body::before {
-  content: '';
-  position: fixed; inset: 0;
-  background-image:
-    linear-gradient(rgba(0,229,255,.018) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,229,255,.018) 1px, transparent 1px);
-  background-size: 48px 48px;
-  pointer-events: none; z-index: 0;
-}
-
-.navbar{position:fixed;top:0;left:0;right:0;z-index:200;background:color-mix(in srgb,var(--bg) 85%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);height:48px;display:flex;align-items:center;padding:0 24px;gap:0;transition:background .25s,border-color .25s;}
-.nav-logo{font-family:'Syne',sans-serif;font-size:.85rem;font-weight:800;background:linear-gradient(135deg,var(--c1),var(--c2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-.02em;margin-right:32px;white-space:nowrap;}
-.nav-links{display:flex;gap:2px;}
-.nav-link{font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted);text-decoration:none;padding:6px 14px;border-radius:8px;letter-spacing:.06em;transition:color .2s,background .2s;display:flex;align-items:center;gap:6px;}
-.nav-link:hover{color:var(--text);background:color-mix(in srgb,var(--c1) 8%,transparent);}
-.nav-link.active{color:var(--c1);background:color-mix(in srgb,var(--c1) 10%,transparent);}
-.nav-link .nd{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.7;}
-.theme-toggle{margin-left:auto;background:none;border:1px solid var(--border);border-radius:8px;padding:4px 10px;font-size:.78rem;cursor:pointer;color:var(--muted);transition:color .2s,border-color .2s,background .2s;line-height:1;}
-.theme-toggle:hover{color:var(--text);border-color:var(--c1);background:color-mix(in srgb,var(--c1) 8%,transparent);}
-.theme-toggle::before{content:var(--theme-icon,'🌙');}
-body{transition:background .25s,color .25s;}
 .block,.detail-panel,.leg{transition:background .25s,border-color .25s,color .25s;}
 .page {
   position: relative; z-index: 1;
-  max-width: 1200px;
+  /* max-width: 880px; */
   margin: 0 auto;
   padding: 80px 24px 80px;
 }
@@ -319,9 +258,8 @@ header p {
 /* ── DETAIL PANEL ── */
 .detail-panel {
   position: fixed;
-  top: 50%; right: 24px;
-  transform: translateY(-50%);
-  width: 280px;
+  top: 60px; right: 24px; bottom: 24px;
+  width: 320px;
   background: var(--surface2);
   border: 1px solid var(--dp-color, var(--border));
   border-left: 3px solid var(--dp-color, var(--border));
@@ -330,13 +268,16 @@ header p {
   z-index: 100;
   opacity: 0;
   pointer-events: none;
-  transition: opacity .25s, transform .25s;
-  transform: translateY(-50%) translateX(20px);
+  transition: opacity .3s, transform .3s;
+  transform: translateX(100%);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
 .detail-panel.show {
   opacity: 1;
   pointer-events: auto;
-  transform: translateY(-50%) translateX(0);
+  transform: translateX(0);
 }
 .dp-title {
   font-family: 'Syne', sans-serif;
@@ -344,6 +285,7 @@ header p {
   font-weight: 700;
   color: var(--dp-color, var(--text));
   margin-bottom: 4px;
+  padding-right: 20px;
 }
 .dp-file {
   font-size: .6rem;
@@ -353,19 +295,21 @@ header p {
   border-bottom: 1px solid var(--border);
 }
 .dp-body {
-  font-size: .68rem;
+  font-size: .7rem;
   color: var(--muted);
-  line-height: 1.75;
+  line-height: 1.9;
 }
 .dp-body strong { color: var(--dp-color, var(--text)); font-weight: 600; }
 .dp-body .dp-item {
   display: flex; gap: 8px;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
+  align-items: flex-start;
 }
 .dp-body .dp-item::before {
   content: '→';
   color: var(--dp-color, var(--muted));
   flex-shrink: 0;
+  margin-top: 1px;
 }
 .dp-close {
   position: absolute; top: 10px; right: 12px;
@@ -389,7 +333,19 @@ header p {
 }
 
 @media (max-width: 900px) {
-  .detail-panel { display: none; }
+  .detail-panel {
+    top: auto;
+    right: 0; left: 0; bottom: 0;
+    width: 100%;
+    max-height: 60vh;
+    border-radius: 16px 16px 0 0;
+    border-left: 1px solid var(--dp-color, var(--border));
+    border-top: 3px solid var(--dp-color, var(--border));
+    transform: translateY(100%);
+  }
+  .detail-panel.show {
+    transform: translateY(0);
+  }
   .block { min-width: 110px; max-width: 150px; padding: 11px 10px; }
   .block.wide { min-width: 220px; max-width: 320px; }
 }
@@ -412,13 +368,15 @@ header p {
   <div class="nav-links">
     <a class="nav-link" href="/"><span class="nd"></span>Pipeline</a>
     <a class="nav-link active" href="schema.htm"><span class="nd"></span>Schema</a>
+    <a class="nav-link" href="docs.htm"><span class="nd"></span>Docs</a>
   </div>
   <button class="theme-toggle" onclick="toggleTheme()" title="Cambia tema"></button>
 </nav>
 <div class="page">
 
   <header>
-    <h1>Appunti AI — Architettura Sistema</h1>
+    <!-- <h1>Appunti AI — Architettura Sistema</h1> -->
+    <h1>Architettura Sistema</h1>
     <p>// clicca su un blocco per i dettagli</p>
   </header>
 
