@@ -314,7 +314,7 @@ Apri `http://localhost:8000`. Il frontend permette di:
 - Impostare l'API key Claude direttamente dall'interfaccia (persiste su `settings.json`)
 - Alternare tema chiaro/scuro
 
-La pagina `http://localhost:8000/schema.htm` mostra il diagramma interattivo dell'architettura.
+La pagina `http://localhost:8000/schema.htm` mostra il diagramma interattivo dell'architettura (accessibile via URL diretto, non nella navbar).
 
 ### Continuità tra lezioni
 
@@ -430,7 +430,7 @@ Prima di inviare il contenuto a Claude, `preprocessor.py` esegue quattro fasi au
 
 **2. Rilevamento materia** — analisi keyword → uno tra `ingegneria`, `matematica`, `fisica`, `medicina`, `economia`, `giurisprudenza`, `generico`. Ogni profilo inietta istruzioni LaTeX specifiche nel prompt (es. matematica → `\begin{proof}`, medicina → dosaggi in tabella). Forzabile con `--subject`.
 
-**3. Allineamento trascrizione↔slide** — se Whisper ha i timestamp `[MM:SS]` e le slide hanno i marker `--- SLIDE N ---`, il preprocessor stima il range temporale di ogni slide e associa i segmenti audio corrispondenti. Il prompt che arriva a Claude ha slide e spiegazione orale affiancate. Le pause tra segmenti sono cappate a 45 secondi per non distorcere l'allineamento.
+**3. Compressione adattiva** — stima i token del prompt e sceglie la modalità: `RAW_CLEAN` (<80k token, testo pulito completo), `DENSE` (80–180k, rimozione esempi ridondanti), `OUTLINE` (>180k, solo struttura gerarchica). La trascrizione Whisper viene inclusa con i timestamp `[MM:SS]` originali — Claude li usa per seguire l'evoluzione temporale della lezione.
 
 **4. Contesto corso** — dopo ogni lezione, `corso_context.json` viene aggiornato con i concetti chiave (titoli section/subsection), definizioni (`\begin{definition}`), simboli introdotti, e l'ultimo argomento spiegato verbalmente (`last_verbal_topic`). Dalla lezione successiva il prompt include:
 - `## CONTESTO DEL CORSO` con i concetti già trattati (non da rispiegare)
@@ -456,7 +456,7 @@ Si disabilita con `--no-context`. Pruning automatico: oltre le ultime 10 lezioni
 | `server.py` | Backend FastAPI + editor LaTeX integrato |
 | `index.htm` | Frontend web (upload, editor split, PDF viewer, history) |
 | `schema.htm` | Diagramma architettura interattivo |
-| `preprocessor.py` | Normalizza e comprime testo; rileva materia; allinea trascrizione↔slide; gestisce contesto corso |
+| `preprocessor.py` | Normalizza e comprime testo; rileva materia; compressione adattiva RAW/DENSE/OUTLINE; gestisce contesto corso |
 | `extractor.py` | Parsing approfondito `.pptx` (testo, immagini, tabelle, formule OMML) |
 | `slide_renderer.py` | Ogni slide PPTX → PNG (LibreOffice+pymupdf prioritario, Pillow come fallback) |
 | `pdf_renderer.py` | Ogni pagina PDF → PNG + LaTeX skeleton |
