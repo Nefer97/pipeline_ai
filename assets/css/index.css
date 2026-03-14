@@ -161,7 +161,7 @@ button.running{opacity:.6;cursor:not-allowed;transform:none !important;}
 @media(max-width:800px){.input-row{grid-template-columns:repeat(3,1fr);}.config-grid{grid-template-columns:1fr;}.subject-grid{grid-template-columns:repeat(3,1fr);}.branch-row{grid-template-columns:1fr;}.output-row{grid-template-columns:1fr 1fr !important;}.step{grid-template-columns:40px 1fr;}.step-badge{display:none;}}
 @media(max-width:500px){.input-row{grid-template-columns:repeat(2,1fr);}.subject-grid{grid-template-columns:repeat(2,1fr);}}
 /* Elementi che usavano colori hardcoded — ora adattivi al tema */
-#latexPreviewCode{color:var(--code-text)!important;}
+#latexPreviewCode{color:var(--code-text)!important; background-color:var(--surface)!important;}
 #pdfErrorsCode{color:var(--code-err)!important;}
 [data-theme="light"] .global-progress{background:#e2e8f0;}
 [data-theme="light"] .live-status{background:var(--surface2);}
