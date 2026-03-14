@@ -277,7 +277,7 @@
     </div>
 
     <!-- ── SPLIT EDITOR: LaTeX (sx) + PDF viewer (dx) ────────── -->
-    <div id="splitEditorWrapper" class="field-hidden">
+    <div id="splitEditorWrapper" class="field-hidden" style="display: none;">
 
       <div id="latexPreviewPanel" class="panel panel-latex field-hidden">
         <div class="panel-header" onclick="toggleLatexPreview()">
@@ -540,7 +540,7 @@ function useJobId(id){
 }
 
 async function deleteJobFromHistory(id){
-  if(!confirm(`Eliminare la lezione "${id}"?\nVerranno cancellati anche il file .tex e le immagini.`))return;
+  if(!await _confirm(`Eliminare la lezione "${id}"?\nVerranno cancellati anche il file .tex e le immagini.`))return;
   try{
     const r=await fetch(`${API}/job/${id}?full=true`,{method:'DELETE'});
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
@@ -940,7 +940,7 @@ function updateLiveStatus(phase,detail='',color='#10b981',isRunning=false){
 async function cancelCurrentJob(){
   if(!_currentJobId)return;
   const id=_currentJobId;
-  if(!confirm(`Annullare il job ${id}?`))return;
+  if(!await _confirm(`Annullare il job ${id}?`))return;
   try{
     await fetch(`${API}/job/${id}`,{method:'DELETE'});
     if(_logEs){_logEs.close();_logEs=null;}
@@ -1411,6 +1411,37 @@ runBtn.addEventListener('click',async()=>{
     showToast('Errore connessione',err.message,'#ef4444');
   }
 });
+
+// ── CONFIRM MODAL ─────────────────────────────────────────────────────────────
+function _buildConfirmModal(){
+  if(document.getElementById('confirmModal')) return;
+  const el=document.createElement('div');
+  el.id='confirmModal';
+  el.className='prompt-modal';
+  el.innerHTML=`
+    <div class="confirm-modal-inner">
+      <p id="confirmMsg" class="confirm-msg"></p>
+      <div class="confirm-actions">
+        <button id="confirmOk"  class="confirm-btn confirm-btn-danger">Conferma</button>
+        <button id="confirmCancel" class="confirm-btn confirm-btn-cancel">Annulla</button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+}
+
+function _confirm(msg){
+  _buildConfirmModal();
+  return new Promise(resolve=>{
+    document.getElementById('confirmMsg').textContent=msg;
+    const modal=document.getElementById('confirmModal');
+    modal.style.display='flex';
+    const ok=document.getElementById('confirmOk');
+    const cancel=document.getElementById('confirmCancel');
+    const cleanup=()=>{ modal.style.display='none'; ok.onclick=null; cancel.onclick=null; };
+    ok.onclick=()=>{ cleanup(); resolve(true); };
+    cancel.onclick=()=>{ cleanup(); resolve(false); };
+  });
+}
 
 // ── PROMPT VIEWER MODAL ───────────────────────────────────────────────────────
 function _buildPromptModal(){
