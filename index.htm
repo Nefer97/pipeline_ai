@@ -40,7 +40,7 @@
           <div class="upload-status" id="status-audio">0</div>
           <div class="progress-bar" id="progress-audio"></div>
           <div class="icon">🎵</div><div class="name">AUDIO</div>
-          <div class="exts">.mp3 · .wav · .m4a</div>
+          <div class="exts">.mp3 · .wav · .m4a · .ogg · .flac</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
         <div class="file-list file-list-audio" id="files-audio"></div>
@@ -51,7 +51,7 @@
           <div class="upload-status" id="status-video">0</div>
           <div class="progress-bar" id="progress-video"></div>
           <div class="icon">🎬</div><div class="name">VIDEO</div>
-          <div class="exts">.mp4 · .mkv · .webm</div>
+          <div class="exts">.mp4 · .mkv · .avi · .mov · .webm</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
         <div class="file-list file-list-video" id="files-video"></div>
@@ -73,7 +73,7 @@
           <div class="upload-status" id="status-doc">0</div>
           <div class="progress-bar" id="progress-doc"></div>
           <div class="icon">📄</div><div class="name">DOC</div>
-          <div class="exts">.docx · .pdf · .txt · .rtf</div>
+          <div class="exts">.docx · .pdf · .txt · .md · .rtf</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
         <div class="file-list file-list-doc" id="files-doc"></div>
@@ -129,7 +129,7 @@
             <div class="toggle-row">
               <div class="toggle-info">
                 <span class="t-name">Contesto corso</span>
-                <span class="t-desc">Legge/aggiorna corso_context.json<br>Evita ri-spiegare concetti già noti</span>
+                <span class="t-desc">Legge/aggiorna corso_context.json<br>Evita di rispiegare concetti già noti</span>
               </div>
               <div class="toggle-wrap toggle-context">
                 <input type="checkbox" id="opt-context" checked><label for="opt-context"></label>
@@ -148,8 +148,8 @@
                 <select class="config-select" id="opt-whisper">
                   <option value="tiny">tiny — più veloce</option>
                   <option value="base" selected>base — bilanciato</option>
-                  <option value="small">small</option>
-                  <option value="medium">medium</option>
+                  <option value="small">small — preciso</option>
+                  <option value="medium">medium — molto preciso</option>
                   <option value="large">large — più preciso</option>
                 </select>
                 <span class="whisper-speed">vel: <span id="whisperSpeedLabel">1×</span></span>
@@ -164,7 +164,7 @@
               <button type="button" id="advancedToggle" onclick="toggleAdvanced()" class="adv-toggle-btn">▸ opzioni avanzate</button>
             </div>
             <div class="config-field config-field-sm field-hidden" id="ttl-field">
-              <label>Retention output <span class="label-faint">(giorni, poi cancellazione automatica)</span></label>
+              <label>Durata output <span class="label-faint">(giorni, poi cancellazione automatica)</span></label>
               <div class="ttl-row">
                 <input type="number" id="opt-ttl" min="1" max="365" value="7" class="input-ttl" oninput="saveTtl()">
                 <span class="ttl-unit">giorni</span>
@@ -188,7 +188,7 @@
         <div class="config-group">
           <div class="config-group-label">Materia — profilo prompt LaTeX</div>
           <div class="subject-grid" id="subjectGrid">
-            <button class="subject-btn selected" data-subject="auto"><span class="s-icon">🔍</span>auto-detect</button>
+            <button class="subject-btn selected" data-subject="auto"><span class="s-icon">🔍</span>Auto-detect</button>
             <button class="subject-btn" data-subject="ingegneria"><span class="s-icon">⚙️</span>Ingegneria</button>
             <button class="subject-btn" data-subject="matematica"><span class="s-icon">∑</span>Matematica</button>
             <button class="subject-btn" data-subject="fisica"><span class="s-icon">⚛️</span>Fisica</button>
@@ -277,7 +277,7 @@
     </div>
 
     <!-- ── SPLIT EDITOR: LaTeX (sx) + PDF viewer (dx) ────────── -->
-    <div id="splitEditorWrapper" class="field-hidden" style="display: none;">
+    <div id="splitEditorWrapper" class="field-hidden">
 
       <div id="latexPreviewPanel" class="panel panel-latex field-hidden">
         <div class="panel-header" onclick="toggleLatexPreview()">
