@@ -45,13 +45,6 @@ sudo apt install ffmpeg \
 sudo apt install ffmpeg texlive-full
 ```
 
-**macOS:**
-```bash
-brew install ffmpeg
-brew install --cask basictex   # ~100 MB, sufficiente
-# oppure scarica MacTeX completo da https://www.tug.org/mactex/
-```
-
 > **Altre lingue LaTeX:** per lezioni in inglese, francese, tedesco, spagnolo ecc. aggiungi il pacchetto babel corrispondente: `texlive-lang-european` copre francese/tedesco/spagnolo/olandese. La lingua viene auto-rilevata da Whisper e il documento LaTeX usa `\usepackage[lingua]{babel}` in modo dinamico.
 
 ### 2. Clona il repo e crea il venv
@@ -61,8 +54,7 @@ git clone <repo_url> ~/appunti_ai
 cd ~/appunti_ai
 
 python3 -m venv venv
-source venv/bin/activate          # Linux/macOS
-# oppure: venv\Scripts\activate   # Windows
+source venv/bin/activate
 ```
 
 ### 3. Installa le dipendenze Python
@@ -77,12 +69,7 @@ Se hai PDF senza testo selezionabile (scansioni, foto di libri):
 
 ```bash
 pip install pytesseract
-
-# Linux
 sudo apt install tesseract-ocr tesseract-ocr-ita tesseract-ocr-eng
-
-# macOS
-brew install tesseract
 ```
 
 Senza il binario `tesseract` i PDF scansionati vengono saltati — la pipeline continua con le altre fonti. Con tesseract installato, `ocr_math.py` lo usa anche come secondo backend per OCR formule (dopo pix2tex).
