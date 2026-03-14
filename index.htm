@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Appunti AI — Pipeline</title>
 <link rel="stylesheet" href="assets/css/index.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/theme/darcula.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.16/mode/stex/stex.min.js"></script>
 <script>
 // Applica tema prima del paint per evitare flash
 (function(){
@@ -521,8 +525,10 @@ function _timeAgo(iso){
 function toggleTheme(){
   const html=document.documentElement;
   const isLight=html.getAttribute('data-theme')==='light';
-  html.setAttribute('data-theme',isLight?'dark':'light');
-  localStorage.setItem('theme',isLight?'dark':'light');
+  const next=isLight?'dark':'light';
+  html.setAttribute('data-theme',next);
+  localStorage.setItem('theme',next);
+  _cmSetTheme(next);
 }
 function toggleHistory(){
   const body=document.getElementById('historyBody');
@@ -559,7 +565,7 @@ function _autosaveSchedule(){
   clearTimeout(_autosaveTimer);
   _autosaveTimer=setTimeout(()=>{
     if(!_currentPreviewJobId)return;
-    const content=document.getElementById('latexPreviewCode').value;
+    const content=_cmGet();
     try{localStorage.setItem(_autosaveKey(_currentPreviewJobId,_currentTexFile),content);}catch(e){}
   },2000);
 }
@@ -567,7 +573,7 @@ function _autosaveSchedule(){
 function _autosaveRestore(jobId,file,serverContent){
   const saved=localStorage.getItem(_autosaveKey(jobId,file));
   if(saved&&saved!==serverContent){
-    document.getElementById('latexPreviewCode').value=saved;
+    _cmSet(saved);
     showToast('Bozza locale ripristinata','Usa 💾 Salva per confermare','#f59e0b');
     return true;
   }
@@ -591,16 +597,16 @@ async function _switchTexFile(filename){
   if(filename===_currentTexFile)return;
   _currentTexFile=filename;
   document.getElementById('latexCurrentFile').textContent=filename;
-  document.getElementById('latexPreviewCode').value='// caricamento…';
+  _cmSet('% caricamento…');
   _renderTexTabs(_texFiles);
   try{
     const r=await fetch(`${API}/tex/${_currentPreviewJobId}/${encodeURIComponent(filename)}`);
     if(!r.ok)throw new Error(`HTTP ${r.status}`);
     const data=await r.json();
     const serverContent=data.content||'';
-    document.getElementById('latexPreviewCode').value=serverContent;
+    _cmSet(serverContent);
     _autosaveRestore(_currentPreviewJobId,filename,serverContent);
-  }catch(e){document.getElementById('latexPreviewCode').value=`// errore: ${e.message}`;}
+  }catch(e){_cmSet(`% errore: ${e.message}`);}
 }
 
 let _texFiles=[];
@@ -610,7 +616,7 @@ function _showPdfAndLatex(id,hasPdf,latexContent,pdfErrors,texFiles){
   _currentTexFile='main.tex';
   _texFiles=texFiles||['main.tex'];
   document.getElementById('latexCurrentFile').textContent='main.tex';
-  document.getElementById('latexPreviewCode').value=latexContent;
+  _cmSet(latexContent);
   _autosaveRestore(id,'main.tex',latexContent);
   document.getElementById('noPdfBadge').style.display=hasPdf?'none':'inline';
   // Pannello LaTeX — sempre visibile, corpo sempre espanso nel split
@@ -671,7 +677,7 @@ async function _loadImages(id){
 async function saveTexFile(){
   if(!_currentPreviewJobId)return;
   const btn=document.getElementById('saveTexBtn');
-  const content=document.getElementById('latexPreviewCode').value;
+  const content=_cmGet();
   btn.textContent='💾 salvando…';btn.disabled=true;
   try{
     const r=await fetch(`${API}/save/${_currentPreviewJobId}`,{
@@ -688,7 +694,7 @@ async function saveTexFile(){
 async function recompileLatex(){
   if(!_currentPreviewJobId)return;
   const btn=document.getElementById('recompileBtn');
-  const content=document.getElementById('latexPreviewCode').value;
+  const content=_cmGet();
   btn.textContent='⚙ compilando…';btn.disabled=true;
   try{
     const r=await fetch(`${API}/recompile/${_currentPreviewJobId}`,{
@@ -716,7 +722,7 @@ async function recompileLatex(){
 }
 
 async function previewFromHistory(id){
-  document.getElementById('latexPreviewCode').value='// caricamento…';
+  _cmSet('% caricamento…');
   document.getElementById('latexPreviewPanel').style.display='block';
   document.getElementById('latexPreviewPanel').scrollIntoView({behavior:'smooth',block:'start'});
   try{
@@ -725,7 +731,7 @@ async function previewFromHistory(id){
     const data=await r.json();
     _showPdfAndLatex(id,data.has_pdf||false,data.content||'',[],data.tex_files||['main.tex']);
   }catch(e){
-    document.getElementById('latexPreviewCode').value=`// errore: ${e.message}`;
+    _cmSet(`% errore: ${e.message}`);
   }
 }
 
@@ -909,6 +915,7 @@ function toggleLatexPreview(){
   const open=body.style.display==='none'||body.style.display==='';
   body.style.display=open?'flex':'none';
   arrow.textContent=open?'▲':'▼';
+  if(open)_cmRefresh();
 }
 function togglePdfErrors(){
   const body=document.getElementById('pdfErrorsBody');
@@ -1061,6 +1068,26 @@ function toggleInfoSection(){
 }
 
 // FILE RENDER
+const _ACCEPTED_EXT={
+  audio:['.mp3','.wav','.m4a','.ogg','.flac'],
+  video:['.mp4','.mkv','.avi','.mov','.webm'],
+  slide:['.pptx'],
+  doc:['.docx','.pdf','.txt','.md','.rtf'],
+  teams:[]
+};
+const _WARN_MB={audio:300,video:3000,slide:200,doc:100,teams:0};
+
+function _fileStatus(type,file){
+  const ext='.'+file.name.split('.').pop().toLowerCase();
+  const accepted=_ACCEPTED_EXT[type];
+  if(accepted.length&&!accepted.includes(ext))
+    return{cls:'file-badge-err',label:'✗ formato'};
+  const mb=(file.size||0)/1024/1024;
+  if(_WARN_MB[type]&&mb>_WARN_MB[type])
+    return{cls:'file-badge-warn',label:`⚠ ${Math.round(mb)} MB`};
+  return{cls:'file-badge-ok',label:'✓'};
+}
+
 function renderFiles(type){
   const list=document.getElementById(`files-${type}`);
   const statusEl=document.getElementById(`status-${type}`);
@@ -1071,8 +1098,10 @@ function renderFiles(type){
     const item=document.createElement('div');item.className='file-item';
     const nameEl=document.createElement('span');nameEl.className='file-item-name';nameEl.title=file.name;nameEl.textContent=file.name;
     const sizeEl=document.createElement('span');sizeEl.className='file-item-size';sizeEl.textContent=fmt(file.size||0);
+    const st=_fileStatus(type,file);
+    const badge=document.createElement('span');badge.className=`file-badge ${st.cls}`;badge.textContent=st.label;
     const removeBtn=document.createElement('button');removeBtn.className='file-item-remove';removeBtn.dataset.type=type;removeBtn.dataset.idx=idx;removeBtn.textContent='✕';
-    item.append(nameEl,sizeEl,removeBtn);
+    item.append(nameEl,sizeEl,badge,removeBtn);
     list.appendChild(item);
   });
   statusEl.textContent=files.length;
@@ -1250,10 +1279,32 @@ document.getElementById('opt-continue').addEventListener('input',()=>{
 });
 updateConfigStatus(false);
 
+// ── CODEMIRROR INIT ───────────────────────────────────────────────────────────
+let _cmEditor=null;
+function _cmInit(){
+  const ta=document.getElementById('latexPreviewCode');
+  if(!ta||typeof CodeMirror==='undefined')return;
+  _cmEditor=CodeMirror.fromTextArea(ta,{
+    mode:'stex',
+    theme:document.documentElement.getAttribute('data-theme')==='light'?'default':'darcula',
+    lineNumbers:true,
+    lineWrapping:true,
+    tabSize:2,
+    indentWithTabs:false,
+    autofocus:false,
+    extraKeys:{'Tab':cm=>cm.execCommand('indentMore'),'Shift-Tab':cm=>cm.execCommand('indentLess')}
+  });
+  _cmEditor.on('change',_autosaveSchedule);
+}
+function _cmGet(){ return _cmEditor?_cmEditor.getValue():(document.getElementById('latexPreviewCode')?.value||''); }
+function _cmSet(v){ if(_cmEditor){_cmEditor.setValue(v);_cmEditor.clearHistory();}else{const ta=document.getElementById('latexPreviewCode');if(ta)ta.value=v;} }
+function _cmRefresh(){ if(_cmEditor)setTimeout(()=>_cmEditor.refresh(),50); }
+function _cmSetTheme(t){ if(_cmEditor)_cmEditor.setOption('theme',t==='light'?'default':'darcula'); }
+
 // Init al caricamento
 _checkHealth();
 _loadHistory();
-document.getElementById('latexPreviewCode').addEventListener('input',_autosaveSchedule);
+_cmInit();
 // Auto-focus sul titolo se non ci sono file caricati
 setTimeout(()=>{
   const t=document.getElementById('titleInput');
