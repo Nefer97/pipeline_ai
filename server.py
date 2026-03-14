@@ -1086,6 +1086,33 @@ async def read_tex_file(job_id: str, filename: str):
     return JSONResponse({"filename": filename, "content": tex_path.read_text(encoding="utf-8")})
 
 
+@app.get("/prompt/{job_id}")
+async def read_prompt_files(job_id: str):
+    """Restituisce i file prompt_lezione_NN.txt dalla cartella debug/ del job."""
+    job = jobs.get(job_id)
+    stored_dir = job.get("output_dir") if job else None
+    if stored_dir and Path(stored_dir).exists():
+        output_dir = Path(stored_dir)
+    else:
+        candidates = list((OUTPUT_DIR / job_id).rglob("main.tex")) if (OUTPUT_DIR / job_id).exists() else []
+        if not candidates:
+            raise HTTPException(status_code=404, detail="output non trovato su disco")
+        output_dir = candidates[0].parent
+
+    debug_dir = output_dir / "debug"
+    if not debug_dir.exists():
+        raise HTTPException(status_code=404, detail="cartella debug non trovata")
+
+    prompts = sorted(debug_dir.glob("prompt_lezione_*.txt"))
+    if not prompts:
+        raise HTTPException(status_code=404, detail="nessun file prompt trovato")
+
+    return JSONResponse([
+        {"filename": p.name, "content": p.read_text(encoding="utf-8")}
+        for p in prompts
+    ])
+
+
 @app.get("/images/{job_id}")
 async def list_images(job_id: str):
     """Restituisce la lista delle immagini nella cartella images/ del job."""
