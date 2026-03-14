@@ -6,6 +6,19 @@ Claude riceve il **prompt testuale completo + le immagini PNG delle slide** (mul
 
 ---
 
+## Piattaforme supportate
+
+> **Sviluppato e testato su Ubuntu 22.04 LTS.** È la piattaforma di riferimento — tutto funziona.
+
+| Sistema | Stato | Note |
+|---------|-------|------|
+| **Ubuntu 22.04 / Debian** | ✅ testato | piattaforma di riferimento |
+| **Linux (altre distro)** | ✅ dovrebbe funzionare | stesso stack apt/pip |
+| **macOS** | ⚠ parziale | ffmpeg/pdflatex/tesseract via `brew`; LibreOffice path da verificare in `slide_renderer.py`; pix2tex su Apple Silicon richiede PyTorch ARM |
+| **Windows** | ⚠ non testato | ffmpeg/pdflatex installabili; LibreOffice non in PATH di default; alcune subprocess call POSIX potrebbero richiedere adattamenti |
+
+---
+
 ## Requisiti di sistema
 
 | Strumento | Versione minima | Note |
