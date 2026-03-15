@@ -307,12 +307,14 @@ Apri `http://localhost:8000`. Il frontend permette di:
 - Scaricare lo `.zip` con il risultato e/o il PDF compilato
 - Vedere la history dei job con accesso diretto a ZIP, PDF e anteprima
 - **Editor LaTeX integrato** — si apre cliccando "👁 .tex" nella history; pannello split: editor a sinistra, PDF viewer a destra
+  - Larghezza dei due pannelli regolabile trascinando il divisore centrale
   - CodeMirror 5 con syntax highlighting LaTeX completo, numeri di riga, indentazione Tab/Shift-Tab
   - Tema editor segue il tema dell'interfaccia (darcula in dark, default in light)
   - Tab per selezionare e modificare qualsiasi file `.tex` del job
   - Salvataggio separato da ricompilazione (💾 Salva / ⚙ Ricompila)
   - Auto-save in `localStorage` ogni 2s — bozza ripristinata se si riapre il job prima di salvare
   - Pannello immagini sotto l'editor con tutte le PNG della cartella `images/`
+- **Pulsante copia log** — nel header del pannello "log pipeline", copia l'intero output in un click
 - **Visualizzatore prompt Claude** — bottone "📄 Prompt" nella history: mostra il prompt SYSTEM+USER completo inviato a Claude; se la lezione ha più capitoli, tab per navigare tra essi
 - **Validazione file upload** — ogni file nella lista mostra un badge: ✓ verde (ok), ⚠ giallo (file molto grande), ✗ rosso (formato non supportato per quel tipo di slot)
 - **Dialog di conferma custom** — elimina job e annulla pipeline usano un modal stilizzato invece del `confirm()` del browser
@@ -320,7 +322,7 @@ Apri `http://localhost:8000`. Il frontend permette di:
 - Impostare l'API key Claude direttamente dall'interfaccia (persiste su `settings.json`)
 - Alternare tema chiaro/scuro
 
-La pagina `http://localhost:8000/schema.htm` mostra il diagramma interattivo dell'architettura (accessibile via URL diretto, non nella navbar).
+Le pagine `schema.htm` (diagramma interattivo architettura) e `docs.htm` (documentazione completa) sono accessibili dalla navbar in alto.
 
 ### Continuità tra lezioni
 
@@ -348,6 +350,7 @@ Dopo il login con lo stesso account, il server è raggiungibile via Tailscale IP
 |----------|--------|-------------|
 | `/` | GET | Frontend (`index.htm`) |
 | `/schema.htm` | GET | Diagramma architettura interattivo |
+| `/docs.htm` | GET | Documentazione interattiva |
 | `/run-pipeline` | POST | Avvia pipeline, ritorna `job_id` |
 | `/job/{job_id}` | GET | Stato job + progress, step, detail, pdf_errors |
 | `/job/{job_id}` | DELETE | Elimina job (`?full=true` rimuove anche ZIP e output) |
@@ -463,6 +466,8 @@ Si disabilita con `--no-context`. Pruning automatico: oltre le ultime 10 lezioni
 | `server.py` | Backend FastAPI + editor LaTeX integrato |
 | `index.htm` | Frontend web (upload, editor split, PDF viewer, history) |
 | `schema.htm` | Diagramma architettura interattivo |
+| `docs.htm` | Documentazione interattiva (19 sezioni, sidebar, burger mobile) |
+| `assets/css/shared.css` | Stili condivisi da tutte le pagine (variabili, navbar, tema) |
 | `preprocessor.py` | Normalizza e comprime testo; rileva materia; compressione adattiva RAW/DENSE/OUTLINE; gestisce contesto corso |
 | `extractor.py` | Parsing approfondito `.pptx` (testo, immagini, tabelle, formule OMML) |
 | `slide_renderer.py` | Ogni slide PPTX → PNG (LibreOffice+pymupdf prioritario, Pillow come fallback) |
