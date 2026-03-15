@@ -530,8 +530,15 @@ curl -X POST http://localhost:8000/settings \
 **Test suite:**
 ```bash
 source venv/bin/activate
+
+# Tutti i test (unit + integrazione API)
 python -m pytest tests/ -v
+
+# Solo test veloci, senza avviare pipeline reale
+python -m pytest tests/ -v -m "not integration"
 ```
+
+`tests/test_core.py` copre i moduli Python core (escape LaTeX, OMML, preprocessor, formula detector). `tests/test_api.py` copre gli endpoint FastAPI (pagine statiche, `/health`, `/jobs`, `/settings`, `/run-pipeline`).
 
 ---
 
@@ -546,6 +553,7 @@ python -m pytest tests/ -v
 | `ffprobe: command not found` | ffprobe non installato | `sudo apt install ffmpeg` |
 | Claude non risponde | API key mancante o errata | `echo $ANTHROPIC_API_KEY` per verificare |
 | Più `lezione_NN.tex` generati | Batch o PDF > 20 pag senza audio | Comportamento atteso — vedi *PDF grandi* |
+| Titolo con `&` `%` `#` `_` rompe pdflatex | Caratteri LaTeX nel titolo | Fix già applicato — `_latex_escape_title()` in `write_run_tex` |
 | `pdflatex` fallisce | Pacchetti LaTeX mancanti | `sudo apt install texlive-latex-extra texlive-lang-italian texlive-fonts-recommended` |
 | Errore Unicode nel PDF | Carattere non mappato in builder.py | Cerca il carattere nel `main.log`; se comune, aprire issue |
 | Frontend non raggiungibile da remoto | Server non su `0.0.0.0` | Avvia con `--host 0.0.0.0`; usa IP del server o Tailscale IP |
