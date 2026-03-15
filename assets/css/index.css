@@ -77,15 +77,19 @@ header p{margin-top:10px;color:var(--muted);font-family:'JetBrains Mono',monospa
 .subject-btn.selected{background:color-mix(in srgb,var(--c4) 14%,var(--surface2));border-color:color-mix(in srgb,var(--c4) 60%,transparent);color:var(--c4);}
 .subject-btn .s-icon{display:block;font-size:1rem;margin-bottom:3px;}
 /* CONFIG STATUS */
-.config-status{display:flex;gap:8px;flex-wrap:wrap;padding-top:14px;border-top:1px solid var(--border);align-content: center;align-items: center;justify-content: space-between;}   
+.config-status{display:flex;flex-direction:column;gap:14px;padding-top:14px;border-top:1px solid var(--border);}
+.config-tags-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
 .config-tag{font-family:'JetBrains Mono',monospace;font-size:.6rem;padding:3px 10px;border-radius:20px;border:1px solid var(--border2);color:var(--muted);background:var(--surface2);transition:all .2s;}
 .config-tag.active{color:var(--tag-color,var(--c1));border-color:color-mix(in srgb,var(--tag-color,var(--c1)) 35%,transparent);background:color-mix(in srgb,var(--tag-color,var(--c1)) 10%,var(--surface2));}
 /* RUN */
-.run-section{display:flex;justify-content:center;align-items:center;gap:10px;flex-wrap:wrap;}
-.run-btn{background:linear-gradient(135deg,var(--c1),var(--c2));color:#000;border:none;border-radius:12px;padding:15px 48px;font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:700;letter-spacing:.1em;cursor:pointer;transition:transform .2s,opacity .2s,box-shadow .2s;opacity:.35;pointer-events:none;}
-.run-btn.active{opacity:1;pointer-events:auto;}
-.run-btn.active:hover{transform:translateY(-2px);box-shadow:0 8px 32px color-mix(in srgb,var(--c1) 28%,transparent);}
-.run-btn.active:active{transform:translateY(0);}
+.run-section{display:flex;flex-direction:column;align-items:stretch;gap:8px;}
+.run-btn{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:none;color:var(--muted);border:1.5px dashed var(--border2);border-radius:12px;padding:16px;font-family:'JetBrains Mono',monospace;font-size:.82rem;font-weight:700;letter-spacing:.12em;cursor:not-allowed;pointer-events:none;transition:all .25s;}
+.run-btn.active{background:linear-gradient(135deg,var(--c1),var(--c2));color:#000;border:none;cursor:pointer;padding:17.5px;pointer-events:auto;}
+.run-btn.active:hover{box-shadow:0 8px 36px color-mix(in srgb,var(--c1) 35%,transparent);transform:translateY(-2px);}
+.run-btn.active:active{transform:translateY(0);box-shadow:none;}
+.run-icon{width:16px;height:16px;flex-shrink:0;opacity:.5;}
+.run-btn.active .run-icon{opacity:1;}
+.run-label{letter-spacing:.14em;}
 /* STEPS */
 .steps{display:grid;grid-template-columns:1fr;gap:10px;}
 .step{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--sc,var(--c1));border-radius:12px;padding:18px 22px;display:grid;grid-template-columns:46px 1fr auto;align-items:center;gap:18px;transition:background .2s,transform .2s;position:relative;overflow:hidden;}
@@ -145,19 +149,20 @@ button.running{opacity:.6;cursor:not-allowed;transform:none !important;}
 [data-theme="light"] .live-status{background:var(--surface2);}
 /* Transizioni tema */
 .surface-transition,.upload-card,.config-panel,.step,.branch-card,.output-card,.toast,.live-status{transition:background .25s,border-color .25s,color .25s;}
-/* PRE-FLIGHT ROW */
-.preflight-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:14px 0 0;padding:10px 14px;background:var(--surface2);border:1px solid var(--border2);border-radius:10px;}
+/* FILE CHIPS (integrati in config-status) */
+#fileChipsGroup{display:contents;}
 .pf-label{font-family:'JetBrains Mono',monospace;font-size:.59rem;color:var(--muted);margin-right:2px;flex-shrink:0;}
 .pf-chip{font-family:'JetBrains Mono',monospace;font-size:.61rem;padding:3px 9px;border-radius:12px;border:1px solid var(--border2);background:var(--surface);color:var(--muted2);transition:all .2s;display:inline-flex;align-items:center;gap:5px;}
 .pf-chip img{height:11px;width:auto;filter:brightness(0) invert(.55);}
 .pf-chip.hi{color:var(--cc,var(--c1));border-color:color-mix(in srgb,var(--cc,var(--c1)) 35%,transparent);background:color-mix(in srgb,var(--cc,var(--c1)) 8%,var(--surface));}
+.pf-sep{display:block;width:1px;height:16px;background:var(--border2);margin:0 4px;flex-shrink:0;align-self:center;}
 /* INFO SECTION TOGGLE */
 .info-toggle{display:flex;justify-content:center;align-items:center;gap:10px;padding:24px 0 4px;}
 .info-toggle::before,.info-toggle::after{content:'';flex:1;height:1px;background:var(--border);}
 .info-toggle-btn{background:none;border:1px solid var(--border2);border-radius:20px;padding:5px 16px;font-family:'JetBrains Mono',monospace;font-size:.62rem;color:var(--muted);cursor:pointer;letter-spacing:.08em;white-space:nowrap;transition:color .2s,border-color .2s;}
 .info-toggle-btn:hover{color:var(--text);border-color:var(--muted2);}
 /* CANCEL BTN */
-#cancelBtn{display:none;background:none;border:1px solid color-mix(in srgb,var(--c5) 40%,transparent);border-radius:10px;padding:14px 22px;font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:700;letter-spacing:.08em;cursor:pointer;color:var(--c5);transition:background .2s,border-color .2s;}
+#cancelBtn{display:none;background:none;border:1px solid color-mix(in srgb,var(--c5) 40%,transparent);border-radius:10px;padding:13px;width:100%;font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:700;letter-spacing:.08em;cursor:pointer;color:var(--c5);transition:background .2s,border-color .2s;text-align:center;}
 #cancelBtn:hover{background:color-mix(in srgb,var(--c5) 10%,transparent);}
 .run-hint{display:none;font-family:'JetBrains Mono',monospace;font-size:.63rem;color:var(--muted);text-align:center;margin-top:6px;opacity:.7;width:100%;}
 /* COLLAPSIBLE PANELS */
@@ -405,10 +410,6 @@ button.running{opacity:.6;cursor:not-allowed;transform:none !important;}
 .tag-start    { --tag-color: #64748b; }
 .tag-continue { --tag-color: #f59e0b; }
 
-/* Preflight row: nascosta di default */
-.preflight-hidden {
-  display: none;
-}
 
 /* Panel panels: nascosti di default */
 .panel-hidden {

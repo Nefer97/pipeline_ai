@@ -83,7 +83,7 @@
 .docs-main {
   flex: 1;
   min-width: 0;
-  padding: 38px 56px 80px;
+  padding: 38px 20px 80px;
 }
 
 .docs-content {
@@ -162,6 +162,8 @@
   font-weight: 600;
   flex-shrink: 0;
   max-width: 50%;
+  display: flex;
+  align-items: center;
 }
 .doc-body .dp-row .dp-val {
   color: var(--muted);
@@ -667,10 +669,13 @@ pdflatex main.tex && pdflatex main.tex</pre>
       <div class="doc-img-cap">File audio, slide e PDF caricati nelle rispettive zone — badge verdi confermano i formati accettati.</div>
       <div class="dp-sep"></div>
       <div class="section-header">Editor LaTeX integrato</div>
-      <p>Cliccando "👁 .tex" nella cronologia si apre l'editor split: il pannello sinistro è un editor CodeMirror con syntax highlighting LaTeX, quello destro mostra il PDF compilato in un iframe. La larghezza dei due pannelli è liberamente regolabile trascinando il divisore centrale.</p>
+      <p>Al termine della pipeline l'editor si apre automaticamente mostrando il PDF compilato. È anche raggiungibile in qualsiasi momento cliccando "👁 .tex" nella cronologia. Il pannello sinistro è un editor CodeMirror con syntax highlighting LaTeX, quello destro mostra il PDF compilato in un iframe. La larghezza dei due pannelli è liberamente regolabile trascinando il divisore centrale.</p>
       <p><strong>Salva</strong> scrive il file su disco senza ricompilare. <strong>Ricompila</strong> esegue pdflatex e aggiorna il PDF — eventuali errori di compilazione vengono mostrati inline. L'auto-save su localStorage ogni 2 secondi preserva la bozza anche se si chiude accidentalmente la finestra prima di salvare.</p>
       <img class="doc-img" src="assets/img/ui-editor.png" alt="Editor LaTeX split con PDF viewer" loading="lazy">
       <div class="doc-img-cap">Split editor: LaTeX con syntax highlighting a sinistra, PDF compilato in tempo reale a destra. Il divisore centrale è trascinabile.</div>
+      <div class="dp-sep"></div>
+      <div class="section-header">Effetti sonori</div>
+      <p>L'interfaccia usa suoni 8-bit per dare feedback immediato sugli eventi principali: <em>Let's go</em> all'avvio, <em>New highscore!</em> quando il download è pronto, <em>You win</em> se il PDF compila senza errori, <em>Well done</em> se compila con avvisi, <em>Oh no</em> in caso di errore pipeline, <em>Game, not over</em> all'annullamento del job, <em>Static Sound</em> al toggle Claude AI.</p>
       <div class="dp-sep"></div>
       <div class="section-header">Altre funzionalità</div>
       <p>Il <strong>prompt viewer</strong> ("📄 Prompt") mostra il prompt SYSTEM+USER completo inviato a Claude, con un tab separato per ogni capitolo — utile per capire esattamente cosa ha visto il modello durante la generazione. I badge di upload forniscono feedback immediato: verde per file accettati, giallo per file molto grandi, rosso per formati non supportati.</p>

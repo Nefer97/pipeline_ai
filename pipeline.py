@@ -2453,11 +2453,9 @@ def main():
             print(f"\n  [ATTENZIONE] {len(batch_errors)} lezioni saltate → errors.json")
         _report_progress(output_dir, 100, "Completato", "")
         print(f"\n{'═'*58}")
-        print(f"  COMPLETATO — {len(lesson_files)} lezioni"
+        print(f"  COMPLETATO"
               + (f" ({len(batch_errors)} errori)" if batch_errors else ""))
-        print(f"\n  Compila il PDF:")
-        print(f"    cd {output_dir.resolve()}")
-        print(f"    pdflatex main.tex && pdflatex main.tex")
+        print(f"\n  Compilando il PDF e preparando il download")
         print(f"{'═'*58}\n")
     else:
         print("\n[ATTENZIONE] Nessun .tex generato.")

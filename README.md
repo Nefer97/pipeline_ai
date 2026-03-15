@@ -306,7 +306,7 @@ Apri `http://localhost:8000`. Il frontend permette di:
 - Monitorare lo stato in tempo reale con percentuale di avanzamento
 - Scaricare lo `.zip` con il risultato e/o il PDF compilato
 - Vedere la history dei job con accesso diretto a ZIP, PDF e anteprima
-- **Editor LaTeX integrato** — si apre cliccando "👁 .tex" nella history; pannello split: editor a sinistra, PDF viewer a destra
+- **Editor LaTeX integrato** — si apre automaticamente al termine della pipeline con il PDF compilato; raggiungibile anche in qualsiasi momento con "👁 .tex" nella history; pannello split: editor a sinistra, PDF viewer a destra
   - Larghezza dei due pannelli regolabile trascinando il divisore centrale
   - CodeMirror 5 con syntax highlighting LaTeX completo, numeri di riga, indentazione Tab/Shift-Tab
   - Tema editor segue il tema dell'interfaccia (darcula in dark, default in light)
@@ -314,6 +314,7 @@ Apri `http://localhost:8000`. Il frontend permette di:
   - Salvataggio separato da ricompilazione (💾 Salva / ⚙ Ricompila)
   - Auto-save in `localStorage` ogni 2s — bozza ripristinata se si riapre il job prima di salvare
   - Pannello immagini sotto l'editor con tutte le PNG della cartella `images/`
+- **Effetti sonori 8-bit** — feedback audio per ogni evento: avvio, download pronto, PDF compilato, errore, annullamento, toggle AI
 - **Pulsante copia log** — nel header del pannello "log pipeline", copia l'intero output in un click
 - **Visualizzatore prompt Claude** — bottone "📄 Prompt" nella history: mostra il prompt SYSTEM+USER completo inviato a Claude; se la lezione ha più capitoli, tab per navigare tra essi
 - **Validazione file upload** — ogni file nella lista mostra un badge: ✓ verde (ok), ⚠ giallo (file molto grande), ✗ rosso (formato non supportato per quel tipo di slot)

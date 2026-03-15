@@ -218,29 +218,30 @@
 
         <!-- Config status tags (aggiornati via JS, visibili come riepilogo impostazioni) -->
         <div class="config-status">
-          <span class="config-tag active tag-claude" id="tag-claude">claude ON</span>
-          <span class="config-tag tag-ocr" id="tag-ocr">ocr OFF</span>
-          <span class="config-tag active tag-context" id="tag-context">context ON</span>
-          <span class="config-tag active tag-whisper" id="tag-whisper">whisper:base</span>
-          <span class="config-tag active tag-subject" id="tag-subject">subject:auto</span>
-          <span class="config-tag active tag-output" id="tag-output">out:./output</span>
-          <span class="config-tag active tag-start" id="tag-start">start:0</span>
-          <!-- style="display:none" rimane: il JS gestisce il toggle con style.display (non può usare classList per compatibilità con logica esistente) -->
-          <span class="config-tag tag-continue" id="tag-continue" style="display:none">continue:—</span>
+          <div class="config-tags-row">
+            <span id="fileChipsGroup"></span>
+            <span class="config-tag active tag-claude" id="tag-claude">claude ON</span>
+            <span class="config-tag tag-ocr" id="tag-ocr">ocr OFF</span>
+            <span class="config-tag active tag-context" id="tag-context">context ON</span>
+            <span class="config-tag active tag-whisper" id="tag-whisper">whisper:base</span>
+            <span class="config-tag active tag-subject" id="tag-subject">subject:auto</span>
+            <span class="config-tag active tag-output" id="tag-output">out:./output</span>
+            <span class="config-tag active tag-start" id="tag-start">start:0</span>
+            <!-- style="display:none" rimane: il JS gestisce il toggle con style.display -->
+            <span class="config-tag tag-continue" id="tag-continue" style="display:none">continue:—</span>
+          </div>
           <!-- ── RUN ───────────────────────────────────────────────── -->
           <div class="run-section">
-            <button class="run-btn" id="runBtn" title="Carica almeno un file e inserisci un titolo">▶ AVVIA PIPELINE</button>
-            <button id="cancelBtn" title="Interrompi job in corso" onclick="cancelCurrentJob()">✕ Annulla</button>
+            <button class="run-btn" id="runBtn" title="Carica almeno un file e inserisci un titolo">
+              <svg class="run-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v14l11-7-11-7z"/></svg>
+              <span class="run-label">AVVIA PIPELINE</span>
+            </button>
             <div id="run-hint" class="run-hint"></div>
+            <button id="cancelBtn" title="Interrompi job in corso" onclick="cancelCurrentJob()">✕ Annulla</button>
           </div>
         </div>
       </div>
 
-    </div>
-
-    <!-- ── PRE-FLIGHT (titolo + file pronti) ─────────────────── -->
-    <div class="preflight-row field-hidden" id="preflightRow">
-      <span class="pf-label">↳</span>
     </div>
 
     <!-- ── LIVE STATUS (nascosto a riposo) ───────────────────── -->
@@ -255,21 +256,7 @@
         <div class="global-progress-bar" id="globalProgressBar"></div>
       </div>
     </div>
-
-    <!-- ── LEZIONI PRECEDENTI ────────────────────────────────── -->
-    <div id="historyPanel" class="panel panel-history field-hidden">
-      <div class="panel-header" onclick="toggleHistory()">
-        <span class="panel-title">// lezioni precedenti</span>
-        <div class="panel-meta">
-          <span id="historyCount" class="panel-count"></span>
-          <span id="historyArrow" class="panel-arrow">▲</span>
-        </div>
-      </div>
-      <div id="historyBody" class="panel-body panel-body-open">
-        <div id="historyList" class="history-list-inner"></div>
-      </div>
-    </div>
-
+    
     <!-- ── LOG PIPELINE ──────────────────────────────────────── -->
     <div id="logPanel" class="panel panel-log field-hidden">
       <div class="panel-header" onclick="toggleLogPanel()">
@@ -294,6 +281,20 @@
       <a id="downloadLink" href="#" class="job-btn job-btn-dl">⬇ Scarica ZIP</a>
       <button onclick="copyJobId()" class="job-btn job-btn-cont">📋 Usa per lezione successiva</button>
       <button onclick="resetForNextLesson()" class="job-btn job-btn-new">↺ Nuova pipeline</button>
+    </div>
+
+    <!-- ── LEZIONI PRECEDENTI ────────────────────────────────── -->
+    <div id="historyPanel" class="panel panel-history field-hidden">
+      <div class="panel-header" onclick="toggleHistory()">
+        <span class="panel-title">// lezioni precedenti</span>
+        <div class="panel-meta">
+          <span id="historyCount" class="panel-count"></span>
+          <span id="historyArrow" class="panel-arrow">▲</span>
+        </div>
+      </div>
+      <div id="historyBody" class="panel-body panel-body-open">
+        <div id="historyList" class="history-list-inner"></div>
+      </div>
     </div>
 
     <!-- ── SPLIT EDITOR: LaTeX (sx) + PDF viewer (dx) ────────── -->
@@ -469,11 +470,17 @@
 </div>
 
 <!-- AUDIO -->
-<audio id="Play" src="assets/audio/Play.mp3"></audio>
-<audio id="Download" src="assets/audio/Download.mp3"></audio>
-<audio id="AddFile" src="assets/audio/AddFile.mp3"></audio>
-<audio id="ToggleAI" src="assets/audio/Toggle.mp3"></audio>
-<audio id="SelectSubject" src="assets/audio/Select.mp3"></audio>
+<audio id="snd-play"        src="assets/audio/letsgo.mp3"></audio>
+<audio id="snd-download"   src="assets/audio/newhighscore.mp3"></audio>
+<audio id="snd-addfile"    src="assets/audio/AddFile.mp3"></audio>
+<audio id="snd-toggleai"   src="assets/audio/staticsound.mp3"></audio>
+<audio id="snd-subject"    src="assets/audio/Select.mp3"></audio>
+<audio id="snd-error"      src="assets/audio/ohno.mp3"></audio>
+<audio id="snd-cancel"     src="assets/audio/gamenotover.mp3"></audio>
+<audio id="snd-welldone"   src="assets/audio/welldone.mp3"></audio>
+<audio id="snd-youwin"     src="assets/audio/youwin.mp3"></audio>
+<audio id="snd-missionfail"src="assets/audio/missionfailed.mp3"></audio>
+<audio id="snd-warning"    src="assets/audio/warning.mp3"></audio>
 <audio id="bgMusic" src="assets/audio/ambient.mp3" loop></audio>
 
 
@@ -948,6 +955,10 @@ function closeEditor(){
   document.getElementById('splitEditorWrapper').style.display='none';
   document.getElementById('imagesPanel').style.display='none';
 }
+function openEditor(){
+  document.getElementById('splitEditorWrapper').style.display='flex';
+  document.getElementById('splitEditorWrapper').scrollIntoView({behavior:'smooth',block:'start'});
+}
 (function(){
   const resizer=document.getElementById('splitResizer');
   const left=document.getElementById('latexPreviewPanel');
@@ -1017,7 +1028,8 @@ async function cancelCurrentJob(){
     updateGlobalProgress(0);
     setUIRunning(false);
     document.getElementById('runBtn').classList.add('active');
-    document.getElementById('runBtn').textContent='▶ AVVIA PIPELINE';
+    document.getElementById('runBtn').querySelector('.run-label').textContent='AVVIA PIPELINE';
+    playSound('cancel');
     showToast('Job annullato',id,'#f59e0b');
     _currentJobId=null;
     setTimeout(_loadHistory,500);
@@ -1028,13 +1040,20 @@ let selectedSubject = 'auto';
 
 // AUDIO ELEMENTS
 const sounds = {
-  play: document.getElementById('Play'),
-  download: document.getElementById('Download'),
-  addFile: document.getElementById('AddFile'),
-  toggleAI: document.getElementById('ToggleAI'),
-  selectSubject: document.getElementById('SelectSubject')
+  play:        document.getElementById('snd-play'),
+  download:    document.getElementById('snd-download'),
+  addFile:     document.getElementById('snd-addfile'),
+  toggleAI:    document.getElementById('snd-toggleai'),
+  selectSubject:document.getElementById('snd-subject'),
+  error:       document.getElementById('snd-error'),
+  cancel:      document.getElementById('snd-cancel'),
+  welldone:    document.getElementById('snd-welldone'),
+  youwin:      document.getElementById('snd-youwin'),
+  missionFail: document.getElementById('snd-missionfail'),
+  warning:     document.getElementById('snd-warning'),
 };
-Object.values(sounds).forEach(s=>{ s.volume=0.15; });
+function playSound(key){ const s=sounds[key]; if(s){s.currentTime=0;s.play().catch(()=>{});} }
+Object.values(sounds).forEach(s=>{ if(s) s.volume=0.18; });
 
 // AMBIENT MUSIC
 const bgMusic = document.getElementById('bgMusic');
@@ -1065,15 +1084,15 @@ function updateRunButton(){
   const continueVal=document.getElementById('opt-continue').value.trim();
   if(total>0 && hasTitle){
     btn.classList.add('active');
-    btn.textContent=continueVal
-      ?`▶ CONTINUA CORSO (${total} file)`
-      :`▶ AVVIA PIPELINE (${total} file)`;
+    btn.querySelector('.run-label').textContent=continueVal
+      ?`CONTINUA CORSO (${total} file)`
+      :`AVVIA PIPELINE (${total} file)`;
     btn.title='';
     titleInput.style.borderLeftColor='';
     if(hint)hint.style.display='none';
   } else {
     btn.classList.remove('active');
-    btn.textContent='▶ AVVIA PIPELINE';
+    btn.querySelector('.run-label').textContent='AVVIA PIPELINE';
     if(total>0 && !hasTitle){
       titleInput.style.borderLeftColor='var(--c5)';
       if(hint){hint.textContent='↑ inserisci un titolo per continuare';hint.style.display='block';}
@@ -1088,43 +1107,7 @@ function updateRunButton(){
       btn.title='Carica almeno un file e inserisci un titolo';
     }
   }
-  updatePreflightRow();
-}
-
-function updatePreflightRow(){
-  const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);
-  const hasTitle=document.getElementById('titleInput').value.trim().length>0;
-  const row=document.getElementById('preflightRow');
-  if(!row)return;
-  if(!total||!hasTitle){row.style.display='none';return;}
-  const colorMap={audio:'#00e5ff',video:'#7c3aed',slide:'#f59e0b',doc:'#10b981',teams:'#ef4444'};
-  const iconMap={
-    audio:'<img src="assets/img/logos/audio.png" alt="audio">',
-    video:'<img src="assets/img/logos/vlc.webp" alt="video">',
-    slide:'<img src="assets/img/logos/microsoftpowerpoint.svg" alt="slide">',
-    doc:'<img src="assets/img/logos/microsoftword.svg" alt="doc">',
-    teams:'<img src="assets/img/logos/microsoftteams.svg" alt="teams">'
-  };
-  let html='<span class="pf-label">↳</span>';
-  // style="--cc:X" rimane inline: colore calcolato dinamicamente da colorMap[t] a runtime
-  Object.entries(fileState).forEach(([t,files])=>{
-    if(!files.length)return;
-    const totalSize=files.reduce((s,f)=>s+(f.size||0),0);
-    const sizeStr=totalSize>0?` · ${fmt(totalSize)}`:'';
-    html+=`<span class="pf-chip hi" style="--cc:${colorMap[t]}">${iconMap[t]} ${files.length} ${t}${sizeStr}</span>`;
-  });
-  const claude=document.getElementById('opt-claude').checked;
-  // style="--cc:X" rimane inline: colore dipende dallo stato runtime del toggle Claude
-  html+=`<span class="pf-chip hi" style="--cc:${claude?'#00e5ff':'#64748b'}"><img src="assets/img/logos/${claude?'anthropic.svg':'python.svg'}" alt=""> ${claude?'Claude':'skip-ai'}</span>`;
-  const ocr=document.getElementById('opt-ocr').checked;
-  if(ocr)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">OCR</span>`;
-  const whisperEl=document.getElementById('whisperEstimate');
-  if(whisperEl&&whisperEl.style.display!=='none'&&whisperEl.textContent)
-    html+=`<span class="pf-chip">⏱ ${whisperEl.textContent.replace('⏱ stima trascrizione Whisper: ','')}</span>`;
-  const subject=selectedSubject!=='auto'?selectedSubject:null;
-  if(subject)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">${subject}</span>`;
-  row.innerHTML=html;
-  row.style.display='flex';
+  updateConfigStatus(false);
 }
 
 function toggleInfoSection(){
@@ -1184,7 +1167,7 @@ function addFiles(type,newFiles){
   renderFiles(type);
   if(newFiles.length>0){
     showToast(`${newFiles.length} file aggiunto`,Array.from(newFiles).map(f=>f.name).join(', ').slice(0,60),colors[type]);
-    sounds.addFile.play().catch(e=>console.log("Suono aggiunta file bloccato:", e));
+    playSound('addFile');
   }
   if(type==='audio'||type==='video') updateWhisperEstimate();
 }
@@ -1212,7 +1195,7 @@ teamsUrlInput.addEventListener('keydown',e=>{
       fileState.teams.push({name:url,size:0,isUrl:true});
       teamsUrlInput.value='';teamsUrlArea.style.display='none';
       renderFiles('teams');showToast('URL Teams aggiunto',url.slice(0,60),'#ef4444');
-      sounds.addFile.play().catch(e=>console.log("Suono aggiunta file bloccato:", e));
+      playSound('addFile');
     }
   }
   if(e.key==='Escape')teamsUrlArea.style.display='none';
@@ -1236,7 +1219,7 @@ document.getElementById('subjectGrid').addEventListener('click',e=>{
   btn.classList.add('selected');
   selectedSubject=btn.dataset.subject;
   updateConfigStatus(false);
-  sounds.selectSubject.play().catch(()=>{});
+  playSound('selectSubject');
 });
 
 // WHISPER SPEED
@@ -1271,7 +1254,7 @@ document.getElementById('titleInput').addEventListener('keydown',e=>{
 });
 
 // CONFIG STATUS
-function updateConfigStatus(playSound){
+function updateConfigStatus(withSound){
   const claude=document.getElementById('opt-claude').checked;
   const ocr=document.getElementById('opt-ocr').checked;
   const context=document.getElementById('opt-context').checked;
@@ -1285,7 +1268,37 @@ function updateConfigStatus(playSound){
   setTag('tag-subject',true,`subject:${selectedSubject}`,'#f59e0b');
   setTag('tag-output',true,`out:${output}`,'#64748b');
   setTag('tag-start',true,`start:${start}`,'#64748b');
-  if(playSound) sounds.toggleAI.play().catch(e=>console.log("Suono toggle AI bloccato:", e));
+  if(withSound) playSound('toggleAI');
+  // file chips (ex preflightRow)
+  const total=Object.values(fileState).reduce((s,a)=>s+a.length,0);
+  const hasTitle=document.getElementById('titleInput').value.trim().length>0;
+  const grp=document.getElementById('fileChipsGroup');
+  if(!grp)return;
+  if(!total||!hasTitle){grp.innerHTML='';return;}
+  const colorMap={audio:'#00e5ff',video:'#7c3aed',slide:'#f59e0b',doc:'#10b981',teams:'#ef4444'};
+  const iconMap={
+    audio:'<img src="assets/img/logos/audio.png" alt="audio">',
+    video:'<img src="assets/img/logos/vlc.webp" alt="video">',
+    slide:'<img src="assets/img/logos/microsoftpowerpoint.svg" alt="slide">',
+    doc:'<img src="assets/img/logos/microsoftword.svg" alt="doc">',
+    teams:'<img src="assets/img/logos/microsoftteams.svg" alt="teams">'
+  };
+  let html='<span class="pf-label">↳</span>';
+  Object.entries(fileState).forEach(([t,files])=>{
+    if(!files.length)return;
+    const totalSize=files.reduce((s,f)=>s+(f.size||0),0);
+    const sizeStr=totalSize>0?` · ${fmt(totalSize)}`:'';
+    html+=`<span class="pf-chip hi" style="--cc:${colorMap[t]}">${iconMap[t]} ${files.length} ${t}${sizeStr}</span>`;
+  });
+  html+=`<span class="pf-chip hi" style="--cc:${claude?'#00e5ff':'#64748b'}"><img src="assets/img/logos/${claude?'anthropic.svg':'python.svg'}" alt=""> ${claude?'Claude':'skip-ai'}</span>`;
+  if(ocr)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">OCR</span>`;
+  const whisperEl=document.getElementById('whisperEstimate');
+  if(whisperEl&&whisperEl.style.display!=='none'&&whisperEl.textContent)
+    html+=`<span class="pf-chip">⏱ ${whisperEl.textContent.replace('⏱ stima trascrizione Whisper: ','')}</span>`;
+  const subject=selectedSubject!=='auto'?selectedSubject:null;
+  if(subject)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">${subject}</span>`;
+  html+='<span class="pf-sep"></span>';
+  grp.innerHTML=html;
 }
 function setTag(id,active,text,color){
   const el=document.getElementById(id);
@@ -1398,10 +1411,10 @@ runBtn.addEventListener('click',async()=>{
     return;
   }
   // PLAY START SOUND
-  sounds.play.play().catch(e=>console.log("Play suono bloccato:", e));
+  playSound('play');
   
   const btn=document.getElementById('runBtn');
-  btn.classList.remove('active');btn.textContent='⏳ Avvio…';
+  btn.classList.remove('active');btn.querySelector('.run-label').textContent='⏳ Avvio…';
 
   const fd=new FormData();
   fd.append('title',document.getElementById('titleInput').value.trim()||'Lezione');
@@ -1433,7 +1446,7 @@ runBtn.addEventListener('click',async()=>{
     if(j.warnings&&j.warnings.length)
       showToast('⚠ File ignorati',j.warnings.join('\n'),'#f59e0b');
     showToast('Pipeline avviata!',`job ${j.job_id}`,'#10b981');
-    btn.textContent='⏳ In esecuzione…';
+    btn.querySelector('.run-label').textContent='⏳ In esecuzione…';
     _currentJobId=j.job_id;
     setUIRunning(true);
     _startLogStream(j.job_id);
@@ -1479,9 +1492,9 @@ runBtn.addEventListener('click',async()=>{
             if(bar)bar.style.width='100%';
             if(card)setTimeout(()=>{card.classList.remove('uploading');if(bar)bar.style.width='0';},600);
           });
-          btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
+          btn.classList.add('active');btn.querySelector('.run-label').textContent=`AVVIA PIPELINE (${total} file)`;
           showToast('✓ Completato!','Download in corso…','#10b981');
-          sounds.download.play().catch(e=>console.log("Suono download bloccato:", e));
+          playSound('download');
           // Mostra badge Job ID e pre-compila continua-corso per la prossima lezione
           document.getElementById('jobIdText').textContent=j.job_id;
           const badge=document.getElementById('jobIdBadge');
@@ -1496,7 +1509,7 @@ runBtn.addEventListener('click',async()=>{
           // Tenta auto-download (può essere bloccato da popup blocker)
           const a=document.createElement('a');
           a.href=dlLink.href;a.download=dlLink.download;a.click();
-          // Pre-carica dati LaTeX senza mostrare l'editor (si apre solo col bottone 👁 .tex)
+          // Apri automaticamente l'editor con il PDF compilato
           fetch(`${API}/preview/${j.job_id}`)
             .then(r=>r.ok?r.json():null)
             .then(data=>{
@@ -1504,6 +1517,9 @@ runBtn.addEventListener('click',async()=>{
               _currentPreviewJobId=j.job_id;
               _currentTexFile='main.tex';
               _texFiles=data.tex_files||['main.tex'];
+              _showPdfAndLatex(j.job_id, data.has_pdf||false, data.content||'', data.pdf_errors||[], _texFiles);
+              playSound(data.has_pdf ? 'youwin' : 'welldone');
+              openEditor();
             })
             .catch(()=>{});
           // Aggiorna history
@@ -1513,6 +1529,7 @@ runBtn.addEventListener('click',async()=>{
           clearInterval(fakeInterval);
           clearInterval(poll);
           setUIRunning(false);
+          playSound('error');
           // Auto-apri il log panel così l'utente vede il motivo dell'errore
           document.getElementById('logPanel').style.display='block';
           document.getElementById('logPanelBody').style.display='block';
@@ -1525,7 +1542,7 @@ runBtn.addEventListener('click',async()=>{
             :errMsg.slice(-200);
           updateLiveStatus('Errore pipeline',errLabel,'#ef4444',false);
           Object.keys(fileState).forEach(type=>document.getElementById(`card-${type}`)?.classList.remove('uploading'));
-          btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
+          btn.classList.add('active');btn.querySelector('.run-label').textContent=`AVVIA PIPELINE (${total} file)`;
           showToast('Errore pipeline',errLabel,'#ef4444');
           setTimeout(_loadHistory, 500);
         }
@@ -1537,7 +1554,7 @@ runBtn.addEventListener('click',async()=>{
       const bar=document.getElementById(`progress-${type}`);
       if(bar)bar.style.width='0';
     });
-    btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
+    btn.classList.add('active');btn.querySelector('.run-label').textContent=`AVVIA PIPELINE (${total} file)`;
     showToast('Errore connessione',err.message,'#ef4444');
   }
 });
