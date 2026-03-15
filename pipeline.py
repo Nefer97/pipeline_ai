@@ -1814,7 +1814,7 @@ def write_run_tex(run_number: int, title: str, date_str: str,
         f"%  RUN {run_number:02d} — {title}",
         f"%  {date_str}",
         f"% {'='*58}",
-        f"\\part{{{title} — {date_str}}}",
+        f"\\part{{{_latex_escape_title(title)} — {date_str}}}",
         "",
     ]
     for n in sorted(lesson_nums):

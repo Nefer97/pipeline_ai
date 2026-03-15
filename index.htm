@@ -1522,7 +1522,11 @@ runBtn.addEventListener('click',async()=>{
       }catch(_){}
     },2000);
   }catch(err){
-    Object.keys(fileState).forEach(type=>document.getElementById(`card-${type}`)?.classList.remove('uploading'));
+    Object.keys(fileState).forEach(type=>{
+      document.getElementById(`card-${type}`)?.classList.remove('uploading');
+      const bar=document.getElementById(`progress-${type}`);
+      if(bar)bar.style.width='0';
+    });
     btn.classList.add('active');btn.textContent=`▶ AVVIA PIPELINE (${total} file)`;
     showToast('Errore connessione',err.message,'#ef4444');
   }
