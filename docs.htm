@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Appunti AI — Documentazione</title>
 <meta name="description" content="Documentazione completa di Appunti AI: installazione, pipeline, architettura, endpoint API e troubleshooting.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Appunti AI — Documentazione">
+<meta property="og:description" content="Documentazione completa di Appunti AI: installazione, pipeline, architettura, endpoint API e troubleshooting.">
+<meta property="og:image" content="assets/favicon_io/android-chrome-512x512.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon_io/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon_io/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon_io/favicon-16x16.png">
@@ -22,7 +26,7 @@
 
 /* ── SIDEBAR ── */
 .docs-sidebar {
-  width: 240px;
+  width: 180px;
   flex-shrink: 0;
   position: sticky;
   top: 48px;
@@ -79,7 +83,7 @@
 .docs-main {
   flex: 1;
   min-width: 0;
-  padding: 48px 56px 80px;
+  padding: 38px 56px 80px;
 }
 
 .docs-content {
@@ -93,7 +97,7 @@
   font-weight: 800;
   letter-spacing: -.03em;
   color: var(--item-color, var(--text));
-  margin-bottom: 6px;
+  margin-bottom: 19px;
   line-height: 1.2;
 }
 
@@ -101,9 +105,9 @@
   font-size: .72rem;
   color: var(--muted);
   letter-spacing: .08em;
-  margin-bottom: 32px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border);
+  margin-bottom: 20px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--item-color);
 }
 
 .doc-body {
@@ -114,8 +118,6 @@
 
 .doc-body p {
   margin-bottom: 16px;
-  color: var(--muted2);
-  line-height: 1.9;
 }
 .doc-body p:last-child { margin-bottom: 0; }
 
@@ -176,22 +178,42 @@
   color: var(--item-color, var(--text));
 }
 
-.doc-body pre {
+/* ── PRE — stile terminale macOS ── */
+.doc-body pre.pre-mac {
   font-family: 'JetBrains Mono', monospace;
-  font-size: .7rem;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--item-color, var(--border));
-  padding: 14px 16px;
-  border-radius: 8px;
-  margin: 12px 0 16px;
-  overflow-x: auto;
-  line-height: 1.75;
-  color: var(--text);
-  white-space: pre;
+  font-size: .72rem;
+  background: #1c1c1e;
+  border: none;
+  border-radius: 10px;
+  padding: 38px 16px 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.55);
   position: relative;
-  max-width: 40%;
+  color: #d4d4d4;
+  line-height: 1.6;
+  margin: 12px 0 18px;
+  overflow-x: auto;
+  white-space: pre;
 }
+.doc-body pre.pre-mac::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 32px;
+  background: #2d2d2f;
+  border-radius: 10px 10px 0 0;
+}
+.doc-body pre.pre-mac::after {
+  content: '';
+  position: absolute;
+  top: 10px;
+  left: 14px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ff5f57;
+  box-shadow: 20px 0 0 #febc2e, 40px 0 0 #28c840;
+}
+
 .pre-copy {
   position: absolute;
   top: 7px; right: 8px;
@@ -303,6 +325,88 @@
     font-size: 1.2rem;
   }
 }
+
+/* ── LOGHI ── */
+.tech-logos-row {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin: 24px 0;
+}
+.tech-logo-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: .65rem;
+  color: var(--muted);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+.tech-logo-item img {
+  height: 20px;
+  width: auto;
+  filter: brightness(0) invert(.55);
+  transition: filter .2s;
+}
+.tech-logo-item:hover img { filter: none; }
+.dp-key img {
+  height: 14px;
+  width: auto;
+  vertical-align: middle;
+  margin-right: 5px;
+  filter: brightness(0) invert(.55);
+  transition: filter .2s;
+}
+.dp-row:hover .dp-key img { filter: none; }
+.logo-inline {
+  height: 13px;
+  width: auto;
+  vertical-align: middle;
+  margin-right: 5px;
+  filter: brightness(0) invert(.55);
+  transition: filter .2s;
+}
+.dp-item:hover .logo-inline { filter: none; }
+
+/* ── SCREENSHOTS ── */
+.doc-img {
+  width: 100%;
+  cursor: zoom-in;
+  display: block;
+  margin: 24px 0 8px;
+  transition: opacity .15s;
+}
+.doc-img:hover { opacity: .88; }
+.doc-img-cap {
+  font-size: .62rem;
+  color: var(--muted);
+  margin-bottom: 24px;
+  letter-spacing: .04em;
+  padding-left: 2px;
+}
+
+/* ── LIGHTBOX ── */
+#imgLightbox {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0,0,0,.9);
+  backdrop-filter: blur(6px);
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+}
+#imgLightbox.open { display: flex; }
+#imgLightboxImg {
+  max-width: 92vw;
+  max-height: 90vh;
+  border-radius: 12px;
+  box-shadow: 0 24px 64px rgba(0,0,0,.8);
+  pointer-events: none;
+}
 </style>
 </head>
 <body>
@@ -403,6 +507,16 @@ const docs = {
       <p>Il principio di design è semplice: <strong>ogni strumento fa una sola cosa</strong>. Whisper (locale, senza API esterna) trascrive l'audio con timestamp [MM:SS]. Claude viene chiamato una sola volta per lezione, per l'unica cosa che richiede intelligenza semantica: sintetizzare la spiegazione orale del professore con le slide in prosa accademica LaTeX. Tutto il resto — trascrizione, OCR, rendering delle slide, compilazione — gira in locale.</p>
       <p>La chiamata a Claude è <strong>multimodale</strong>: testo e immagini PNG delle slide nella stessa richiesta. Claude vede grafici, schemi e diagrammi che la sola trascrizione testuale non può descrivere. Il risultato è un capitolo che integra sia il contenuto verbale sia quello visivo.</p>
       <p>Con <code>--skip-ai</code> la pipeline funziona completamente <strong>offline e gratuita</strong>: produce LaTeX strutturato solo dalle slide, senza nessuna chiamata API.</p>
+      <div class="tech-logos-row">
+        <div class="tech-logo-item"><img src="assets/img/logos/anthropic.svg" alt="Anthropic">Claude</div>
+        <div class="tech-logo-item"><img src="assets/img/logos/python.svg" alt="Python">Python</div>
+        <div class="tech-logo-item"><img src="assets/img/logos/fastapi.svg" alt="FastAPI">FastAPI</div>
+        <div class="tech-logo-item"><img src="assets/img/logos/ffmpeg.svg" alt="ffmpeg">ffmpeg</div>
+        <div class="tech-logo-item"><img src="assets/img/logos/latex.svg" alt="LaTeX">LaTeX</div>
+        <div class="tech-logo-item"><img src="assets/img/logos/openai.svg" alt="Whisper">Whisper</div>
+      </div>
+      <img class="doc-img" src="assets/img/ui-overview.png" alt="Interfaccia principale di Appunti AI" loading="lazy">
+      <div class="doc-img-cap">L'interfaccia principale: zona upload, pannello impostazioni e log di esecuzione in tempo reale.</div>
     `
   },
   piattaforme: {
@@ -411,10 +525,10 @@ const docs = {
     color: "var(--c1)",
     html: `
       <p>Appunti AI è sviluppato e testato principalmente su <strong>Ubuntu 22.04 LTS</strong>. Lo stack — ffmpeg, pdflatex, LibreOffice, Python — è disponibile su qualsiasi distribuzione Linux senza modifiche significative.</p>
-      <div class="dp-row"><span class="dp-key">Ubuntu 22.04 / Debian</span><span class="dp-val">✅ testato — piattaforma di riferimento</span></div>
-      <div class="dp-row"><span class="dp-key">Linux (altre distro)</span><span class="dp-val">✅ dovrebbe funzionare — stesso stack</span></div>
-      <div class="dp-row"><span class="dp-key">macOS</span><span class="dp-val">⚠ parziale — ffmpeg/pdflatex via brew</span></div>
-      <div class="dp-row"><span class="dp-key">Windows</span><span class="dp-val">⚠ non testato — subprocess POSIX</span></div>
+      <div class="dp-row"><span class="dp-key"><img src="assets/img/logos/ubuntu.svg" alt="">Ubuntu 22.04 / Debian</span><span class="dp-val">✅ testato — piattaforma di riferimento</span></div>
+      <div class="dp-row"><span class="dp-key"><img src="assets/img/logos/linux.svg" alt="">Linux (altre distro)</span><span class="dp-val">✅ dovrebbe funzionare — stesso stack</span></div>
+      <div class="dp-row"><span class="dp-key"><img src="assets/img/logos/apple.svg" alt="">macOS</span><span class="dp-val">⚠ parziale — ffmpeg/pdflatex via brew</span></div>
+      <div class="dp-row"><span class="dp-key"><img src="assets/img/logos/windows.svg" alt="">Windows</span><span class="dp-val">⚠ non testato — subprocess POSIX</span></div>
       <div class="dp-sep"></div>
       <p>Su <strong>macOS</strong>, ffmpeg e pdflatex si installano via Homebrew, ma il path di LibreOffice va verificato manualmente in <code>slide_renderer.py</code>. pix2tex su Apple Silicon richiede una build PyTorch per ARM.</p>
       <p>Su <strong>Windows</strong>, ffmpeg e pdflatex sono disponibili come pacchetti standalone, ma LibreOffice non è nel PATH di sistema per default e alcune chiamate subprocess con semantica POSIX potrebbero richiedere adattamenti.</p>
@@ -449,13 +563,10 @@ const docs = {
       <div class="dp-row"><span class="dp-key">Claude API key</span><span class="dp-val">opzionale — senza: --skip-ai</span></div>
       <div class="dp-sep"></div>
       <div class="section-header">Installazione dipendenze sistema</div>
-      <pre>sudo apt install ffmpeg \
-
+      <pre class="pre-mac">sudo apt install ffmpeg \
   texlive-latex-base texlive-latex-recommended \
-
-    texlive-latex-extra texlive-fonts-recommended \
-
-      texlive-lang-italian</pre>
+  texlive-latex-extra texlive-fonts-recommended \
+  texlive-lang-italian</pre>
       <p>Per lezioni in altre lingue, <code>texlive-lang-european</code> copre francese, tedesco, spagnolo e olandese. La lingua viene rilevata automaticamente da Whisper — non è necessario specificarla manualmente (eccetto per l'italiano, vedi Note pratiche).</p>
     `
   },
@@ -465,7 +576,7 @@ const docs = {
     color: "var(--c2)",
     html: `
       <p>Dopo aver installato le dipendenze di sistema, clona il repository e crea un ambiente virtuale Python isolato per tenere separato lo stack del progetto dal Python di sistema.</p>
-      <pre>git clone &lt;repo_url&gt; ~/appunti_ai
+      <pre class="pre-mac">git clone &lt;repo_url&gt; ~/appunti_ai
 cd ~/appunti_ai
 
 python3 -m venv venv
@@ -473,7 +584,7 @@ source venv/bin/activate
 
 pip install -r requirements.txt</pre>
       <p>Per verificare che tutto sia installato correttamente prima di usare la pipeline per la prima volta, esegui questi controlli rapidi:</p>
-      <pre>python -c "import fitz; print('pymupdf OK')"
+      <pre class="pre-mac">python -c "import fitz; print('pymupdf OK')"
 python -c "import whisper; print('whisper OK')"
 python -c "import fastapi; print('server OK')"
 python -c "import anthropic; print('claude OK')"
@@ -487,21 +598,19 @@ python pipeline.py --help</pre>
     html: `
       <p>L'OCR è completamente opzionale. La pipeline funziona senza, ma due strumenti aggiuntivi estendono la copertura ai PDF scansionati e alle formule matematiche nelle immagini.</p>
       <div class="section-header">tesseract — PDF scansionati</div>
-      <pre>pip install pytesseract
-  sudo apt install tesseract-ocr 
-    tesseract-ocr-ita tesseract-ocr-eng</pre>
+      <pre class="pre-mac">pip install pytesseract
+sudo apt install tesseract-ocr \
+  tesseract-ocr-ita tesseract-ocr-eng</pre>
       <p>Senza tesseract, le pagine PDF prive di testo digitale (scansioni) vengono semplicemente saltate. La pipeline continua normalmente con tutte le altre fonti disponibili.</p>
       <div class="dp-sep"></div>
       <div class="section-header">pix2tex — formule matematiche</div>
-      <pre>python3 -m venv ~/pix2tex_venv
-  source ~/pix2tex_venv/bin/activate
-    pip install pix2tex</pre>
+      <pre class="pre-mac">python3 -m venv ~/pix2tex_venv
+source ~/pix2tex_venv/bin/activate
+pip install pix2tex</pre>
       <p>pix2tex porta con sé dipendenze pesanti (PyTorch, circa 2 GB) ed è consigliato installarlo in un virtual environment separato per non appesantire quello principale. Il sistema lo cerca automaticamente in diversi percorsi standard: <code>~/pix2tex_venv</code>, <code>~/venv</code>, <code>~/Scrivania/venv</code>, <code>~/.venv</code>, <code>/opt/pix2tex_venv</code>. Se non viene trovato, le immagini-formula vengono saltate senza bloccare il processo. Le formule direttamente incorporate nei file PowerPoint come OMML vengono comunque convertite correttamente, senza OCR.</p>
       <div class="dp-sep"></div>
       <div class="section-header">Verifica backend attivi</div>
-      <pre>python -c
-  "from ocr_math import get_available_backends;
-    print(get_available_backends())"</pre>
+      <pre class="pre-mac">python -c "from ocr_math import get_available_backends; print(get_available_backends())"</pre>
     `
   },
   apikey: {
@@ -510,13 +619,12 @@ python pipeline.py --help</pre>
     color: "var(--c2)",
     html: `
       <p>La chiave API Claude va impostata come variabile d'ambiente prima di avviare il server. Per renderla disponibile in tutte le sessioni future aggiungila al file di configurazione della shell.</p>
-      <pre>export ANTHROPIC_API_KEY='sk-ant-...'
+      <pre class="pre-mac">export ANTHROPIC_API_KEY='sk-ant-...'
 
 # Per renderla permanente (Linux):
 echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc</pre>
       <p>In alternativa, puoi impostarla direttamente dall'interfaccia web nella sezione di configurazione in cima alla pagina. La chiave viene salvata in <code>settings.json</code> con permessi <code>600</code>, accessibile solo dal proprietario del file.</p>
-      <p>Se non si dispone di una API key, o si vuole verificare il prompt prima di consumare crediti, la pipeline funziona ugualmente con il flag 
-<code>--skip-ai</code>: produce LaTeX strutturato solo dalle slide e salva comunque il prompt completo in <code>debug/</code>.</p>
+      <p>Se non si dispone di una API key, o si vuole verificare il prompt prima di consumare crediti, la pipeline funziona ugualmente con il flag <code>--skip-ai</code>: produce LaTeX strutturato solo dalle slide e salva comunque il prompt completo in <code>debug/</code>.</p>
     `
   },
   quickstart: {
@@ -525,29 +633,26 @@ echo "export ANTHROPIC_API_KEY='sk-ant-...'" >> ~/.bashrc</pre>
     color: "var(--c4)",
     html: `
       <div class="section-header">Opzione A — browser (consigliata)</div>
-      <pre>source venv/bin/activate
+      <pre class="pre-mac">source venv/bin/activate
 uvicorn server:app --host 0.0.0.0 --port 8000</pre>
       <p>Apri <code>http://localhost:8000</code>, trascina i file nelle rispettive zone di upload, inserisci un titolo e clicca <strong>Start</strong>. Il log in tempo reale mostra l'avanzamento fase per fase.</p>
       <div class="dp-sep"></div>
       <div class="section-header">Opzione B — riga di comando</div>
-      <pre># Con audio + slide
-python pipeline.py ./lezione_01/
-    --title "Analisi Matematica 1"
+      <pre class="pre-mac"># Con audio + slide
+python pipeline.py ./lezione_01/ --title "Analisi Matematica 1"
 
 # Offline, senza Claude
-python pipeline.py ./lezione_01/
-    --skip-ai --title "Fisica 1"
+python pipeline.py ./lezione_01/ --skip-ai --title "Fisica 1"
 
 # Intero corso in batch
-python pipeline.py --batch ./corso/
-    --title "Digital Control"</pre>
+python pipeline.py --batch ./corso/ --title "Digital Control"</pre>
       <div class="dp-sep"></div>
       <p>L'output viene generato nella cartella <code>./output/</code>. Per produrre il PDF finale esegui pdflatex due volte: la seconda passata risolve i riferimenti incrociati e la table of contents.</p>
-      <pre>output/
+      <pre class="pre-mac">output/
 ├── main.tex
 ├── lezione_01.tex
 └── images/</pre>
-      <pre>cd output/
+      <pre class="pre-mac">cd output/
 pdflatex main.tex && pdflatex main.tex</pre>
     `
   },
@@ -558,10 +663,14 @@ pdflatex main.tex && pdflatex main.tex</pre>
     html: `
       <p>L'interfaccia web è il modo consigliato per usare Appunti AI. Trascina i file audio, video, slide e documenti nelle rispettive zone di upload, oppure incolla direttamente un URL manifest Microsoft Teams — viene scaricato automaticamente via ffmpeg e convertito in .mp3 mono.</p>
       <p>Prima di avviare puoi scegliere tra 7 profili disciplinari o lasciare l'auto-detect, attivare o disattivare Claude e OCR, selezionare il modello Whisper e aggiungere il contesto del corso per orientare la sintesi. Il progresso viene mostrato in tempo reale con percentuale e fase corrente.</p>
+      <img class="doc-img" src="assets/img/ui-upload.png" alt="Zona di upload con file caricati" loading="lazy">
+      <div class="doc-img-cap">File audio, slide e PDF caricati nelle rispettive zone — badge verdi confermano i formati accettati.</div>
       <div class="dp-sep"></div>
       <div class="section-header">Editor LaTeX integrato</div>
       <p>Cliccando "👁 .tex" nella cronologia si apre l'editor split: il pannello sinistro è un editor CodeMirror con syntax highlighting LaTeX, quello destro mostra il PDF compilato in un iframe. La larghezza dei due pannelli è liberamente regolabile trascinando il divisore centrale.</p>
       <p><strong>Salva</strong> scrive il file su disco senza ricompilare. <strong>Ricompila</strong> esegue pdflatex e aggiorna il PDF — eventuali errori di compilazione vengono mostrati inline. L'auto-save su localStorage ogni 2 secondi preserva la bozza anche se si chiude accidentalmente la finestra prima di salvare.</p>
+      <img class="doc-img" src="assets/img/ui-editor.png" alt="Editor LaTeX split con PDF viewer" loading="lazy">
+      <div class="doc-img-cap">Split editor: LaTeX con syntax highlighting a sinistra, PDF compilato in tempo reale a destra. Il divisore centrale è trascinabile.</div>
       <div class="dp-sep"></div>
       <div class="section-header">Altre funzionalità</div>
       <p>Il <strong>prompt viewer</strong> ("📄 Prompt") mostra il prompt SYSTEM+USER completo inviato a Claude, con un tab separato per ogni capitolo — utile per capire esattamente cosa ha visto il modello durante la generazione. I badge di upload forniscono feedback immediato: verde per file accettati, giallo per file molto grandi, rosso per formati non supportati.</p>
@@ -585,10 +694,10 @@ pdflatex main.tex && pdflatex main.tex</pre>
       <div class="dp-row"><span class="dp-key">--start-from</span><span class="dp-val">Numero iniziale lezione (auto da state.json)</span></div>
       <div class="dp-row"><span class="dp-key">--continue-on-error</span><span class="dp-val">In batch: salta lezioni che falliscono</span></div>
       <div class="dp-sep"></div>
-      <pre>python pipeline.py --batch ./corso/
-    --title "Analisi Matematica 1"
-      --subject matematica
-        --whisper-model small</pre>
+      <pre class="pre-mac">python pipeline.py --batch ./corso/ \
+  --title "Analisi Matematica 1" \
+  --subject matematica \
+  --whisper-model small</pre>
     `
   },
   continua: {
@@ -600,6 +709,8 @@ pdflatex main.tex && pdflatex main.tex</pre>
       <p>Il server copia automaticamente tutto il necessario: <code>state.json</code> (con la numerazione corrente), <code>corso_context.json</code> (la memoria accumulata del corso), i file <code>lezione_*.tex</code> e <code>run_*.tex</code> già generati, e l'intera cartella <code>images/</code>. La numerazione e il contesto proseguono esattamente da dove ci si era fermati — le nuove lezioni ricevono i numeri successivi a quelli esistenti.</p>
       <p>Claude riceve anche il contenuto dell'<strong>ultimo capitolo generato</strong> (fino a 6000 caratteri) nel system prompt. In questo modo sa cosa è stato spiegato nell'ultima lezione e può riprendere il filo con coerenza, senza ripetizioni né salti tematici.</p>
       <p>Il log in tempo reale via SSE (<code>/job/{id}/stream</code>) funziona normalmente anche nelle sessioni di continuazione.</p>
+      <img class="doc-img" src="assets/img/ui-history.png" alt="Pannello cronologia job" loading="lazy">
+      <div class="doc-img-cap">La cronologia mostra ogni run con titolo, data e pulsanti per riaprire il .tex, il PDF, il prompt usato o continuare il corso.</div>
     `
   },
   pipeline: {
@@ -608,19 +719,19 @@ pdflatex main.tex && pdflatex main.tex</pre>
     color: "var(--c6)",
     html: `
       <p>Ogni run esegue una sequenza di fasi specializzate, ognuna con responsabilità precisa e ben separata dalle altre. Di seguito il flusso completo dall'input grezzo al file <code>.tex</code> finale.</p>
-      <div class="dp-item"><strong>ffmpeg</strong> — estrae l'audio dai file video; trasforma i manifest Microsoft Teams in .mp3 mono</div>
-      <div class="dp-item"><strong>Whisper</strong> (locale) — trascrive l'audio in testo con timestamp [MM:SS]; il risultato è salvato come <code>.transcript.txt</code> — le esecuzioni successive lo riusano senza rielaborare</div>
+      <div class="dp-item"><img src="assets/img/logos/ffmpeg.svg" alt="" class="logo-inline"><strong>ffmpeg</strong> — estrae l'audio dai file video; trasforma i manifest Microsoft Teams in .mp3 mono</div>
+      <div class="dp-item"><img src="assets/img/logos/openai.svg" alt="" class="logo-inline"><strong>Whisper</strong> (locale) — trascrive l'audio in testo con timestamp [MM:SS]; il risultato è salvato come <code>.transcript.txt</code> — le esecuzioni successive lo riusano senza rielaborare</div>
       <div class="dp-item"><strong>extractor.py</strong> — parsing PPTX: estrae testo, immagini, tabelle e formule OMML da ogni slide</div>
       <div class="dp-item"><strong>omml2latex.py</strong> — converte le formule PowerPoint (OMML) in LaTeX senza passare per OCR</div>
       <div class="dp-item"><strong>formula_detector.py</strong> — riconosce le immagini-formula tramite aspect ratio e saturazione cromatica</div>
       <div class="dp-item"><strong>ocr_math.py</strong> — applica pix2tex o tesseract per convertire le immagini-formula in LaTeX</div>
-      <div class="dp-item"><strong>slide_renderer.py</strong> — converte ogni slide in PNG (LibreOffice+pymupdf se disponibile, altrimenti Pillow)</div>
+      <div class="dp-item"><img src="assets/img/logos/libreoffice.svg" alt="" class="logo-inline"><strong>slide_renderer.py</strong> — converte ogni slide in PNG (LibreOffice+pymupdf se disponibile, altrimenti Pillow)</div>
       <div class="dp-item"><strong>pdfplumber + pymupdf</strong> — estrazione duale per ogni pagina PDF: viene usata la versione con la densità testuale più alta</div>
       <div class="dp-item"><strong>pytesseract</strong> — OCR fallback per le pagine PDF scansionate, processate pagina per pagina</div>
       <div class="dp-item"><strong>preprocessor.py</strong> — pulisce, comprime e allinea il materiale slide↔audio prima di inviarlo a Claude</div>
-      <div class="dp-item"><strong>Claude API</strong> — riceve testo e PNG slide nella stessa richiesta multimodale, genera LaTeX strutturato</div>
+      <div class="dp-item"><img src="assets/img/logos/anthropic.svg" alt="" class="logo-inline"><strong>Claude API</strong> — riceve testo e PNG slide nella stessa richiesta multimodale, genera LaTeX strutturato</div>
       <div class="dp-item"><strong>_clean_claude_output</strong> — rimuove code fence, prefissi spurii e artefatti prima di scrivere il <code>.tex</code></div>
-      <div class="dp-item"><strong>builder.py</strong> — assembla i <code>.tex</code> finali con escape unicode completo (150+ caratteri)</div>
+      <div class="dp-item"><img src="assets/img/logos/latex.svg" alt="" class="logo-inline"><strong>builder.py</strong> — assembla i <code>.tex</code> finali con escape unicode completo (150+ caratteri)</div>
     `
   },
   gerarchia: {
@@ -671,7 +782,7 @@ pdflatex main.tex && pdflatex main.tex</pre>
     color: "var(--c7)",
     html: `
       <p>Ogni run genera una cartella <code>output/</code> con la struttura seguente. I file <code>lezione_NN.tex</code> contengono i capitoli sintetizzati da Claude; <code>main.tex</code> li include tutti con un preambolo LaTeX completo e configurato.</p>
-      <pre>output/
+      <pre class="pre-mac">output/
 ├── main.tex                   # documento principale
 ├── run_01.tex                 # \part{Titolo — data}
 ├── lezione_01.tex             # capitolo 1
@@ -694,7 +805,7 @@ pdflatex main.tex && pdflatex main.tex</pre>
     color: "var(--c7)",
     html: `
       <p>Ogni invocazione della pipeline genera un <strong>run</strong> numerato. Il <code>main.tex</code> organizza i run come parti separate del documento LaTeX, in modo da poter accumulare tutte le lezioni di un corso in un unico PDF finale senza sovrascrivere nulla.</p>
-      <pre>main.tex
+      <pre class="pre-mac">main.tex
   └── \part{Lezione 1 — 2025-06-10}   ← run_01.tex
         \input{lezione_01}
         \input{lezione_02}
@@ -759,7 +870,7 @@ pdflatex main.tex && pdflatex main.tex</pre>
       <p><strong>Lingua Whisper</strong> — il sistema supporta <code>en</code> e <code>it</code>. Per le lezioni in italiano imposta <code>export WHISPER_LANG=it</code> prima di avviare il server; altrimenti Whisper potrebbe trascrivere in inglese.</p>
       <div class="dp-sep"></div>
       <div class="section-header">Timeout configurabili senza riavviare</div>
-      <pre>curl -X POST http://localhost:8000/settings \
+      <pre class="pre-mac">curl -X POST http://localhost:8000/settings \
   -H "Content-Type: application/json" \
   -d '{"ffmpeg_timeout":14400,"pipeline_timeout":7200}'</pre>
       <p><strong>Concorrenza</strong> — per default girano al massimo 2 job contemporanei. Oltre questo limite il server risponde con HTTP 429. Il limite è configurabile via <code>max_concurrent_jobs</code> in <code>POST /settings</code> senza riavviare il server. Con <code>--skip-ai</code> il prompt viene comunque salvato in <code>debug/prompt_lezione_NN.txt</code> — utile per verificare cosa riceverebbe Claude prima di consumare crediti API.</p>
@@ -892,6 +1003,26 @@ document.addEventListener('keydown', e => {
 // show section from URL hash or default
 const _startId = location.hash.slice(1);
 showDoc(docs[_startId] ? _startId : 'intro');
+
+// sync when browser back/forward changes the hash
+window.addEventListener('hashchange', () => {
+  const id = location.hash.slice(1);
+  if (id && docs[id]) showDoc(id);
+});
+
+// Lightbox
+function closeLightbox(){ document.getElementById('imgLightbox').classList.remove('open'); }
+document.addEventListener('click', e => {
+  if (e.target.classList.contains('doc-img')) {
+    document.getElementById('imgLightboxImg').src = e.target.src;
+    document.getElementById('imgLightbox').classList.add('open');
+  }
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
 </script>
+
+<div id="imgLightbox" onclick="closeLightbox()">
+  <img id="imgLightboxImg" src="" alt="">
+</div>
 </body>
 </html>

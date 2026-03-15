@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Appunti AI — Architettura Sistema</title>
 <meta name="description" content="Schema interattivo dell'architettura di Appunti AI: pipeline di trascrizione, OCR, preprocessor e generazione LaTeX con Claude.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Appunti AI — Architettura Sistema">
+<meta property="og:description" content="Schema interattivo dell'architettura di Appunti AI: pipeline di trascrizione, OCR, preprocessor e generazione LaTeX con Claude.">
+<meta property="og:image" content="assets/favicon_io/android-chrome-512x512.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon_io/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon_io/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon_io/favicon-16x16.png">
@@ -167,7 +171,26 @@ header p {
   background: color-mix(in srgb, var(--bc, transparent) 8%, var(--surface));
 }
 
-.block-icon { font-size: 1.4rem; margin-bottom: 6px; }
+.block-icon { font-size: 1.4rem; margin-bottom: 6px; line-height: 1; }
+.block-logo {
+  height: 26px; width: auto;
+  display: block; margin: 0 auto 6px;
+  filter: brightness(0) invert(.55);
+  transition: filter .2s;
+}
+.block:hover .block-logo, .block.active .block-logo { filter: none; }
+.leg-logo {
+  height: 11px; width: auto;
+  filter: brightness(0) invert(.45);
+  margin: 0 3px;
+  vertical-align: middle;
+}
+.dp-logo {
+  height: 18px; width: auto;
+  filter: brightness(0) invert(.55);
+  vertical-align: middle;
+  margin-right: 7px;
+}
 .block-name {
   font-size: .72rem; font-weight: 700;
   color: var(--bc, var(--text));
@@ -382,12 +405,12 @@ header p {
 
   <div class="legend">
     <div class="leg"><div class="leg-dot" style="background:#00e5ff"></div>Browser / UI</div>
-    <div class="leg"><div class="leg-dot" style="background:#7c3aed"></div>server.py (FastAPI)</div>
-    <div class="leg"><div class="leg-dot" style="background:#f59e0b"></div>pipeline.py (orchestratore)</div>
-    <div class="leg"><div class="leg-dot" style="background:#ef4444"></div>Moduli pptx</div>
-    <div class="leg"><div class="leg-dot" style="background:#a78bfa"></div>preprocessor.py</div>
-    <div class="leg"><div class="leg-dot" style="background:#10b981"></div>Claude API / AI</div>
-    <div class="leg"><div class="leg-dot" style="background:#f472b6"></div>Output</div>
+    <div class="leg"><div class="leg-dot" style="background:#7c3aed"></div><img src="assets/img/logos/fastapi.svg" class="leg-logo" alt="">server.py (FastAPI)</div>
+    <div class="leg"><div class="leg-dot" style="background:#f59e0b"></div><img src="assets/img/logos/python.svg" class="leg-logo" alt="">pipeline.py (orchestratore)</div>
+    <div class="leg"><div class="leg-dot" style="background:#ef4444"></div><img src="assets/img/logos/python.svg" class="leg-logo" alt="">Moduli pptx</div>
+    <div class="leg"><div class="leg-dot" style="background:#a78bfa"></div><img src="assets/img/logos/python.svg" class="leg-logo" alt="">preprocessor.py</div>
+    <div class="leg"><div class="leg-dot" style="background:#10b981"></div><img src="assets/img/logos/anthropic.svg" class="leg-logo" alt="">Claude API / AI</div>
+    <div class="leg"><div class="leg-dot" style="background:#f472b6"></div><img src="assets/img/logos/latex.svg" class="leg-logo" alt="">Output</div>
   </div>
 
   <div class="diagram">
@@ -412,7 +435,7 @@ header p {
     <div class="section-tag">http server</div>
     <div class="row">
       <div class="block wide" style="--bc:#7c3aed" data-id="server">
-        <div class="block-icon">⚡</div>
+        <div class="block-icon"><img src="assets/img/logos/fastapi.svg" alt="FastAPI" class="block-logo"></div>
         <div class="block-name">server.py</div>
         <div class="block-sub">FastAPI · riceve file · crea job UUID<br>BackgroundTasks · polling /job/{id}<br>download /download/{id}</div>
         <div class="block-file">FastAPI + uvicorn</div>
@@ -428,7 +451,7 @@ header p {
     <div class="section-tag">orchestratore</div>
     <div class="row">
       <div class="block wide" style="--bc:#f59e0b" data-id="pipeline">
-        <div class="block-icon">🔧</div>
+        <div class="block-icon"><img src="assets/img/logos/python.svg" alt="Python" class="block-logo"></div>
         <div class="block-name">pipeline.py</div>
         <div class="block-sub">Coordina tutti i moduli in sequenza<br>Cache trascrizioni · gestione errori<br>Batch lezioni · continue_from</div>
         <div class="block-file">pipeline.py</div>
@@ -452,7 +475,7 @@ header p {
           <div class="arrow" style="border-top-color:#00e5ff"></div>
         </div>
         <div class="block" style="--bc:#00e5ff" data-id="ffmpeg">
-          <div class="block-icon">🎬</div>
+          <div class="block-icon"><img src="assets/img/logos/ffmpeg.svg" alt="ffmpeg" class="block-logo"></div>
           <div class="block-name">ffmpeg</div>
           <div class="block-sub">video → .mp3<br>Teams manifest</div>
           <div class="block-file">subprocess</div>
@@ -461,7 +484,7 @@ header p {
           <div class="arrow" style="border-top-color:#00e5ff"></div>
         </div>
         <div class="block" style="--bc:#00e5ff" data-id="whisper">
-          <div class="block-icon">🎙️</div>
+          <div class="block-icon"><img src="assets/img/logos/openai.svg" alt="Whisper" class="block-logo"></div>
           <div class="block-name">Whisper</div>
           <div class="block-sub">audio → testo<br>timestamp [MM:SS]</div>
           <div class="block-file">openai-whisper</div>
@@ -483,7 +506,7 @@ header p {
           <div class="arrow" style="border-top-color:#ef4444"></div>
         </div>
         <div class="block" style="--bc:#ef4444" data-id="omml">
-          <div class="block-icon">∑</div>
+          <div class="block-icon"><img src="assets/img/logos/latex.svg" alt="LaTeX" class="block-logo"></div>
           <div class="block-name">omml2latex</div>
           <div class="block-sub">formule PowerPoint<br>OMML → LaTeX</div>
           <div class="block-file">omml2latex.py</div>
@@ -514,7 +537,7 @@ header p {
           <div class="arrow" style="border-top-color:#f59e0b"></div>
         </div>
         <div class="block" style="--bc:#f59e0b" data-id="docx">
-          <div class="block-icon">📝</div>
+          <div class="block-icon"><img src="assets/img/logos/microsoftword.svg" alt="Word" class="block-logo"></div>
           <div class="block-name">python-docx</div>
           <div class="block-sub">.docx → testo<br>plain text</div>
           <div class="block-file">pipeline.py</div>
@@ -527,7 +550,7 @@ header p {
           <div class="arrow" style="border-top-color:#ef4444"></div>
         </div>
         <div class="block" style="--bc:#ef4444" data-id="teams">
-          <div class="block-icon">📹</div>
+          <div class="block-icon"><img src="assets/img/logos/microsoftteams.svg" alt="Teams" class="block-logo"></div>
           <div class="block-name">TeamsHack</div>
           <div class="block-sub">URL manifest<br>→ .mp3 mono</div>
           <div class="block-file">server.py + ffmpeg</div>
@@ -550,7 +573,7 @@ header p {
     <div class="section-tag">ottimizzazione prompt</div>
     <div class="row">
       <div class="block wide" style="--bc:#a78bfa" data-id="preprocessor">
-        <div class="block-icon">🧠</div>
+        <div class="block-icon"><img src="assets/img/logos/python.svg" alt="Python" class="block-logo"></div>
         <div class="block-name">preprocessor.py</div>
         <div class="block-sub">
           Pulizia testo · detect_subject() · profilo LaTeX<br>
@@ -610,7 +633,7 @@ header p {
           <div class="arrow" style="border-top-color:#10b981"></div>
         </div>
         <div class="block medium" style="--bc:#10b981" data-id="claude">
-          <div class="block-icon">✦</div>
+          <div class="block-icon"><img src="assets/img/logos/anthropic.svg" alt="Claude" class="block-logo"></div>
           <div class="block-name">Claude API</div>
           <div class="block-sub">claude-sonnet-4-6<br>prompt context cache<br>LaTeX semantico</div>
           <div class="block-file">Anthropic API</div>
@@ -633,7 +656,7 @@ header p {
     <div class="section-tag">assemblaggio</div>
     <div class="row">
       <div class="block wide" style="--bc:#f472b6" data-id="builder">
-        <div class="block-icon">📦</div>
+        <div class="block-icon"><img src="assets/img/logos/latex.svg" alt="LaTeX" class="block-logo"></div>
         <div class="block-name">builder.py</div>
         <div class="block-sub">Assembla lezione_NN.tex · genera main.tex<br>Preambolo LaTeX completo · ZIP finale</div>
         <div class="block-file">builder.py</div>
@@ -649,14 +672,14 @@ header p {
     <div class="row" style="gap:10px;align-items:flex-start">
 
       <div class="block" style="--bc:#f472b6" data-id="maintex">
-        <div class="block-icon">📘</div>
+        <div class="block-icon"><img src="assets/img/logos/latex.svg" alt="LaTeX" class="block-logo"></div>
         <div class="block-name">main.tex</div>
         <div class="block-sub">documento principale<br>\include tutte lezioni</div>
         <div class="block-file">.tex</div>
       </div>
 
       <div class="block" style="--bc:#f472b6" data-id="lezionetex">
-        <div class="block-icon">📝</div>
+        <div class="block-icon"><img src="assets/img/logos/latex.svg" alt="LaTeX" class="block-logo"></div>
         <div class="block-name">lezione_NN.tex</div>
         <div class="block-sub">capitoli · formule<br>immagini</div>
         <div class="block-file">.tex × N</div>
@@ -709,7 +732,7 @@ const details = {
   browser: {
     title: "index.htm — Frontend",
     file: "Browser · nessuna dipendenza",
-    color: "#00e5ff",
+    color: "#00e5ff", logo: null,
     items: [
       "Drag & drop su 5 zone: Audio, Video, Slide, Doc, Teams URL (incolla manifest URL)",
       "Titolo corso obbligatorio — pulsante Start rimane disattivo senza titolo",
@@ -722,7 +745,7 @@ const details = {
     ]
   },
   server: {
-    title: "server.py — HTTP Server",
+    title: "server.py — HTTP Server", logo: "fastapi.svg",
     file: "FastAPI + uvicorn · porta 8000",
     color: "#7c3aed",
     items: [
@@ -737,7 +760,7 @@ const details = {
     ]
   },
   pipeline: {
-    title: "pipeline.py — Orchestratore",
+    title: "pipeline.py — Orchestratore", logo: "python.svg",
     file: "pipeline.py · ~1980 righe",
     color: "#f59e0b",
     items: [
@@ -753,7 +776,7 @@ const details = {
     ]
   },
   ffmpeg: {
-    title: "ffmpeg — Estrazione Audio",
+    title: "ffmpeg — Estrazione Audio", logo: "ffmpeg.svg",
     file: "subprocess · sistema",
     color: "#00e5ff",
     items: [
@@ -765,7 +788,7 @@ const details = {
     ]
   },
   whisper: {
-    title: "Whisper — Trascrizione",
+    title: "Whisper — Trascrizione", logo: "openai.svg",
     file: "openai-whisper · locale, no API",
     color: "#00e5ff",
     items: [
@@ -778,7 +801,7 @@ const details = {
     ]
   },
   extractor: {
-    title: "extractor.py — Parsing PPTX",
+    title: "extractor.py — Parsing PPTX", logo: "python.svg",
     file: "extractor.py · python-pptx",
     color: "#ef4444",
     items: [
@@ -790,7 +813,7 @@ const details = {
     ]
   },
   omml: {
-    title: "omml2latex.py — Formule PowerPoint",
+    title: "omml2latex.py — Formule PowerPoint", logo: "latex.svg",
     file: "omml2latex.py · lxml",
     color: "#ef4444",
     items: [
@@ -801,7 +824,7 @@ const details = {
     ]
   },
   pix2tex: {
-    title: "pix2tex — OCR Formule Immagini",
+    title: "pix2tex — OCR Formule Immagini", logo: null,
     file: "formula_detector.py + pix2tex · venv dedicato",
     color: "#ef4444",
     items: [
@@ -825,7 +848,7 @@ const details = {
     ]
   },
   docx: {
-    title: "python-docx — Documenti Word",
+    title: "python-docx — Documenti Word", logo: "microsoftword.svg",
     file: "pipeline.py · python-docx",
     color: "#f59e0b",
     items: [
@@ -835,7 +858,7 @@ const details = {
     ]
   },
   teams: {
-    title: "TeamsHack — Download Teams",
+    title: "TeamsHack — Download Teams", logo: "microsoftteams.svg",
     file: "server.py + ffmpeg (integrato) · TeamsHack.py (standalone)",
     color: "#ef4444",
     items: [
@@ -847,7 +870,7 @@ const details = {
     ]
   },
   preprocessor: {
-    title: "preprocessor.py — Ottimizzazione Prompt",
+    title: "preprocessor.py — Ottimizzazione Prompt", logo: "python.svg",
     file: "preprocessor.py · ~753 righe",
     color: "#a78bfa",
     items: [
@@ -890,7 +913,7 @@ const details = {
     ]
   },
   claude: {
-    title: "Claude API — Generazione Intelligente",
+    title: "Claude API — Generazione Intelligente", logo: "anthropic.svg",
     file: "Anthropic API · claude-sonnet-4-x",
     color: "#10b981",
     items: [
@@ -903,7 +926,7 @@ const details = {
     ]
   },
   builder: {
-    title: "builder.py — Assemblaggio",
+    title: "builder.py — Assemblaggio", logo: "latex.svg",
     file: "builder.py",
     color: "#f472b6",
     items: [
@@ -916,7 +939,7 @@ const details = {
     ]
   },
   maintex: {
-    title: "main.tex",
+    title: "main.tex", logo: "latex.svg",
     file: "output/main.tex",
     color: "#f472b6",
     items: [
@@ -927,7 +950,7 @@ const details = {
     ]
   },
   lezionetex: {
-    title: "lezione_NN.tex",
+    title: "lezione_NN.tex", logo: "latex.svg",
     file: "output/lezione_01.tex, lezione_02.tex ...",
     color: "#f472b6",
     items: [
@@ -978,7 +1001,8 @@ function showDetail(id) {
   const d = details[id];
   if (!d) return;
   const panel = document.getElementById('detailPanel');
-  document.getElementById('dpTitle').textContent = d.title;
+  document.getElementById('dpTitle').innerHTML =
+    (d.logo ? `<img src="assets/img/logos/${d.logo}" class="dp-logo" alt="">` : '') + d.title;
   document.getElementById('dpFile').textContent  = d.file;
   panel.style.setProperty('--dp-color', d.color);
   document.getElementById('dpBody').innerHTML = d.items

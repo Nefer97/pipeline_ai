@@ -1,34 +1,22 @@
+# Dati runtime e log
+logs/
+texput.log
+
+# Configurazione con API key
+settings.json
+
+# Pipeline output e upload temporanei
+output/
+uploads/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-.env
-uploads/
-outputs/
-downloads/
-*.zip
-*.mp3
-*.mp4
-*.mkv
-*.wav
 venv/
 .venv/
-corso_context.json
-*.m4a
-*.mp3
-*.mp4
-*.wav
-test/
-files/
+*.egg-info/
 
-# Output generati
-output/
-debug/
-test_images/
-*.transcript.txt
-
-# File di test temporanei
-lezione_test/
-test_lesson/
-
-# Venv
-venv/
+# Ambiente
+.env
+.env.*

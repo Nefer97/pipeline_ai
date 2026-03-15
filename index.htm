@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Appunti AI — Pipeline</title>
 <meta name="description" content="Appunti AI — converti lezioni universitarie in LaTeX strutturato usando Whisper e Claude.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Appunti AI — Pipeline">
+<meta property="og:description" content="Pipeline locale che trasforma lezioni universitarie — audio, slide, PDF — in appunti LaTeX strutturati e compilabili con pdflatex.">
+<meta property="og:image" content="assets/favicon_io/android-chrome-512x512.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/favicon_io/apple-touch-icon.png">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon_io/favicon-32x32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon_io/favicon-16x16.png">
@@ -52,7 +56,7 @@
           <input type="file" accept=".mp3,.wav,.m4a,.ogg,.flac" multiple id="input-audio">
           <div class="upload-status" id="status-audio">0</div>
           <div class="progress-bar" id="progress-audio"></div>
-          <div class="icon">🎵</div><div class="name">AUDIO</div>
+          <div class="icon"><img src="assets/img/logos/audio.png" alt="Audio"></div><div class="name">AUDIO</div>
           <div class="exts">.mp3 · .wav · .m4a · .ogg · .flac</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
@@ -63,7 +67,7 @@
           <input type="file" accept=".mp4,.mkv,.avi,.mov,.webm" multiple id="input-video">
           <div class="upload-status" id="status-video">0</div>
           <div class="progress-bar" id="progress-video"></div>
-          <div class="icon">🎬</div><div class="name">VIDEO</div>
+          <div class="icon"><img src="assets/img/logos/vlc.webp" alt="VLC"></div><div class="name">VIDEO</div>
           <div class="exts">.mp4 · .mkv · .avi · .mov · .webm</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
@@ -74,7 +78,7 @@
           <input type="file" accept=".pptx" multiple id="input-slide">
           <div class="upload-status" id="status-slide">0</div>
           <div class="progress-bar" id="progress-slide"></div>
-          <div class="icon">📊</div><div class="name">SLIDE</div>
+          <div class="icon"><img src="assets/img/logos/microsoftpowerpoint.svg" alt="PowerPoint"></div><div class="name">SLIDE</div>
           <div class="exts">.pptx</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
@@ -85,7 +89,7 @@
           <input type="file" accept=".docx,.pdf,.txt,.md,.rtf" multiple id="input-doc">
           <div class="upload-status" id="status-doc">0</div>
           <div class="progress-bar" id="progress-doc"></div>
-          <div class="icon">📄</div><div class="name">DOC</div>
+          <div class="icon"><img src="assets/img/logos/microsoftword.svg" alt="Word"></div><div class="name">DOC</div>
           <div class="exts">.docx · .pdf · .txt · .md · .rtf</div>
           <div class="upload-hint">↑ drag &amp; drop</div>
         </div>
@@ -94,7 +98,7 @@
       <div class="upload-col">
         <div class="upload-card card-teams" id="card-teams">
           <div class="upload-status" id="status-teams">0</div>
-          <div class="icon">🌐</div><div class="name">TEAMS</div>
+          <div class="icon"><img src="assets/img/logos/microsoftteams.svg" alt="Teams"></div><div class="name">TEAMS</div>
           <div class="exts">Microsoft Teams</div>
           <div class="upload-hint">✎ incolla URL</div>
         </div>
@@ -439,9 +443,9 @@
 
     <div class="section-label">// output</div>
     <div class="output-row output-row-5">
-      <div class="output-card"><div class="icon">📘</div><div class="name">main.tex</div><div class="desc">Documento principale<br>\input tutti i run<br>Compila con pdflatex</div></div>
-      <div class="output-card"><div class="icon">📂</div><div class="name">run_NN.tex</div><div class="desc">\part{Titolo — data}<br>raggruppa le lezioni<br>di ogni sessione</div></div>
-      <div class="output-card"><div class="icon">📝</div><div class="name">lezione_NN.tex</div><div class="desc">Un file per lezione<br>\chapter{} + sezioni<br>formule + immagini</div></div>
+      <div class="output-card"><div class="icon"><img src="assets/img/logos/latex.svg" alt="LaTeX"></div><div class="name">main.tex</div><div class="desc">Documento principale<br>\input tutti i run<br>Compila con pdflatex</div></div>
+      <div class="output-card"><div class="icon"><img src="assets/img/logos/latex.svg" alt="LaTeX"></div><div class="name">run_NN.tex</div><div class="desc">\part{Titolo — data}<br>raggruppa le lezioni<br>di ogni sessione</div></div>
+      <div class="output-card"><div class="icon"><img src="assets/img/logos/latex.svg" alt="LaTeX"></div><div class="name">lezione_NN.tex</div><div class="desc">Un file per lezione<br>\chapter{} + sezioni<br>formule + immagini</div></div>
       <div class="output-card"><div class="icon">🧠</div><div class="name">corso_context.json</div><div class="desc">Memoria del corso<br>concetti, definizioni, simboli<br>aggiornata ad ogni lezione</div></div>
       <div class="output-card"><div class="icon">💾</div><div class="name">state.json</div><div class="desc">next_lesson · next_run<br>numerazione persistente<br>aggiornato dopo ogni sessione</div></div>
     </div>
@@ -1094,7 +1098,13 @@ function updatePreflightRow(){
   if(!row)return;
   if(!total||!hasTitle){row.style.display='none';return;}
   const colorMap={audio:'#00e5ff',video:'#7c3aed',slide:'#f59e0b',doc:'#10b981',teams:'#ef4444'};
-  const iconMap={audio:'🎵',video:'🎬',slide:'📊',doc:'📄',teams:'🌐'};
+  const iconMap={
+    audio:'<img src="assets/img/logos/audio.png" alt="audio">',
+    video:'<img src="assets/img/logos/vlc.webp" alt="video">',
+    slide:'<img src="assets/img/logos/microsoftpowerpoint.svg" alt="slide">',
+    doc:'<img src="assets/img/logos/microsoftword.svg" alt="doc">',
+    teams:'<img src="assets/img/logos/microsoftteams.svg" alt="teams">'
+  };
   let html='<span class="pf-label">↳</span>';
   // style="--cc:X" rimane inline: colore calcolato dinamicamente da colorMap[t] a runtime
   Object.entries(fileState).forEach(([t,files])=>{
@@ -1105,14 +1115,14 @@ function updatePreflightRow(){
   });
   const claude=document.getElementById('opt-claude').checked;
   // style="--cc:X" rimane inline: colore dipende dallo stato runtime del toggle Claude
-  html+=`<span class="pf-chip hi" style="--cc:${claude?'#00e5ff':'#64748b'}">${claude?'✦ Claude':'⚡ skip-ai'}</span>`;
+  html+=`<span class="pf-chip hi" style="--cc:${claude?'#00e5ff':'#64748b'}"><img src="assets/img/logos/${claude?'anthropic.svg':'python.svg'}" alt=""> ${claude?'Claude':'skip-ai'}</span>`;
   const ocr=document.getElementById('opt-ocr').checked;
-  if(ocr)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">🔬 OCR</span>`;
+  if(ocr)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">OCR</span>`;
   const whisperEl=document.getElementById('whisperEstimate');
   if(whisperEl&&whisperEl.style.display!=='none'&&whisperEl.textContent)
     html+=`<span class="pf-chip">⏱ ${whisperEl.textContent.replace('⏱ stima trascrizione Whisper: ','')}</span>`;
   const subject=selectedSubject!=='auto'?selectedSubject:null;
-  if(subject)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">📚 ${subject}</span>`;
+  if(subject)html+=`<span class="pf-chip hi" style="--cc:#f59e0b">${subject}</span>`;
   row.innerHTML=html;
   row.style.display='flex';
 }
